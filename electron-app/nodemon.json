@@ -1,0 +1,6 @@
+{
+  "watch": ["../react-app/src", "src"],
+  "ext": "js,ts,tsx,json,css",
+  "exec": "electron .",
+  "delay": "1000"
+}

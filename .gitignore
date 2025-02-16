@@ -1,0 +1,46 @@
+# Общие игнорируемые файлы
+node_modules/
+dist/
+build/
+*.log
+.yarn/
+.pnp.*
+.pnpm-debug.log
+.npm/
+.DS_Store
+Thumbs.db
+
+# Electron (electron-app)
+electron-app/node_modules/
+electron-app/dist/
+electron-app/out/
+electron-app/*.log
+electron-app/.env
+
+# React (react-app)
+react-app/node_modules/
+react-app/build/
+react-app/.env
+react-app/.DS_Store
+
+# IDE / редактор кода
+.idea/
+.vscode/
+*.iml
+
+# Lock-файлы (если используешь только pnpm, остальные можно удалить)
+yarn.lock
+pnpm-lock.yaml
+package-lock.json
+
+# Logs & Debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+debug.log*
+
+# Misc
+*.swp
+*.swo
+*.swn

@@ -1,0 +1,9 @@
+/* global.css */
+button {
+    padding: 10px 20px;
+    border: none;
+    background-color: gray;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+}

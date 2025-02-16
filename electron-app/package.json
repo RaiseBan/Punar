@@ -1,0 +1,54 @@
+{
+  "name": "electron-app",
+  "productName": "ElectronApp",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "description": "My Electron application description",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "cross-env NODE_ENV=development concurrently \"npm run react-start\" \"npm run electron-start\"",
+    "react-start": "cd ../react-app && npm start",
+    "electron-start": "wait-on http://localhost:3000 && electron .",
+    "build": "cross-env NODE_ENV=production npm run react-build && npm run electron-build",
+    "react-build": "cd ../react-app && npm run build",
+    "electron-build": "electron-builder --win",
+    "clear-cache": "rimraf %LOCALAPPDATA%\\electron-builder\\Cache"
+  },
+  "build": {
+    "appId": "com.example.electronapp",
+    "productName": "ElectronApp",
+    "publish": null,
+    "files": [
+      "src/**/*",
+      "../react-app/build/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "sign": false
+    }
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "34.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-is-dev": "^3.0.1",
+    "rimraf": "^5.0.10",
+    "wait-on": "^8.0.2"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1"
+  },
+  "keywords": [],
+  "author": {
+    "name": "Sergey",
+    "email": "shornikov1407@gmail.com"
+  },
+  "license": "MIT"
+}
