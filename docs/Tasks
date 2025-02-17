@@ -88,3 +88,959 @@ Task settings не работают. Я нажимаю save, но таска н�
 
 
 
+---
+settings:
+
+
+Сейчас нужно сделать:
+-компонент settings:
+в нем можно будет указать путь к директории с проектами, которые в будущем будут запускать.
+
+
+-соответсвенно нужно передать эту путь к этой директории в electron
+electron в свою очередь должен принять и задать этот путь как переменную, которую он будет использовать для определения пути скрипта
+
+соответсвенно нужно обновить global.d.ts:
+// global.d.ts
+declare module "*.module.css" {
+    const classes: { [key: string]: string };
+    export default classes;
+}
+export {};
+
+declare global {
+    interface Window {
+        electronAPI?: {
+            // Методы
+            startProcess: (taskConfig: any) => void;
+            stopProcess: (taskId: number) => void;
+            resumeProcess: (taskId: number, config: any) => void;
+
+            // События:
+            // 1) process-started
+            onProcessStarted: (
+                callback: (
+                    event: any,
+                    data: { taskId: number; config: any }
+                ) => void
+            ) => void;
+
+            // 2) process-output
+            onProcessOutput: (
+                callback: (
+                    event: any,
+                    data: { taskId: number; log: string }
+                ) => void
+            ) => void;
+
+            // 3) process-exit
+            onProcessExit: (
+                callback: (
+                    event: any,
+                    data: { taskId: number; code: number }
+                ) => void
+            ) => void;
+
+            // 4) process-error (если нужно)
+            onProcessError: (
+                callback: (
+                    event: any,
+                    data: string
+                ) => void
+            ) => void;
+
+            // Снятие подписчика
+            removeListener: (
+                channel: string,
+                callback: (...args: any[]) => void
+            ) => void;
+        };
+    }
+}
+
+
+
+
+Сделай этот компонент Settings.tsx:
+export default function Settings() {
+    return (
+        <div>
+            <h1>Settings</h1>
+            <p>Co nfigure your application settings here.</p>
+        </div>
+    );
+}
+
+Напомню структуру проекта на скрине.
+
+
+
+
+
+
+
+----- 
+Проблемы:
+Когда нажимаю на save в Settings, то начинает дублироваться в логах, нужно как-то это починить.
+
+
+Build:
+собирать весь проект нужно в терминале от имени администратора!
+
+
+
+
+Проблемы:
+Смотри, я сейчас пишу приложение на electron + react 
+У меня есть компонент TasksPage в котором отображаются компоненты Task
+При создании task создается процесс и логи записываются в Task.
+
+Но у меня помимо страницы TasksPage есть и другие пути.
+
+И проблема заключается в том, что когда перед созданием Task переключаюсь между разными компонентами у меня видимо накидываются лишние listener'ы и логи дублируются в Task
+
+Вот мой код:
+
+electron:
+index.js:
+const { app, BrowserWindow, ipcMain } = require("electron");
+const path = require("path");
+const { spawn } = require("child_process");
+const { spawnProcess } = require("./utils/spawnProcess");
+
+let mainWindow;
+const processes = {}; // Храним child_process по taskId
+let scriptDirectory = "";  // Храним путь к директории проектов
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  mainWindow.setMenuBarVisibility(false);
+  mainWindow.loadURL(
+      app.isPackaged
+          ? `file://${path.join(app.getAppPath(), "react-app", "build", "index.html")}`
+          : "http://localhost:3000"
+  );
+}
+
+// Сохранение пути к директории
+ipcMain.on("save-script-directory", (event, directory) => {
+  scriptDirectory = directory;
+  console.log(`Сохранен путь к директории: ${scriptDirectory}`);
+});
+
+app.whenReady().then(() => {
+  createWindow();
+});
+
+// Запуск нового процесса
+ipcMain.on("start-process", (event, taskConfig) => {
+  const taskId = Date.now();
+  console.log(`Создан taskId: ${taskId}, запускаем процесс...`);
+
+  // Сразу говорим рендеру "process-started"
+  event.reply("process-started", { taskId, config: taskConfig });
+  console.log(`taskConfig: ${JSON.stringify(taskConfig)}`);
+
+  // Передаем путь к проекту и конфиг в spawnProcess
+  // const child = spawnProcess(taskConfig, scriptDirectory);
+  const child = spawn("node", ["your_script.js", scriptDirectory]);
+  processes[taskId] = child;
+
+  child.stdout.on("data", (data) => {
+    console.log(`STDOUT [Task ${taskId}]:`, data.toString());
+    mainWindow?.webContents.send("process-output", { taskId, log: data.toString() });
+  });
+
+  child.stderr.on("data", (data) => {
+    console.error(`STDERR [Task ${taskId}]:`, data.toString());
+  });
+
+  child.on("exit", (code) => {
+    console.log(`Процесс Task ${taskId} завершился с кодом ${code}`);
+    mainWindow?.webContents.send("process-exit", { taskId, code });
+  });
+});
+
+// Остановка процесса
+ipcMain.on("stop-process", (event, taskId) => {
+  const child = processes[taskId];
+  if (child && !child.killed) {
+    child.kill();
+    console.log(`Процесс ${taskId} остановлен`);
+  }
+});
+
+// Возобновление процесса
+ipcMain.on("resume-process", (event, { taskId, config }) => {
+  console.log(`Resume-process: Task ${taskId}, config:`, config);
+
+  event.reply("process-started", { taskId, config });
+
+  const child = spawn("node", ["your_script.js", JSON.stringify(config)]);
+  processes[taskId] = child;
+
+  child.stdout.on("data", (data) => {
+    console.log(`STDOUT [Task ${taskId}]:`, data.toString());
+    mainWindow?.webContents.send("process-output", { taskId, log: data.toString() });
+  });
+
+  child.stderr.on("data", (data) => {
+    console.error(`STDERR [Task ${taskId}]:`, data.toString());
+  });
+
+  child.on("exit", (code) => {
+    console.log(`Процесс Task ${taskId} (resume) завершился с кодом ${code}`);
+    mainWindow?.webContents.send("process-exit", { taskId, code });
+  });
+});
+
+
+
+preloadl.js:
+// preload.js
+const {contextBridge, ipcRenderer} = require("electron");
+
+contextBridge.exposeInMainWorld("electronAPI", {
+    // Запуск процесса
+    startProcess: (config) => ipcRenderer.send("start-process", config),
+
+    // Остановка процесса
+    stopProcess: (taskId) => ipcRenderer.send("stop-process", taskId),
+
+    // Возобновление процесса
+    resumeProcess: (taskId, config) => ipcRenderer.send("resume-process", {taskId, config}),
+
+    // События
+    onProcessStarted: (callback) =>
+        ipcRenderer.on("process-started", (event, data) => {
+            callback(event, data);
+        }),
+
+    onProcessOutput: (callback) =>
+        ipcRenderer.on("process-output", (event, data) => {
+            callback(event, data);
+        }),
+
+    onProcessExit: (callback) =>
+        ipcRenderer.on("process-exit", (event, data) => {
+            callback(event, data);
+        }),
+
+    onProcessError: (callback) =>
+        ipcRenderer.on("process-error", (event, data) => {
+            callback(event, data);
+        }),
+
+    // Снятие подписчика
+    removeListener: (channel, callback) => {
+        ipcRenderer.removeListener(channel, callback);
+    },
+    saveScriptDirectory: (path) => ipcRenderer.send("save-script-directory", path),
+
+});
+
+
+react:
+Task.tsx:
+import React, { useState } from "react";
+import {
+    Card,
+    CardContent,
+    Typography,
+    IconButton,
+    Box,
+    Chip,
+    Table,
+    TableHead,
+    TableRow,
+    TableCell,
+    TableBody,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    TextField,
+    Select,
+    MenuItem,
+    FormControl,
+    InputLabel,
+} from "@mui/material";
+
+import DeleteIcon from "@mui/icons-material/Delete";
+import SettingsIcon from "@mui/icons-material/Settings";
+import OpenInFullIcon from "@mui/icons-material/OpenInFull";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import StopIcon from "@mui/icons-material/Stop";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+
+import { useDispatch } from "react-redux";
+import { removeTask, updateTask } from "../store/tasksSlice";
+
+export interface TaskDataRow {
+    cells: string[];
+}
+
+export interface TaskProps {
+    id: number;
+    name: string;
+    moduleName: string;
+    status: string;
+    columns: string[];
+    data: TaskDataRow[];
+    logs: string[];
+    config?: any; // <-- теперь храним конфиг
+}
+
+const statusColorMap: Record<string, string> = {
+    Running: "#00c853",
+    Stopped: "#f44336",
+};
+
+export default function Task({
+                                 id,
+                                 name,
+                                 moduleName,
+                                 status,
+                                 columns,
+                                 data,
+                                 logs,
+                                 config,
+                             }: TaskProps) {
+    const dispatch = useDispatch();
+
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [fullViewOpen, setFullViewOpen] = useState(false);
+    const [logsOpen, setLogsOpen] = useState(false);
+
+    // Для сворачивания таблицы
+    const [tableCollapsed, setTableCollapsed] = useState(true);
+
+    // Локальная копия config для редактирования
+    // (Если модуль "tensor_sdk", тогда там есть task_name, threshold_price и т.д.)
+    const [editConfig, setEditConfig] = useState<any>(config || {});
+
+    // Можно отдельно хранить новое имя, или брать из editConfig
+    const [editName, setEditName] = useState(name);
+    const [editModuleName, setEditModuleName] = useState(moduleName);
+
+    const chipColor = statusColorMap[status] || "#ff9e44";
+
+    // -----------------------
+    //  Логика кнопок
+    // -----------------------
+    const handleOpenSettings = () => {
+        // Обновляем локальные стейты из актуальных значений
+        setEditName(name);
+        setEditModuleName(moduleName);
+        setEditConfig(config || {});
+        setSettingsOpen(true);
+    };
+    const handleCloseSettings = () => setSettingsOpen(false);
+
+    const handleSaveSettings = () => {
+        // Сохраняем изменения в Redux
+        dispatch(
+            updateTask({
+                id,
+                name: editName,
+                moduleName: editModuleName,
+                config: editConfig, // <-- сохраняем новый config
+            })
+        );
+        setSettingsOpen(false);
+    };
+
+    const handleOpenFullView = () => setFullViewOpen(true);
+    const handleCloseFullView = () => setFullViewOpen(false);
+
+    const handleOpenLogs = () => setLogsOpen(true);
+    const handleCloseLogs = () => setLogsOpen(false);
+
+    const handleStop = () => {
+        window.electronAPI?.stopProcess(id);
+        dispatch(updateTask({ id, status: "Stopped" }));
+    };
+
+    const handleResume = () => {
+        // При возобновлении берём обновлённый config
+        window.electronAPI?.resumeProcess(id, editConfig || {});
+        dispatch(updateTask({ id, status: "Running" }));
+    };
+
+    const handleDelete = () => {
+        if (status !== "Stopped") {
+            window.electronAPI?.stopProcess(id);
+        }
+        dispatch(removeTask(id));
+    };
+
+    // Переключение свёрнуто/развёрнуто
+    const toggleTable = () => {
+        setTableCollapsed(!tableCollapsed);
+    };
+
+    // Определяем, сколько строк показывать
+    const displayedData = tableCollapsed ? data.slice(0, 2) : data;
+
+    // Разрешаем ли редактировать поля конфигурации? Только если Stopped
+    const canEditConfig = status === "Stopped";
+
+    return (
+        <>
+            <Card
+                sx={{
+                    backgroundColor: "#0e0e0e",
+                    color: "#fff",
+                    width: "100%",
+                    borderRadius: "8px",
+                    border: "1px solid #2A2A2A",
+                    padding: "10px",
+                }}
+            >
+                <CardContent sx={{ padding: "10px" }}>
+                    <Box
+                        sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            gap: 2,
+                            justifyContent: "space-between",
+                        }}
+                    >
+                        {/* Левая часть: Название, Модуль, Статус */}
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                            <Box>
+                                <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
+                                    {name}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: "#999" }}>
+                                    Module: {moduleName}
+                                </Typography>
+                            </Box>
+                            <Chip
+                                label={status}
+                                sx={{
+                                    backgroundColor: chipColor,
+                                    color: "#000",
+                                    fontWeight: "bold",
+                                }}
+                            />
+                        </Box>
+
+                        {/* Правая часть: иконки */}
+                        <Box sx={{ display: "flex", gap: 1 }}>
+                            {/* Кнопка развернуть/свернуть таблицу */}
+                            <IconButton sx={{ color: "#fff" }} onClick={toggleTable}>
+                                {tableCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+                            </IconButton>
+
+                            {/* FullView */}
+                            <IconButton sx={{ color: "#fff" }} onClick={handleOpenFullView}>
+                                <OpenInFullIcon />
+                            </IconButton>
+
+                            {/* Settings */}
+                            <IconButton sx={{ color: "#ff9e44" }} onClick={handleOpenSettings}>
+                                <SettingsIcon />
+                            </IconButton>
+
+                            {/* Logs */}
+                            <IconButton sx={{ color: "#ccc" }} onClick={handleOpenLogs}>
+                                <VisibilityIcon />
+                            </IconButton>
+
+                            {/* Stop */}
+                            <IconButton
+                                sx={{ color: "#f44336" }}
+                                onClick={handleStop}
+                                disabled={status !== "Running"}
+                            >
+                                <StopIcon />
+                            </IconButton>
+
+                            {/* Resume */}
+                            <IconButton
+                                sx={{ color: "#00c853" }}
+                                onClick={handleResume}
+                                disabled={status !== "Stopped"}
+                            >
+                                <PlayArrowIcon />
+                            </IconButton>
+
+                            {/* Delete */}
+                            <IconButton onClick={handleDelete} sx={{ color: "red" }}>
+                                <DeleteIcon />
+                            </IconButton>
+                        </Box>
+                    </Box>
+
+                    {/* Таблица (2 строки если tableCollapsed=true) */}
+                    <Box sx={{ width: "100%", marginTop: "10px", overflowX: "auto" }}>
+                        <Table sx={{ minWidth: 500 }}>
+                            <TableHead>
+                                <TableRow sx={{ backgroundColor: "#1E1E1E" }}>
+                                    {columns.map((col, i) => (
+                                        <TableCell
+                                            key={i}
+                                            sx={{ color: "#ff9e44", borderBottom: "1px solid #2A2A2A" }}
+                                        >
+                                            {col}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {displayedData.map((row, rowIndex) => (
+                                    <TableRow key={rowIndex}>
+                                        {row.cells.map((cell, cellIndex) => (
+                                            <TableCell
+                                                key={cellIndex}
+                                                sx={{ color: "#fff", borderBottom: "1px solid #2A2A2A" }}
+                                            >
+                                                {cell}
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </Box>
+                </CardContent>
+            </Card>
+
+            {/* Диалог Settings */}
+            <Dialog open={settingsOpen} onClose={handleCloseSettings} maxWidth="sm" fullWidth>
+                <DialogTitle>Task Settings</DialogTitle>
+                <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+                    {/* Пример: имя таска */}
+                    <TextField
+                        label="Task Name"
+                        variant="outlined"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        disabled={!canEditConfig} // Только если Stopped
+                    />
+
+                    {/* Module Name */}
+                    <TextField
+                        label="Module Name"
+                        variant="outlined"
+                        value={editModuleName}
+                        onChange={(e) => setEditModuleName(e.target.value)}
+                        disabled={!canEditConfig}
+                    />
+
+                    {/* Пример: если модуль "Tensor sniper (SDK)", тогда редактируем threshold_price */}
+                    {editConfig?.module_name === "Tensor sniper (SDK)" && (
+                        <TextField
+                            label="Threshold Price"
+                            type="number"
+                            value={editConfig.threshold_price ?? 0}
+                            disabled={!canEditConfig}
+                            onChange={(e) =>
+                                setEditConfig({
+                                    ...editConfig,
+                                    threshold_price: parseFloat(e.target.value),
+                                })
+                            }
+                        />
+                    )}
+
+                    {/* Можете добавить и другие поля из config, если нужно */}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseSettings} color="inherit">
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleSaveSettings}
+                        disabled={!canEditConfig} // Сохранить только если Stopped
+                    >
+                        Save
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Диалог FullView (показывает всю таблицу и т.д.) */}
+            <Dialog open={fullViewOpen} onClose={handleCloseFullView} fullWidth maxWidth="lg">
+                <DialogTitle>Full View: {name}</DialogTitle>
+                <DialogContent>
+                    <Box sx={{ overflowX: "auto" }}>
+                        <Table sx={{ minWidth: 800 }}>
+                            <TableHead>
+                                <TableRow sx={{ backgroundColor: "#1E1E1E" }}>
+                                    {columns.map((col, i) => (
+                                        <TableCell
+                                            key={i}
+                                            sx={{ color: "#ff9e44", borderBottom: "1px solid #2A2A2A" }}
+                                        >
+                                            {col}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {data.map((row, rowIndex) => (
+                                    <TableRow key={rowIndex}>
+                                        {row.cells.map((cell, cellIndex) => (
+                                            <TableCell
+                                                key={cellIndex}
+                                                sx={{ color: "#fff", borderBottom: "1px solid #2A2A2A" }}
+                                            >
+                                                {cell}
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseFullView} variant="outlined" color="inherit">
+                        Close
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Диалог Logs */}
+            <Dialog open={logsOpen} onClose={handleCloseLogs} fullWidth maxWidth="md">
+                <DialogTitle>Logs for {name}</DialogTitle>
+                <DialogContent dividers>
+                    <Box sx={{ maxHeight: 400, overflowY: "auto" }}>
+                        {logs.map((log, index) => (
+                            <Typography key={index} variant="body2" sx={{ color: "#fff" }}>
+                                {log}
+                            </Typography>
+                        ))}
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseLogs} variant="outlined" color="inherit">
+                        Close
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </>
+    );
+}
+
+
+TasksPage.tsx:
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Box, Button, Typography } from "@mui/material";
+import Task from "./Task";
+import CreateTaskWizard from "./CreateTaskWizard";
+import { COLS_NAMES } from "../constants";
+import { useDispatch, useSelector } from "react-redux";
+import {
+    addOrUpdateTask,
+    addTaskLog,
+    addTaskRow,
+    updateTask,
+} from "../store/tasksSlice";
+import { RootState } from "../store/store";
+import { parseTableRowFromLog } from "../utils/tableDataParser";
+
+export default function TasksPage() {
+    const tasks = useSelector((state: RootState) => state.tasks.tasks);
+    const dispatch = useDispatch();
+    const [wizardOpen, setWizardOpen] = useState(false);
+
+    // ✅ Используем useRef для предотвращения дублирования подписок
+    const isSubscribed = useRef(false);
+
+    const handleCreateTask = useCallback((config: any) => {
+        window.electronAPI?.startProcess(config);
+        setWizardOpen(false);
+    }, []);
+
+    const handleProcessStarted = useCallback(
+        (event: any, data: { taskId: number; config: any }) => {
+            console.log("handleProcessStarted called", data);
+            const { taskId, config } = data;
+            dispatch(addOrUpdateTask({ taskId, config }));
+
+            const moduleName = config.module_name;
+            if (moduleName && COLS_NAMES.has(moduleName)) {
+                dispatch(updateTask({ id: taskId, columns: COLS_NAMES.get(moduleName) }));
+            }
+        },
+        [dispatch]
+    );
+
+    const handleProcessOutput = useCallback(
+        (event: any, data: { taskId: number; log: string }) => {
+            console.log('handleProcessOutput called', data);
+            const { taskId, log } = data;
+            dispatch(addTaskLog({ taskId, log }));
+
+            const rowCells = parseTableRowFromLog(log);
+            if (rowCells) {
+                dispatch(addTaskRow({ taskId, rowCells }));
+            }
+        },
+        [dispatch]
+    );
+
+    const handleProcessExit = useCallback(
+        (event: any, data: { taskId: number; code: number }) => {
+            console.log('handleProcessExit called', data);
+            const { taskId, code } = data;
+            dispatch(updateTask({ id: taskId, status: "Stopped" }));
+        },
+        [dispatch]
+    );
+
+    useEffect(() => {
+        if (!window.electronAPI || isSubscribed.current) return;
+
+        console.log("Subscribing to events");
+        isSubscribed.current = true;
+
+        window.electronAPI.onProcessStarted(handleProcessStarted);
+        window.electronAPI.onProcessOutput(handleProcessOutput);
+        window.electronAPI.onProcessExit(handleProcessExit);
+
+        return () => {
+            console.log("Unsubscribing from events");
+            window.electronAPI?.removeListener("process-started", handleProcessStarted);
+            window.electronAPI?.removeListener("process-output", handleProcessOutput);
+            window.electronAPI?.removeListener("process-exit", handleProcessExit);
+        };
+    }, [handleProcessStarted, handleProcessOutput, handleProcessExit]);
+
+    return (
+        <Box sx={{ p: 2 }}>
+            <Typography variant="h4" sx={{ mb: 2 }}>
+                DeFi Tasks
+            </Typography>
+            <Button variant="contained" onClick={() => setWizardOpen(true)}>
+                Create Task +
+            </Button>
+            <Box sx={{ mt: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                {tasks.map((t) => (
+                    <Task key={t.id} {...t} />
+                ))}
+            </Box>
+            <CreateTaskWizard
+                open={wizardOpen}
+                onClose={() => setWizardOpen(false)}
+                onCreateTask={handleCreateTask}
+            />
+        </Box>
+    );
+}
+
+
+
+global.d.ts:
+// global.d.ts
+declare module "*.module.css" {
+    const classes: { [key: string]: string };
+    export default classes;
+}
+
+export {};
+
+declare global {
+    interface Window {
+        electronAPI?: {
+            // Методы
+            startProcess: (taskConfig: any) => void;
+            stopProcess: (taskId: number) => void;
+            resumeProcess: (taskId: number, config: any) => void;
+            saveScriptDirectory: (directoryPath: string) => void; // Новая функция для установки директории скриптов
+
+            // События:
+            // 1) process-started
+            onProcessStarted: (
+                callback: (
+                    event: any,
+                    data: { taskId: number; config: any }
+                ) => void
+            ) => void;
+
+            // 2) process-output
+            onProcessOutput: (
+                callback: (
+                    event: any,
+                    data: { taskId: number; log: string }
+                ) => void
+            ) => void;
+
+            // 3) process-exit
+            onProcessExit: (
+                callback: (
+                    event: any,
+                    data: { taskId: number; code: number }
+                ) => void
+            ) => void;
+
+            // 4) process-error (если нужно)
+            onProcessError: (
+                callback: (
+                    event: any,
+                    data: string
+                ) => void
+            ) => void;
+
+            // Снятие подписчика
+            removeListener: (
+                channel: string,
+                callback: (...args: any[]) => void
+            ) => void;
+        };
+    }
+}
+
+
+index.tsx:
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+    <>
+        <App />
+    </>
+
+);
+
+
+
+store.ts:
+import { configureStore } from "@reduxjs/toolkit";
+import tasksReducer from "./tasksSlice";
+import {electronMiddleware} from "./middleware/electronMiddleware";
+
+export const store = configureStore({
+    reducer: {
+        tasks: tasksReducer,
+
+    },
+    middleware: (getDefaultMiddleware) =>
+        getDefaultMiddleware().concat(electronMiddleware),
+
+});
+
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
+
+
+tasksSllice.ts:
+// tasksSlice.ts
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { TaskProps } from "../components/Task";
+
+interface TasksState {
+    tasks: TaskProps[];
+}
+
+const initialState: TasksState = {
+    tasks: [],
+};
+
+export const tasksSlice = createSlice({
+    name: "tasks",
+    initialState,
+    reducers: {
+        addTask: (state, action: PayloadAction<TaskProps>) => {
+            state.tasks.push(action.payload);
+        },
+        removeTask: (state, action: PayloadAction<number>) => {
+            state.tasks = state.tasks.filter((task) => task.id !== action.payload);
+        },
+        updateTask: (state, action) => {
+            const { id, name, moduleName, status, columns, config } = action.payload;
+            const task = state.tasks.find((t) => t.id === id);
+            if (task) {
+                if (name !== undefined) task.name = name;
+                if (moduleName !== undefined) task.moduleName = moduleName;
+                if (status !== undefined) task.status = status;
+                if (columns !== undefined) task.columns = columns;
+                if (config !== undefined) task.config = config; // ← теперь можно обновлять config
+            }
+        },
+        addTaskLog: (state, action: PayloadAction<{ taskId: number; log: string }>) => {
+            const task = state.tasks.find((t) => t.id === action.payload.taskId);
+            if (task) {
+                task.logs.push(action.payload.log);
+            }
+        },
+        addOrUpdateTask: (state, action: PayloadAction<{ taskId: number; config: any }>) => {
+            const { taskId, config } = action.payload;
+            console.log("🟢 Redux: addOrUpdateTask called", action.payload);
+
+            const existing = state.tasks.find((t) => t.id === taskId);
+
+            if (existing) {
+                console.log("🟡 Updating existing task", taskId);
+                existing.status = "Running";
+                existing.config = config;
+                if (config.module_name) {
+                    existing.moduleName = config.module_name;
+                }
+                if (config.task_name) {
+                    existing.name = config.task_name;
+                }
+            } else {
+                console.log("🟠 Creating new task", taskId);
+                const name = config.task_name || `Task ${config.module_name || ""}`;
+                state.tasks.push({
+                    id: taskId,
+                    name,
+                    moduleName: config.module_name || "",
+                    status: "Running",
+                    columns: [],
+                    data: [],
+                    logs: [],
+                    config,
+                });
+            }
+        },
+        addTaskRow: (
+            state,
+            action: PayloadAction<{ taskId: number; rowCells: string[] }>
+        ) => {
+            const { taskId, rowCells } = action.payload;
+            const task = state.tasks.find((t) => t.id === taskId);
+            if (task) {
+                task.data.push({ cells: rowCells });
+            }
+        },
+    },
+});
+
+export const {
+    addTask,
+    removeTask,
+    updateTask,
+    addTaskLog,
+    addOrUpdateTask,
+    addTaskRow,
+} = tasksSlice.actions;
+
+export default tasksSlice.reducer;
+
+
+
+На скрине прикрепил структуру проекта. (у меня разделено отдельно на electron и react)
+
+Реши мою проблему с дублированием логов, чтобы независимо от того переключался я перед запуском task или нет - логи не дублировались!
+
+

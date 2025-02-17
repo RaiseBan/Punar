@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, {useEffect, useState} from "react";
 import {
     Card,
     CardContent,
@@ -32,8 +32,9 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 
-import { useDispatch } from "react-redux";
+import {useDispatch, useSelector} from "react-redux";
 import { removeTask, updateTask } from "../store/tasksSlice";
+import {RootState} from "../store/store";
 
 export interface TaskDataRow {
     cells: string[];
@@ -46,7 +47,6 @@ export interface TaskProps {
     status: string;
     columns: string[];
     data: TaskDataRow[];
-    logs: string[];
     config?: any; // <-- теперь храним конфиг
 }
 
@@ -62,7 +62,6 @@ export default function Task({
                                  status,
                                  columns,
                                  data,
-                                 logs,
                                  config,
                              }: TaskProps) {
     const dispatch = useDispatch();
@@ -94,7 +93,17 @@ export default function Task({
         setEditConfig(config || {});
         setSettingsOpen(true);
     };
+
+
+    // Получаем логи из Redux
+    const logs = useSelector((state: RootState) =>
+        state.tasks.tasks.find((task) => task.id === id)?.logs || []
+    );
     const handleCloseSettings = () => setSettingsOpen(false);
+    useEffect(() => {
+        console.log("Logs updated for Task", id, logs);  // Логи обновляются
+    }, [logs]);
+
 
     const handleSaveSettings = () => {
         // Сохраняем изменения в Redux
@@ -143,6 +152,10 @@ export default function Task({
 
     // Разрешаем ли редактировать поля конфигурации? Только если Stopped
     const canEditConfig = status === "Stopped";
+
+    useEffect(() => {
+        console.log("Logs updated for Task", id, logs);  // Логи обновляются
+    }, [logs]);
 
     return (
         <>

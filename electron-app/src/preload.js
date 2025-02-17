@@ -1,15 +1,30 @@
 // preload.js
-const { contextBridge, ipcRenderer } = require("electron");
+const {contextBridge, ipcRenderer} = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
     // Запуск процесса
-    startProcess: (config) => ipcRenderer.send("start-process", config),
+    startProcess: (taskId, config) => {
+        console.log(`start process config: ${JSON.stringify(config, null, 2)}`);
+        ipcRenderer.send("start-process", { taskId, config });
+
+        // Уведомляем, что процесс был запущен для этой задачи
+        ipcRenderer.once(`process-started-${taskId}`, () => {
+            console.log(`Process started for task ${taskId}`);
+        });
+    },
+    resumeProcess: (taskId, config) => ipcRenderer.send("resume-process", {taskId, config}),
+    removeAllListeners: () => {
+        ipcRenderer.removeAllListeners("process-started");
+        ipcRenderer.removeAllListeners("process-output");
+        ipcRenderer.removeAllListeners("process-exit");
+    },
+
 
     // Остановка процесса
     stopProcess: (taskId) => ipcRenderer.send("stop-process", taskId),
 
     // Возобновление процесса
-    resumeProcess: (taskId, config) => ipcRenderer.send("resume-process", { taskId, config }),
+
 
     // События
     onProcessStarted: (callback) =>
@@ -36,4 +51,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     removeListener: (channel, callback) => {
         ipcRenderer.removeListener(channel, callback);
     },
+    saveScriptDirectory: (path) => ipcRenderer.send("save-script-directory", path),
+    getWallets: () => ipcRenderer.invoke('getWallets'),
+    addWallet: (wallet) => ipcRenderer.invoke('addWallet', wallet),
+    deleteWallet: (publicKey) => ipcRenderer.invoke('deleteWallet', publicKey), // Новый метод для удаления кошелька
+
 });

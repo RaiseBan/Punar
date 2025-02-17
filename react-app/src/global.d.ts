@@ -3,16 +3,23 @@ declare module "*.module.css" {
     const classes: { [key: string]: string };
     export default classes;
 }
+
 export {};
 
 declare global {
     interface Window {
         electronAPI?: {
             // Методы
-            startProcess: (taskConfig: any) => void;
+            startProcess: (taskId: number, taskConfig: any) => void;
             stopProcess: (taskId: number) => void;
             resumeProcess: (taskId: number, config: any) => void;
+            saveScriptDirectory: (directoryPath: string) => void; // Новая функция для установки директории скриптов
 
+
+            // Методы для работы с кошельками
+            getWallets: () => Promise<any[]>; // Метод для получения кошельков
+            addWallet: (wallet: { publicKey: string; privateKey: string }) => Promise<void>; // Метод для добавления нового кошелька
+            deleteWallet: (publicKey: string) => Promise<void>; // Метод для удаления кошелька
             // События:
             // 1) process-started
             onProcessStarted: (
@@ -51,6 +58,7 @@ declare global {
                 channel: string,
                 callback: (...args: any[]) => void
             ) => void;
+
         };
     }
 }

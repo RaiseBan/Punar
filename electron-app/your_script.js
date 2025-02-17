@@ -3,6 +3,7 @@ function sleep(ms) {
 }
 (async () => {
     let i = 0;
+    console.log(process.argv[2]);
     while (true){
         i++
         if (i % 5 === 0) {
