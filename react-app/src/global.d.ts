@@ -13,8 +13,9 @@ declare global {
             startProcess: (taskId: number, taskConfig: any) => void;
             stopProcess: (taskId: number) => void;
             resumeProcess: (taskId: number, config: any) => void;
-            saveScriptDirectory: (directoryPath: string) => void; // Новая функция для установки директории скриптов
 
+            saveScriptDirectory: (directory: string) => void;
+            getScriptDirectory: () => Promise<string | null>;
 
             // Методы для работы с кошельками
             getWallets: () => Promise<any[]>; // Метод для получения кошельков

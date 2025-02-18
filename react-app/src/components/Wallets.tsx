@@ -158,6 +158,8 @@ const Wallets = () => {
 
 // Стилизуем кнопки с анимацией и оранжевым цветом
 const StyledButton = styled(Button)({
+    // fontFamily: 'Tensor',
+    // fontWeight: 'bold',
     backgroundColor: '#FF5722', // Оранжевый цвет
     color: '#fff',
     padding: '10px 20px',

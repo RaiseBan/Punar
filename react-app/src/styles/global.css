@@ -1,4 +1,28 @@
 /* global.css */
+
+/* Подключение шрифта Tensor для обычного начертания */
+@font-face {
+    font-family: 'Tensor';
+    src: url('Tensor/cpmono.otf') format('opentype');
+    font-weight: normal; /* Обычное начертание */
+    font-style: normal;
+}
+
+/* Подключение шрифта Tensor для жирного начертания */
+@font-face {
+    font-family: 'Tensor';
+    src: url('Tensor/cpmono_bold.otf') format('opentype');
+    font-weight: bold; /* Жирное начертание */
+    font-style: normal;
+}
+
+/* Применение шрифта глобально */
+body {
+    font-family: 'Tensor', sans-serif;
+    font-weight: normal; /* По умолчанию обычное начертание */
+}
+
+/* Стили для кнопок (опционально) */
 button {
     padding: 10px 20px;
     border: none;

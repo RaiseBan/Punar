@@ -28,11 +28,62 @@ function createWindow() {
   );
 }
 
-// Сохранение пути к директории
+
+// Путь к директории globalSettings
+
+// Обработчик сохранения пути к директории
 ipcMain.on("save-script-directory", (event, directory) => {
-  scriptDirectory = directory;
-  console.log(`Сохранен путь к директории: ${scriptDirectory}`);
+  const settingsDir = getGlobalConfigDirectory()
+  const settingsFilePath = path.join(settingsDir, 'userSettings.json');
+
+  // Создаем директорию, если она не существует
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true });
+  }
+
+  // Если файл не существует, создаем его с начальной структурой
+  if (!fs.existsSync(settingsFilePath)) {
+    const initialSettings = { scriptDirectory: directory };
+    fs.writeFileSync(settingsFilePath, JSON.stringify(initialSettings, null, 2));
+    console.log(`Создан файл с настройками, путь сохранен: ${directory}`);
+  } else {
+    // Если файл существует, обновляем только поле scriptDirectory
+    try {
+      const data = fs.readFileSync(settingsFilePath, 'utf-8');
+      const settings = JSON.parse(data);
+
+      // Обновляем только поле scriptDirectory
+      settings.scriptDirectory = directory;
+
+      fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+      console.log(`Путь обновлен: ${directory}`);
+    } catch (error) {
+      console.error('Ошибка при чтении или записи файла настроек:', error);
+    }
+  }
 });
+
+
+// Получение пути к директории из userSettings.json
+ipcMain.handle("get-script-directory", () => {
+  const settingsDir = getGlobalConfigDirectory();
+  const settingsFilePath = path.join(settingsDir, 'userSettings.json');
+
+  if (!fs.existsSync(settingsFilePath)) {
+    return null; // Если файл не существует, возвращаем null
+  }
+
+  try {
+    const data = fs.readFileSync(settingsFilePath, 'utf-8');
+    const settings = JSON.parse(data);
+    return settings.scriptDirectory; // Возвращаем путь
+  } catch (error) {
+    console.error('Ошибка при чтении файла настроек:', error);
+    return null;
+  }
+});
+
+
 
 app.whenReady().then(() => {
   createWindow();

@@ -6,12 +6,16 @@ import Wallets from "./components/Wallets";
 import Settings from "./components/Settings";
 import { Provider } from "react-redux";
 import { store } from "./store/store";
+import './styles/global.css'
 
 const darkTheme = createTheme({
     palette: {
         mode: "dark",
         background: { default: "#0e0e0e" },
         text: { primary: "#fff" },
+    },
+    typography: {
+        fontFamily: "'Tensor', sans-serif", // Добавь сюда шрифт
     },
 });
 
