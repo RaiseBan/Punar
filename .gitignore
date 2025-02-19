@@ -16,6 +16,8 @@ electron-app/dist/
 electron-app/out/
 electron-app/*.log
 electron-app/.env
+electron-app/src/configs.json
+electron-app/src/globalSettings.json
 
 # React (react-app)
 react-app/node_modules/
