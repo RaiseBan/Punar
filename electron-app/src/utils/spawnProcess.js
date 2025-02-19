@@ -46,6 +46,7 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
     console.log(`Конфигурация сохранена: ${configPath}`);
 
     // Запускаем дочерний процесс с заданным рабочим каталогом (cwd) и переменными окружения
+    console.log(`scriptsDirectoryPath: ${scriptsDirectoryPath}`)
     console.log(`start process: \nPath: ${path.join(scriptsDirectoryPath, "src", "index.ts")} \nConfigPath: ${configPath}`);
 
     const child = spawn("npx", ["tsx", path.join(scriptsDirectoryPath, "src", "index.ts")], {
@@ -54,7 +55,7 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
         cwd: scriptsDirectoryPath, // Устанавливаем рабочую директорию для процесса
         env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath } // Передаем CONFIG_PATH в переменные окружения
     });
-
+    console.log(`after child`)
     // // Обработка стандартного вывода (stdout)
     // child.stdout.on("data", (data) => {
     //     console.log(`STDOUT: ${data}`);

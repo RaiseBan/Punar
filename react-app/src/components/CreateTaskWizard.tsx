@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, {useEffect, useState} from "react";
 import {
     Dialog,
     DialogTitle,
@@ -33,6 +33,8 @@ interface TensorSdkParams {
     bloxrouteRegion: string;
     bloxrouteTipLamports: number;
     txToSend: number;
+    walletSource: 'existing' | 'manual'; // новый параметр
+    privateKey: string; // новый параметр
 }
 
 const STEPS = ["Choose module", "Configure module", "Review & Create"];
@@ -52,7 +54,7 @@ export default function CreateTaskWizard({
 
     // Выбранный модуль
     const [selectedModule, setSelectedModule] = useState<string | null>(null);
-
+    const [wallets, setWallets] = useState<{ publicKey: string; privateKey: string }[]>([]);
     // Параметры Tensor sniper (SDK)
     const [tensorSdkParams, setTensorSdkParams] = useState<TensorSdkParams>({
         collectionId: "",
@@ -66,6 +68,8 @@ export default function CreateTaskWizard({
         bloxrouteRegion: "",
         bloxrouteTipLamports: 1000000,
         txToSend: 1,
+        walletSource: 'existing',
+        privateKey: ""
     });
 
     // Новое: имя таска
@@ -92,6 +96,8 @@ export default function CreateTaskWizard({
             bloxrouteRegion: "",
             bloxrouteTipLamports: 1000000,
             txToSend: 1,
+            walletSource: 'existing', // новый параметр
+            privateKey: ""
         });
         setTaskName("");
         onClose();
@@ -114,12 +120,27 @@ export default function CreateTaskWizard({
                 bloxroute_region: tensorSdkParams.bloxrouteRegion || null,
                 bloxroute_tip_lamports: tensorSdkParams.bloxrouteTipLamports,
                 tx_to_send: tensorSdkParams.txToSend,
+                privateKey: tensorSdkParams.privateKey
             };
             onCreateTask(cfg);
         }
         // Можно добавить логику для остальных модулей
         handleClose();
     };
+
+    useEffect(() => {
+        const fetchWallets = async () => {
+            if (open) {
+                try {
+                    const wallets = await window.electronAPI!.getWallets();
+                    setWallets(wallets);
+                } catch (error) {
+                    console.error('Error loading wallets:', error);
+                }
+            }
+        };
+        fetchWallets();
+    }, [open]);
 
     const renderStepChooseModule = () => (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 400 }}>
@@ -196,6 +217,69 @@ export default function CreateTaskWizard({
                             <FormControlLabel value="no" control={<Radio />} label="No" />
                         </RadioGroup>
                     </Box>
+                    {/* Секция выбора кошелька */}
+                    <Typography variant="subtitle1" sx={{ mt: 2 }}>
+                        Wallet Configuration
+                    </Typography>
+
+                    <RadioGroup
+                        row
+                        value={params.walletSource}
+                        onChange={(e) =>
+                            setTensorSdkParams({
+                                ...params,
+                                walletSource: e.target.value as 'existing' | 'manual'
+                            })
+                        }
+                    >
+                        <FormControlLabel
+                            value="existing"
+                            control={<Radio />}
+                            label="Select existing wallet"
+                        />
+                        <FormControlLabel
+                            value="manual"
+                            control={<Radio />}
+                            label="Enter private key manually"
+                        />
+                    </RadioGroup>
+
+                    {params.walletSource === 'existing' ? (
+                        <FormControl fullWidth>
+                            <InputLabel>Select Wallet</InputLabel>
+                            <Select
+                                value={wallets.find(w => w.privateKey === params.privateKey)?.publicKey || ''}
+                                onChange={(e) => {
+                                    const selectedWallet = wallets.find(w => w.publicKey === e.target.value);
+                                    if (selectedWallet) {
+                                        setTensorSdkParams({
+                                            ...params,
+                                            privateKey: selectedWallet.privateKey
+                                        });
+                                    }
+                                }}
+                                label="Select Wallet"
+                            >
+                                {wallets.map((wallet) => (
+                                    <MenuItem key={wallet.publicKey} value={wallet.publicKey}>
+                                        {wallet.publicKey}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    ) : (
+                        <TextField
+                            label="Private Key"
+                            value={params.privateKey}
+                            onChange={(e) =>
+                                setTensorSdkParams({ ...params, privateKey: e.target.value })
+                            }
+                            type="password"
+                            fullWidth
+                        />
+                    )}
+
+
 
                     {/* Если priceByName = true => Price config (строка/файл) */}
                     {params.priceByName && (
@@ -372,6 +456,16 @@ export default function CreateTaskWizard({
                     </Typography>
                     <Typography>
                         <b>collectionId:</b> {p.collectionId}
+                    </Typography>
+                    <Typography>
+                        <b>Wallet Source:</b> {p.walletSource === 'existing'
+                        ? 'Existing Wallet'
+                        : 'Manual Entry'}
+                    </Typography>
+                    <Typography>
+                        <b>Wallet:</b> {p.walletSource === 'existing'
+                        ? wallets.find(w => w.privateKey === p.privateKey)?.publicKey
+                        : '*********'}
                     </Typography>
                     <Typography>
                         <b>priceByName:</b> {p.priceByName ? "Yes" : "No"}

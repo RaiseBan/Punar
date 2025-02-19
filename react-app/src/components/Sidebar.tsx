@@ -42,7 +42,7 @@ export default function Sidebar() {
                                 component={Link}
                                 to={item.path}
                                 sx={{
-                                    backgroundColor: isActive ? "rgba(221,152,49,0.56)" : "transparent", // Оранжевый, но прозрачный
+                                    backgroundColor: isActive ? "rgba(255,136,0,0.52)" : "transparent", // Оранжевый, но прозрачный
                                     color: isActive ? "#000" : "#fff", // Черный текст в активной вкладке
                                     borderRadius: "8px",
                                     margin: "4px",

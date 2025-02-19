@@ -1,0 +1,16 @@
+{
+  "module_name": "Tensor sniper (SDK)",
+  "task_name": "12",
+  "collection_id": "",
+  "price_by_name": false,
+  "price_config": null,
+  "threshold_price": 0,
+  "use_jito": true,
+  "jito_region": "🇺🇸 New York",
+  "jito_tip_lamports": 1000,
+  "use_bloxroute": false,
+  "bloxroute_region": null,
+  "bloxroute_tip_lamports": 1000000,
+  "tx_to_send": 1,
+  "privateKey": "3GnBr3Qz2oHr8najDjgDWwozJDMUjppXJZuTcu165MKzmChe539MNcCcvJuvvA1mTtX2b1VerqRCtrRHKiZj4Lwu"
+}

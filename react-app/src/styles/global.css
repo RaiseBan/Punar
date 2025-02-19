@@ -20,14 +20,27 @@
 body {
     font-family: 'Tensor', sans-serif;
     font-weight: normal; /* По умолчанию обычное начертание */
+    overflow: hidden; /* Убираем скроллы для всего приложения */
 }
 
-/* Стили для кнопок (опционально) */
-button {
-    padding: 10px 20px;
-    border: none;
-    background-color: gray;
-    color: white;
-    font-size: 16px;
-    cursor: pointer;
+/* Полностью скрыть скролл-бары */
+::-webkit-scrollbar {
+    display: none;
 }
+
+/* Альтернативный вариант: сделать скролл-бары прозрачными */
+::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+
+/*!* Стили для кнопок (опционально) *!*/
+/*button {*/
+/*    padding: 10px 20px;*/
+/*    border: none;*/
+/*    background-color: gray;*/
+/*    color: white;*/
+/*    font-size: 16px;*/
+/*    cursor: pointer;*/
+/*}*/

@@ -1,0 +1,15 @@
+{
+  "module_name": "Tensor sniper (SDK)",
+  "task_name": "1212",
+  "collection_id": "2121",
+  "price_by_name": false,
+  "price_config": null,
+  "threshold_price": 0,
+  "use_jito": false,
+  "jito_region": null,
+  "jito_tip_lamports": 1000,
+  "use_bloxroute": false,
+  "bloxroute_region": null,
+  "bloxroute_tip_lamports": 1000000,
+  "tx_to_send": 1
+}

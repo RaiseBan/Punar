@@ -10,6 +10,9 @@ declare global {
     interface Window {
         electronAPI?: {
             // Методы
+
+
+
             startProcess: (taskId: number, taskConfig: any) => void;
             stopProcess: (taskId: number) => void;
             resumeProcess: (taskId: number, config: any) => void;
@@ -59,6 +62,15 @@ declare global {
                 channel: string,
                 callback: (...args: any[]) => void
             ) => void;
+
+            // Методы для сворачивания окна
+            minimizeWindow: () => void;
+
+            // Методы для закрытия окна
+            closeWindow: () => void;
+
+            enableDrag: () => void;
+
 
         };
     }

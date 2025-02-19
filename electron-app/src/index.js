@@ -13,8 +13,10 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      overlayScrollbars: true,
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -26,9 +28,16 @@ function createWindow() {
           ? `file://${path.join(app.getAppPath(), "react-app", "build", "index.html")}`
           : "http://localhost:3000"
   );
+
 }
 
+ipcMain.handle('minimizeWindow', () => {
+  mainWindow.minimize();
+});
 
+ipcMain.handle('closeWindow', () => {
+  mainWindow.close();
+});
 // Путь к директории globalSettings
 
 // Обработчик сохранения пути к директории
@@ -63,16 +72,12 @@ ipcMain.on("save-script-directory", (event, directory) => {
   }
 });
 
-
-// Получение пути к директории из userSettings.json
-ipcMain.handle("get-script-directory", () => {
+function getScriptPath(){
   const settingsDir = getGlobalConfigDirectory();
   const settingsFilePath = path.join(settingsDir, 'userSettings.json');
-
   if (!fs.existsSync(settingsFilePath)) {
     return null; // Если файл не существует, возвращаем null
   }
-
   try {
     const data = fs.readFileSync(settingsFilePath, 'utf-8');
     const settings = JSON.parse(data);
@@ -81,12 +86,17 @@ ipcMain.handle("get-script-directory", () => {
     console.error('Ошибка при чтении файла настроек:', error);
     return null;
   }
+}
+// Получение пути к директории из userSettings.json
+ipcMain.handle("get-script-directory", () => {
+  return getScriptPath()
 });
 
 
 
 app.whenReady().then(() => {
   createWindow();
+
 });
 
 // Запуск нового процесса
@@ -97,9 +107,9 @@ ipcMain.on("start-process", (event, {taskId, config}) => {
   // Сразу говорим рендеру "process-started"
   event.reply("process-started", { taskId, config: config });
 
-
+  const scriptPath = getScriptPath();
   // Передаем путь к проекту и конфиг в spawnProcess
-  const child = spawnProcess(config, scriptDirectory);
+  const child = spawnProcess(config, scriptPath);
   // const child = spawn("node", ["your_script.js", scriptDirectory]);
   processes[taskId] = child;
 
@@ -132,8 +142,9 @@ ipcMain.on("resume-process", (event, { taskId, config }) => {
   console.log(`Resume-process: Task ${taskId}, config:`, config);
 
   event.reply("process-started", { taskId, config });
-
-  const child = spawnProcess(config, scriptDirectory);
+  const scriptPath = getScriptPath();
+  const child = spawnProcess(config, scriptPath);
+  // const child = spawn("node", ["your_script.js", scriptDirectory]);
   processes[taskId] = child;
 
   child.stdout.on("data", (data) => {
@@ -229,3 +240,6 @@ ipcMain.handle('deleteWallet', async (event, publicKey) => {
     console.error('Ошибка при удалении кошелька:', error);
   }
 });
+
+
+

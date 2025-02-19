@@ -37,6 +37,9 @@ export default function Settings() {
         setIsInputChanged(true); // Пользователь изменил поле ввода
     };
 
+    // Проверка на совпадение введенного значения с сохраненным
+    const isInputEqualToSaved = scriptDirectory === savedPath;
+
     return (
         <div>
             <h1>Settings</h1>
@@ -53,7 +56,21 @@ export default function Settings() {
             </Box>
 
             {/* Если путь не сохранен, отображается кнопка SAVE */}
-            {!isSaved ? (
+            {isSaved || isInputEqualToSaved ? (
+                <Button
+                    variant="contained"
+                    disabled
+                    sx={{
+                        backgroundColor: "green", // Зеленая кнопка после сохранения
+                        color: "white",
+                        "&:hover": {
+                            backgroundColor: "green", // Без изменения цвета при наведении
+                        },
+                    }}
+                >
+                    <CheckCircle sx={{ color: "white", fontSize: 24 }} />
+                </Button>
+            ) : (
                 <Button
                     variant="contained"
                     onClick={handleSave}
@@ -67,20 +84,6 @@ export default function Settings() {
                     }}
                 >
                     SAVE
-                </Button>
-            ) : (
-                <Button
-                    variant="contained"
-                    disabled
-                    sx={{
-                        backgroundColor: "green", // Зеленая кнопка после сохранения
-                        color: "white",
-                        "&:hover": {
-                            backgroundColor: "green", // Без изменения цвета при наведении
-                        },
-                    }}
-                >
-                    <CheckCircle sx={{ color: "white", fontSize: 24 }} />
                 </Button>
             )}
 
