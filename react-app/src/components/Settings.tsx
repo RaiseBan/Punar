@@ -1,98 +1,149 @@
 import React, { useState, useEffect } from "react";
-import { TextField, Button, Box, Typography } from "@mui/material";
-import { CheckCircle } from "@mui/icons-material"; // Для зеленой галочки
+import { TextField, Button, Box, Typography, IconButton, Stack } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import CheckCircle from "@mui/icons-material/CheckCircle";
+import DeleteIcon from "@mui/icons-material/Delete";
+
+interface AppSettings {
+    scriptDirectory?: string;
+    mainRpc?: string;
+    heliusRpcs?: string[];
+}
 
 export default function Settings() {
-    const [scriptDirectory, setScriptDirectory] = useState<string>("");
-    const [savedPath, setSavedPath] = useState<string | null>(null);
-    const [isSaved, setIsSaved] = useState<boolean>(false);
-    const [isInputChanged, setIsInputChanged] = useState<boolean>(false);
+    const [settings, setSettings] = useState<AppSettings>({});
+    const [isChanged, setIsChanged] = useState(false);
 
     useEffect(() => {
-        // Получаем сохраненный путь при монтировании компонента
-        window.electronAPI?.getScriptDirectory().then((directory: string | null) => {
-            if (directory) {
-                setScriptDirectory(directory);
-                setSavedPath(directory); // Устанавливаем сохраненный путь при монтировании
+        const loadSettings = async () => {
+            const loadedSettings = await window.electronAPI?.getSettings();
+            if (loadedSettings) {
+                setSettings(loadedSettings);
             }
-        });
+        };
+        loadSettings();
     }, []);
 
-    const handleSave = () => {
-        if (scriptDirectory) {
-            // Сохраняем путь через Electron API
-            window.electronAPI?.saveScriptDirectory(scriptDirectory);
-
-            // Меняем состояние на "сохранено"
-            setIsSaved(true);
-            setSavedPath(scriptDirectory);
-
-            // Сброс состояния через 2 секунды
-            setTimeout(() => setIsSaved(false), 2000);
-        }
+    const handleSave = async () => {
+        await window.electronAPI?.saveSettings(settings);
+        setIsChanged(false); // Сбрасываем флаг изменений после сохранения
     };
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setScriptDirectory(e.target.value);
-        setIsInputChanged(true); // Пользователь изменил поле ввода
+    const handleAddHeliusRpc = () => {
+        setSettings(prev => ({
+            ...prev,
+            heliusRpcs: [...(prev.heliusRpcs || []), ""]
+        }));
+        setIsChanged(true);
     };
 
-    // Проверка на совпадение введенного значения с сохраненным
-    const isInputEqualToSaved = scriptDirectory === savedPath;
+    const handleDeleteHeliusRpc = (index: number) => {
+        setSettings(prev => ({
+            ...prev,
+            heliusRpcs: prev.heliusRpcs?.filter((_, i) => i !== index) || []
+        }));
+        setIsChanged(true);
+    };
+
+    const handleChange = (field: keyof AppSettings) => (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSettings(prev => ({ ...prev, [field]: e.target.value }));
+        setIsChanged(true);
+    };
+
+    const handleHeliusRpcChange = (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSettings(prev => ({
+            ...prev,
+            heliusRpcs: prev.heliusRpcs?.map((rpc, i) =>
+                i === index ? e.target.value : rpc
+            ) || []
+        }));
+        setIsChanged(true);
+    };
 
     return (
-        <div>
-            <h1>Settings</h1>
-            <p>Configure your application settings here.</p>
+        <Box sx={{ p: 3 }}>
+            <Typography variant="h4" gutterBottom>Settings</Typography>
 
-            <Box sx={{ mb: 2 }}>
+            {/* Script Directory */}
+            <Box sx={{ mb: 4 }}>
                 <TextField
                     label="Scripts Directory"
-                    variant="outlined"
-                    value={scriptDirectory}
-                    onChange={handleInputChange}
                     fullWidth
+                    value={settings.scriptDirectory || ""}
+                    onChange={handleChange('scriptDirectory')}
+                    margin="normal"
                 />
             </Box>
 
-            {/* Если путь не сохранен, отображается кнопка SAVE */}
-            {isSaved || isInputEqualToSaved ? (
-                <Button
-                    variant="contained"
-                    disabled
-                    sx={{
-                        backgroundColor: "green", // Зеленая кнопка после сохранения
-                        color: "white",
-                        "&:hover": {
-                            backgroundColor: "green", // Без изменения цвета при наведении
-                        },
-                    }}
-                >
-                    <CheckCircle sx={{ color: "white", fontSize: 24 }} />
-                </Button>
-            ) : (
-                <Button
-                    variant="contained"
-                    onClick={handleSave}
-                    disabled={!isInputChanged} // Кнопка доступна только после изменения поля
-                    sx={{
-                        backgroundColor: "#1976d2", // Синий цвет до сохранения
-                        color: "white",
-                        "&:hover": {
-                            backgroundColor: "#1565c0",
-                        },
-                    }}
-                >
-                    SAVE
-                </Button>
-            )}
+            {/* Main RPC */}
+            <Box sx={{ mb: 4 }}>
+                <TextField
+                    label="Main RPC"
+                    fullWidth
+                    value={settings.mainRpc || ""}
+                    onChange={handleChange('mainRpc')}
+                    margin="normal"
+                />
+            </Box>
 
-            {/* Отображение пути, если он был сохранен */}
-            {isSaved && savedPath && (
-                <Typography variant="body1" color="success.main" sx={{ mt: 2 }}>
-                    Script directory saved: {savedPath}
+            {/* Helius RPCs */}
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                    Helius RPC Endpoints
+                    <IconButton
+                        color="primary"
+                        onClick={handleAddHeliusRpc}
+                        sx={{ ml: 1 }}
+                    >
+                        <AddIcon />
+                    </IconButton>
                 </Typography>
-            )}
-        </div>
+
+                <Stack spacing={2}>
+                    {settings.heliusRpcs?.map((rpc, index) => (
+                        <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <TextField
+                                fullWidth
+                                value={rpc}
+                                onChange={handleHeliusRpcChange(index)}
+                                margin="normal"
+                            />
+                            <IconButton
+                                color="error"
+                                onClick={() => handleDeleteHeliusRpc(index)}
+                            >
+                                <DeleteIcon />
+                            </IconButton>
+                        </Box>
+                    ))}
+                </Stack>
+            </Box>
+
+            {/* Save Button or Checkmark */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                {isChanged ? (
+                    <Button
+                        variant="contained"
+                        onClick={handleSave}
+                        sx={{
+                            backgroundColor: "#1976d2",
+                            color: "white",
+                            "&:hover": {
+                                backgroundColor: "#1565c0",
+                            },
+                        }}
+                    >
+                        SAVE
+                    </Button>
+                ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CheckCircle fontSize="large" color="success" />
+                        <Typography variant="body1" color="text.secondary">
+                            Settings saved
+                        </Typography>
+                    </Box>
+                )}
+            </Box>
+        </Box>
     );
 }

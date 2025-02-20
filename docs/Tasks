@@ -1044,3 +1044,12 @@ export default tasksSlice.reducer;
 Реши мою проблему с дублированием логов, чтобы независимо от того переключался я перед запуском task или нет - логи не дублировались!
 
 
+
+
+<Routes>
+                        {/* На "/" перенаправляем сразу на /tasks */}
+                        <Route path="/" element={<Navigate to="/tasks" replace />} />
+                        <Route path="/tasks" element={<TasksPage />} />
+                        <Route path="/wallets" element={<Wallets />} />
+                        <Route path="/settings" element={<Settings />} />
+                    </Routes>

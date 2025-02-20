@@ -1,16 +1,24 @@
 {
   "module_name": "Tensor sniper (SDK)",
   "task_name": "test",
-  "collection_id": "121",
-  "price_by_name": false,
-  "price_config": null,
+  "collection_id": "GT8s3zXajUBRxmEjucRWu1RA1QxTsC4ahRh3B3cbruGB",
+  "price_by_name": true,
+  "price_config": "C:\\Users\\user\\WebstormProjects\\tensor-sdk\\src\\config\\out_prices.json",
   "threshold_price": 0,
-  "use_jito": true,
-  "jito_region": "🇺🇸 Salt Lake City",
-  "jito_tip_lamports": 1999,
+  "use_jito": false,
+  "jito_region": null,
+  "jito_tip_lamports": 1000,
   "use_bloxroute": false,
   "bloxroute_region": null,
   "bloxroute_tip_lamports": 1000000,
   "tx_to_send": 1,
-  "privateKey": "5r8LscnGYaU7HbRgwjy6NojNnqcxcbPNUjWomJXcEjHwoU67Xv4KjjTRko9azjgnuE3wwaGi3exA2zfQMg96cbUh"
+  "privateKey": "2EFYhL9PG98x2bFBYZWKFdZiCdU9V4B6xCF57t9oGpPcsbfDaFn8Qmtg16Snye2do5jnVgHpkWyDgTQ6W6q7Xy5p",
+  "main_rpc": "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f",
+  "helius_rpcs": [
+    "f20cc51e-8516-4603-b26d-d27d7b49d49f",
+    "b7d3b06f-b1f9-49ed-b4f4-43b70dae66d4",
+    "bdd61b38-c3e0-4064-8b79-f70bc73bda4d",
+    "d069229e-d958-48a8-8b5f-bf83a5ae9729",
+    "e3789e21-b1c6-4478-a3d3-c46fbbe3c98d"
+  ]
 }

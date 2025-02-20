@@ -1,3 +1,11 @@
 {
-  "scriptDirectory": "C:\\Users\\user\\WebstormProjects\\tensor-sdk"
+  "scriptDirectory": "C:\\Users\\user\\WebstormProjects\\tensor-sdk",
+  "heliusRpcs": [
+    "f20cc51e-8516-4603-b26d-d27d7b49d49f",
+    "b7d3b06f-b1f9-49ed-b4f4-43b70dae66d4",
+    "bdd61b38-c3e0-4064-8b79-f70bc73bda4d",
+    "d069229e-d958-48a8-8b5f-bf83a5ae9729",
+    "e3789e21-b1c6-4478-a3d3-c46fbbe3c98d"
+  ],
+  "mainRpc": "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f"
 }

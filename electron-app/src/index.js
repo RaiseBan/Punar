@@ -41,56 +41,94 @@ ipcMain.handle('closeWindow', () => {
 // Путь к директории globalSettings
 
 // Обработчик сохранения пути к директории
-ipcMain.on("save-script-directory", (event, directory) => {
-  const settingsDir = getGlobalConfigDirectory()
-  const settingsFilePath = path.join(settingsDir, 'userSettings.json');
+// ipcMain.on("save-script-directory", (event, directory) => {
+//   const settingsDir = getGlobalConfigDirectory()
+//   const settingsFilePath = path.join(settingsDir, 'userSettings.json');
+//
+//   // Создаем директорию, если она не существует
+//   if (!fs.existsSync(settingsDir)) {
+//     fs.mkdirSync(settingsDir, { recursive: true });
+//   }
+//
+//   // Если файл не существует, создаем его с начальной структурой
+//   if (!fs.existsSync(settingsFilePath)) {
+//     const initialSettings = { scriptDirectory: directory };
+//     fs.writeFileSync(settingsFilePath, JSON.stringify(initialSettings, null, 2));
+//     console.log(`Создан файл с настройками, путь сохранен: ${directory}`);
+//   } else {
+//     // Если файл существует, обновляем только поле scriptDirectory
+//     try {
+//       const data = fs.readFileSync(settingsFilePath, 'utf-8');
+//       const settings = JSON.parse(data);
+//
+//       // Обновляем только поле scriptDirectory
+//       settings.scriptDirectory = directory;
+//
+//       fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+//       console.log(`Путь обновлен: ${directory}`);
+//     } catch (error) {
+//       console.error('Ошибка при чтении или записи файла настроек:', error);
+//     }
+//   }
+// });
+//
+// function getScriptPath(){
+//   const settingsDir = getGlobalConfigDirectory();
+//   const settingsFilePath = path.join(settingsDir, 'userSettings.json');
+//   if (!fs.existsSync(settingsFilePath)) {
+//     return null; // Если файл не существует, возвращаем null
+//   }
+//   try {
+//     const data = fs.readFileSync(settingsFilePath, 'utf-8');
+//     const settings = JSON.parse(data);
+//     return settings.scriptDirectory; // Возвращаем путь
+//   } catch (error) {
+//     console.error('Ошибка при чтении файла настроек:', error);
+//     return null;
+//   }
+// }
+// // Получение пути к директории из userSettings.json
+// ipcMain.handle("get-script-directory", () => {
+//   return getScriptPath()
+// });
 
-  // Создаем директорию, если она не существует
-  if (!fs.existsSync(settingsDir)) {
-    fs.mkdirSync(settingsDir, { recursive: true });
-  }
-
-  // Если файл не существует, создаем его с начальной структурой
-  if (!fs.existsSync(settingsFilePath)) {
-    const initialSettings = { scriptDirectory: directory };
-    fs.writeFileSync(settingsFilePath, JSON.stringify(initialSettings, null, 2));
-    console.log(`Создан файл с настройками, путь сохранен: ${directory}`);
-  } else {
-    // Если файл существует, обновляем только поле scriptDirectory
-    try {
-      const data = fs.readFileSync(settingsFilePath, 'utf-8');
-      const settings = JSON.parse(data);
-
-      // Обновляем только поле scriptDirectory
-      settings.scriptDirectory = directory;
-
-      fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
-      console.log(`Путь обновлен: ${directory}`);
-    } catch (error) {
-      console.error('Ошибка при чтении или записи файла настроек:', error);
-    }
-  }
-});
-
-function getScriptPath(){
+// Получение настроек
+function getSettings(){
   const settingsDir = getGlobalConfigDirectory();
   const settingsFilePath = path.join(settingsDir, 'userSettings.json');
+
   if (!fs.existsSync(settingsFilePath)) {
-    return null; // Если файл не существует, возвращаем null
+    return {};
   }
+
   try {
     const data = fs.readFileSync(settingsFilePath, 'utf-8');
-    const settings = JSON.parse(data);
-    return settings.scriptDirectory; // Возвращаем путь
+    return JSON.parse(data);
   } catch (error) {
-    console.error('Ошибка при чтении файла настроек:', error);
-    return null;
+    console.error('Error reading settings:', error);
+    return {};
   }
 }
-// Получение пути к директории из userSettings.json
-ipcMain.handle("get-script-directory", () => {
-  return getScriptPath()
+
+ipcMain.handle("get-settings", async () => {
+  return getSettings();
 });
+
+// Сохранение настроек
+ipcMain.handle("save-settings", (_, settings) => {
+  const settingsDir = getGlobalConfigDirectory();
+  const settingsFilePath = path.join(settingsDir, 'userSettings.json');
+
+  try {
+    fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    return false;
+  }
+});
+
+
 
 
 
@@ -107,9 +145,9 @@ ipcMain.on("start-process", (event, {taskId, config}) => {
   // Сразу говорим рендеру "process-started"
   event.reply("process-started", { taskId, config: config });
 
-  const scriptPath = getScriptPath();
+  const scriptPath = getSettings();
   // Передаем путь к проекту и конфиг в spawnProcess
-  const child = spawnProcess(config, scriptPath);
+  const child = spawnProcess(config, scriptPath.scriptDirectory);
   // const child = spawn("node", ["your_script.js", scriptDirectory]);
   processes[taskId] = child;
 
@@ -131,19 +169,29 @@ ipcMain.on("start-process", (event, {taskId, config}) => {
 // Остановка процесса
 ipcMain.on("stop-process", (event, taskId) => {
   const child = processes[taskId];
+
   if (child && !child.killed) {
-    child.kill();
-    console.log(`Процесс ${taskId} остановлен`);
+    child.stdin.write("terminate-workers\n"); // Передаем команду через stdin
+
+    setTimeout(() => {
+      if (!child.killed) {
+        child.kill(); // Гарантированно убиваем процесс
+        console.log(`Процесс ${taskId} остановлен`);
+      }
+    }, 1000);
   }
 });
+
+
+
 
 // Возобновление процесса
 ipcMain.on("resume-process", (event, { taskId, config }) => {
   console.log(`Resume-process: Task ${taskId}, config:`, config);
 
   event.reply("process-started", { taskId, config });
-  const scriptPath = getScriptPath();
-  const child = spawnProcess(config, scriptPath);
+  const scriptPath = getSettings();
+  const child = spawnProcess(config, scriptPath.scriptDirectory);
   // const child = spawn("node", ["your_script.js", scriptDirectory]);
   processes[taskId] = child;
 

@@ -56,8 +56,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     addWallet: (wallet) => ipcRenderer.invoke('addWallet', wallet),
     deleteWallet: (publicKey) => ipcRenderer.invoke('deleteWallet', publicKey), // Новый метод для удаления кошелька
 
-    saveScriptDirectory: (directory) => ipcRenderer.send("save-script-directory", directory),
-    getScriptDirectory: () => ipcRenderer.invoke('get-script-directory'),
+    // saveScriptDirectory: (directory) => ipcRenderer.send("save-script-directory", directory),
+    // getScriptDirectory: () => ipcRenderer.invoke('get-script-directory'),
+
+    getSettings: () => ipcRenderer.invoke('get-settings'),
+    saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
 
     // Функция для сворачивания окна
     minimizeWindow: () => ipcRenderer.invoke("minimizeWindow"),

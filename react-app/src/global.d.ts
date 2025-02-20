@@ -3,6 +3,11 @@ declare module "*.module.css" {
     const classes: { [key: string]: string };
     export default classes;
 }
+interface AppSettings {
+    scriptDirectory?: string;
+    mainRpc?: string;
+    heliusRpcs?: string[];
+}
 
 export {};
 
@@ -11,14 +16,15 @@ declare global {
         electronAPI?: {
             // Методы
 
-
+            getSettings: () => Promise<AppSettings>;
+            saveSettings: (settings: AppSettings) => Promise<void>;
 
             startProcess: (taskId: number, taskConfig: any) => void;
             stopProcess: (taskId: number) => void;
             resumeProcess: (taskId: number, config: any) => void;
 
-            saveScriptDirectory: (directory: string) => void;
-            getScriptDirectory: () => Promise<string | null>;
+            // saveScriptDirectory: (directory: string) => void;
+            // getScriptDirectory: () => Promise<string | null>;
 
             // Методы для работы с кошельками
             getWallets: () => Promise<any[]>; // Метод для получения кошельков
