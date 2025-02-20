@@ -35,6 +35,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import {useDispatch, useSelector} from "react-redux";
 import { removeTask, updateTask } from "../store/tasksSlice";
 import {RootState} from "../store/store";
+import {COLS_NAMES} from "../constants";
 
 export interface TaskDataRow {
     cells: string[];
@@ -104,6 +105,8 @@ export default function Task({
         console.log("Logs updated for Task", id, logs);  // Логи обновляются
     }, [logs]);
 
+    const finalColumns =
+        columns && columns.length > 0 ? columns : COLS_NAMES.get(moduleName) || [];
 
     const handleSaveSettings = () => {
         // Сохраняем изменения в Redux
@@ -250,8 +253,8 @@ export default function Task({
                     <Box sx={{ width: "100%", marginTop: "10px", overflowX: "auto" }}>
                         <Table sx={{ minWidth: 500 }}>
                             <TableHead>
-                                <TableRow sx={{ backgroundColor: "#1E1E1E" }}>
-                                    {columns.map((col, i) => (
+                                <TableRow>
+                                    {finalColumns.map((col, i) => (
                                         <TableCell
                                             key={i}
                                             sx={{ color: "#ff9e44", borderBottom: "1px solid #2A2A2A" }}
