@@ -18,9 +18,29 @@ import {
     Stepper,
     Step,
     StepLabel,
+    Divider,
 } from "@mui/material";
-import { MODULES } from "../constants";
+import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
+import {MODULES} from "../constants";
+// Импорт, если иконка ещё не добавлена
 
+
+interface ModuleItem {
+    id: string;
+    label: string;
+    icon: React.ReactNode;
+    isDisabled?: boolean;
+}
+
+// ------------------------
+// Пример структуры "Wallet" (см. ваш код для одиночных кошельков)
+interface Wallet {
+    publicKey: string;
+    privateKey: string;
+}
+
+// ------------------------
+// Параметры для "Tensor sniper (SDK)" и "Tensor reprice" (уже были)
 interface TensorSdkParams {
     collectionId: string;
     priceByName: boolean;
@@ -32,13 +52,47 @@ interface TensorSdkParams {
     useBloxroute: boolean;
     bloxrouteRegion: string;
     bloxrouteTipLamports: number;
+    delta: number;
     txToSend: number;
-    walletSource: 'existing' | 'manual'; // новый параметр
-    privateKey: string; // новый параметр
+    walletSource: 'existing' | 'manual'; // уже было
+    privateKey: string; // уже было
 }
 
+// ------------------------
+// ПАРАМЕТРЫ НОВОГО МОДУЛЯ LAUNCH_MY_NFT
+interface LaunchMyNftParams {
+    target_url: string;
+    total_priority_fee: number;
+    compute_unit_limit: number;
+    useJito: boolean;
+    jito_tip_account: string;
+    jito_tip_amount: number;
+    jito_region: string;
+    delay_when_sending: number;
+    delay_before_sending: number;
+    nfts_to_buy_per_account: number;
+
+    // Логика выбора кошельков:
+    // 1) "single"  или  "set"
+    walletApproach: 'single' | 'set';
+
+    // Если single → user может выбрать "existing" или "manual"
+    singleWalletMethod: 'existing' | 'manual';
+
+    // Если single + existing → privateKey берём из списка, а сюда сохраняем publicKey
+    selectedWalletPublicKey: string;
+
+    // Если single + manual → вводим вручную
+    manualPrivateKey: string;
+
+    // Если set → пользователь выбирает имя сета
+    chosenSetName: string;
+}
+
+// ------------------------
 const STEPS = ["Choose module", "Configure module", "Review & Create"];
 
+// ------------------------
 interface CreateTaskWizardProps {
     open: boolean;
     onClose: () => void;
@@ -54,8 +108,11 @@ export default function CreateTaskWizard({
 
     // Выбранный модуль
     const [selectedModule, setSelectedModule] = useState<string | null>(null);
-    const [wallets, setWallets] = useState<{ publicKey: string; privateKey: string }[]>([]);
-    // Параметры Tensor sniper (SDK)
+
+    // Одиночные кошельки (список), уже было
+    const [wallets, setWallets] = useState<Wallet[]>([]);
+
+    // Параметры Tensor sniper (SDK) + reprice
     const [tensorSdkParams, setTensorSdkParams] = useState<TensorSdkParams>({
         collectionId: "",
         priceByName: false,
@@ -68,22 +125,47 @@ export default function CreateTaskWizard({
         bloxrouteRegion: "",
         bloxrouteTipLamports: 1000000,
         txToSend: 1,
+        delta: 50000,
         walletSource: 'existing',
         privateKey: ""
     });
 
-    // Новое: имя таска
+    // ---- НОВОЕ: Параметры LaunchMyNft
+    const [launchMyNftParams, setLaunchMyNftParams] = useState<LaunchMyNftParams>({
+        target_url: "",
+        total_priority_fee: 0,
+        compute_unit_limit: 1400000, // к примеру
+        useJito: false,
+        jito_tip_account: "",
+        jito_tip_amount: 10000,
+        jito_region: "",
+        delay_when_sending: 0,
+        delay_before_sending: 0,
+        nfts_to_buy_per_account: 1,
+
+        walletApproach: 'single',
+        singleWalletMethod: 'existing',
+        selectedWalletPublicKey: "",
+        manualPrivateKey: "",
+        chosenSetName: "",
+    });
+
+    // Имя таска
     const [taskName, setTaskName] = useState("");
 
-    const handleNext = () => {
-        setStep((prev) => prev + 1);
-    };
-    const handleBack = () => {
-        setStep((prev) => prev - 1);
-    };
+    // walletSets: ключи для выпадающего списка, если пользователь выбрал «Wallet Set»
+    const [walletSets, setWalletSets] = useState<string[]>([]);
+
+    // ------------------------
+    // Шаги
+    const handleNext = () => setStep((prev) => prev + 1);
+    const handleBack = () => setStep((prev) => prev - 1);
+
     const handleClose = () => {
         setStep(0);
         setSelectedModule(null);
+
+        // Сброс Tensor
         setTensorSdkParams({
             collectionId: "",
             priceByName: false,
@@ -95,64 +177,170 @@ export default function CreateTaskWizard({
             useBloxroute: false,
             bloxrouteRegion: "",
             bloxrouteTipLamports: 1000000,
+            delta: 50000,
             txToSend: 1,
-            walletSource: 'existing', // новый параметр
+            walletSource: 'existing',
             privateKey: ""
         });
+
+        // Сброс LaunchMyNft
+        setLaunchMyNftParams({
+            target_url: "",
+            total_priority_fee: 0,
+            compute_unit_limit: 1400000,
+            useJito: false,
+            jito_tip_account: "",
+            jito_tip_amount: 10000,
+            jito_region: "",
+            delay_when_sending: 0,
+            delay_before_sending: 0,
+            nfts_to_buy_per_account: 1,
+
+            walletApproach: 'single',
+            singleWalletMethod: 'existing',
+            selectedWalletPublicKey: "",
+            manualPrivateKey: "",
+            chosenSetName: "",
+        });
+
         setTaskName("");
         onClose();
     };
 
+    // ------------------------
+    // Создание таска (шаг Review & Create → Create)
     const handleCreate = async () => {
         if (selectedModule === "tensor_sdk") {
-            // Формируем config
-
             const settings = await window.electronAPI?.getSettings();
-
+            const p = tensorSdkParams;
             const cfg = {
                 module_name: "Tensor sniper (SDK)",
-                task_name: taskName || "", // <-- новое поле
-                collection_id: tensorSdkParams.collectionId,
-                price_by_name: tensorSdkParams.priceByName,
-                price_config: tensorSdkParams.priceConfig || null,
-                threshold_price: tensorSdkParams.thresholdPrice,
-                use_jito: tensorSdkParams.useJito,
-                jito_region: tensorSdkParams.jitoRegion || null,
-                jito_tip_lamports: tensorSdkParams.jitoTipLamports,
-                use_bloxroute: tensorSdkParams.useBloxroute,
-                bloxroute_region: tensorSdkParams.bloxrouteRegion || null,
-                bloxroute_tip_lamports: tensorSdkParams.bloxrouteTipLamports,
-                tx_to_send: tensorSdkParams.txToSend,
-                privateKey: tensorSdkParams.privateKey,
-                main_rpc: settings?.mainRpc || "", // Добавляем main_rpc
-                helius_rpcs: settings?.heliusRpcs || [], // Добавляем helius_rpcs
+                task_name: taskName || "",
+                collection_id: p.collectionId,
+                price_by_name: p.priceByName,
+                price_config: p.priceConfig || null,
+                threshold_price: p.thresholdPrice,
+                use_jito: p.useJito,
+                jito_region: p.jitoRegion || null,
+                jito_tip_lamports: p.jitoTipLamports,
+                use_bloxroute: p.useBloxroute,
+                bloxroute_region: p.bloxrouteRegion || null,
+                bloxroute_tip_lamports: p.bloxrouteTipLamports,
+                tx_to_send: p.txToSend,
+                privateKey: p.privateKey,
+                main_rpc: settings?.mainRpc || "",
+                helius_rpcs: settings?.heliusRpcs || [],
+            };
+            onCreateTask(cfg);
+
+        } else if (selectedModule === "tensor_reprice") {
+            const settings = await window.electronAPI?.getSettings();
+            const p = tensorSdkParams;
+            const cfg = {
+                module_name: "Tensor reprice",
+                task_name: taskName,
+                collection_id: p.collectionId,
+                delta: p.delta,
+                limit_config: p.priceConfig,
+                privateKey: p.privateKey,
+                main_rpc: settings?.mainRpc || "",
+                helius_rpcs: settings?.heliusRpcs || [],
+                tensor_api_token: settings?.tensor_api_token || "",
+            };
+            onCreateTask(cfg);
+
+        } else if (selectedModule === "launch_my_nft") {
+            const settings = await window.electronAPI?.getSettings();
+            const p = launchMyNftParams;
+
+            // Формируем логику, как именно получить нужное поле wallet или walletSet:
+            let walletSource: "manaully" | "set" = "manaully"; // по умолчанию
+            let singleWalletPk = "";
+            let walletSet: Wallet[] = [];
+
+            if (p.walletApproach === "single") {
+                // Если пользователь выбрал одиночный кошелек
+                walletSource = "manaully"; // по вашим условиям
+                if (p.singleWalletMethod === "existing") {
+                    // Ищем приватный ключ у выбранного публичного
+                    const found = wallets.find((w) => w.publicKey === p.selectedWalletPublicKey);
+                    if (found) {
+                        singleWalletPk = found.privateKey;
+                    }
+                } else {
+                    // manual
+                    singleWalletPk = p.manualPrivateKey.trim();
+                }
+            } else {
+                // Выбор «set»
+                walletSource = "set";
+                if (p.chosenSetName && settings?.walletsSet?.[p.chosenSetName]) {
+                    walletSet = settings.walletsSet[p.chosenSetName];
+                }
+            }
+
+            const cfg = {
+                module_name: "LaunchMyNft",
+                task_name: taskName,
+
+                // Параметры LaunchMyNft
+                target_url: p.target_url,
+                total_priority_fee: p.total_priority_fee,
+                compute_unit_limit: p.compute_unit_limit,
+                use_jito: p.useJito,
+                jito_tip_account: p.jito_tip_account,
+                jito_tip_amount: p.jito_tip_amount,
+                jito_region: p.jito_region,
+                delay_when_sending: p.delay_when_sending,
+                delay_before_sending: p.delay_before_sending,
+                nfts_to_buy_per_account: p.nfts_to_buy_per_account,
+
+                // Кошельки
+                walletSource, // "manaully" или "set"
+                wallet: singleWalletPk, // пусто, если user выбрал set
+                walletSet,     // [] если user выбрал single
+
+                main_rpc: settings?.mainRpc || "",
             };
             onCreateTask(cfg);
         }
-        // Можно добавить логику для остальных модулей
         handleClose();
     };
 
+    // ------------------------
+    // При открытии диалога загружаем одиночные кошельки + имена сетов
     useEffect(() => {
-        const fetchWallets = async () => {
+        const fetchData = async () => {
             if (open) {
                 try {
-                    const wallets = await window.electronAPI!.getWallets();
-                    setWallets(wallets);
+                    // 1) Обычные кошельки
+                    const w = await window.electronAPI!.getWallets();
+                    setWallets(w);
+
+                    // 2) Список сетов (keys)
+                    const s = await window.electronAPI!.getSettings();
+                    if (s?.walletsSet) {
+                        setWalletSets(Object.keys(s.walletsSet));
+                    } else {
+                        setWalletSets([]);
+                    }
                 } catch (error) {
-                    console.error('Error loading wallets:', error);
+                    console.error("Error loading data:", error);
                 }
             }
         };
-        fetchWallets();
+        fetchData();
     }, [open]);
 
+    // ------------------------
+    // Рендер шагов
+    // ------------------------
+    // Шаг 0: выбор модуля
     const renderStepChooseModule = () => (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 400 }}>
             <Typography variant="h6" sx={{ mb: 1 }}>
                 Choose a module to run
             </Typography>
-
             {MODULES.map((mod) => (
                 <Button
                     key={mod.id}
@@ -180,8 +368,7 @@ export default function CreateTaskWizard({
         </Box>
     );
 
-
-    // Рендер для шага 1: настройки выбранного модуля
+    // Шаг 1: конфигурация в зависимости от выбранного модуля
     const renderStepConfigure = () => {
         if (selectedModule === "tensor_sdk") {
             const params = tensorSdkParams;
@@ -440,9 +627,368 @@ export default function CreateTaskWizard({
                     />
                 </Box>
             );
+        }else if (selectedModule === "tensor_reprice") {
+            const params = tensorSdkParams;
+            return (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 500 }}>
+                    <Typography variant="h6">Tensor Reprice Parameters</Typography>
+
+                    <TextField
+                        label="Task Name"
+                        value={taskName}
+                        onChange={(e) => setTaskName(e.target.value)}
+                        sx={{ mb: 2 }}
+                    />
+
+                    <TextField
+                        label="Collection ID"
+                        value={params.collectionId}
+                        onChange={(e) =>
+                            setTensorSdkParams({ ...params, collectionId: e.target.value })
+                        }
+                    />
+
+                    {/* Wallet Configuration */}
+                    <Typography variant="subtitle1" sx={{ mt: 2 }}>
+                        Wallet Configuration
+                    </Typography>
+
+                    <RadioGroup
+                        row
+                        value={params.walletSource}
+                        onChange={(e) =>
+                            setTensorSdkParams({
+                                ...params,
+                                walletSource: e.target.value as 'existing' | 'manual'
+                            })
+                        }
+                    >
+                        <FormControlLabel
+                            value="existing"
+                            control={<Radio />}
+                            label="Select existing wallet"
+                        />
+                        <FormControlLabel
+                            value="manual"
+                            control={<Radio />}
+                            label="Enter private key manually"
+                        />
+                    </RadioGroup>
+
+                    {params.walletSource === 'existing' ? (
+                        <FormControl fullWidth>
+                            <InputLabel>Select Wallet</InputLabel>
+                            <Select
+                                value={wallets.find(w => w.privateKey === params.privateKey)?.publicKey || ''}
+                                onChange={(e) => {
+                                    const selectedWallet = wallets.find(w => w.publicKey === e.target.value);
+                                    if (selectedWallet) {
+                                        setTensorSdkParams({
+                                            ...params,
+                                            privateKey: selectedWallet.privateKey
+                                        });
+                                    }
+                                }}
+                                label="Select Wallet"
+                            >
+                                {wallets.map((wallet) => (
+                                    <MenuItem key={wallet.publicKey} value={wallet.publicKey}>
+                                        {wallet.publicKey}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    ) : (
+                        <TextField
+                            label="Private Key"
+                            value={params.privateKey}
+                            onChange={(e) =>
+                                setTensorSdkParams({ ...params, privateKey: e.target.value })
+                            }
+                            type="password"
+                            fullWidth
+                        />
+                    )}
+
+                    {/* Delta */}
+                    <TextField
+                        label="Delta"
+                        type="number"
+                        value={params.delta}
+                        onChange={(e) =>
+                            setTensorSdkParams({
+                                ...params,
+                                delta: parseFloat(e.target.value) || 0,
+                            })
+                        }
+                    />
+
+                    {/* Limit Config */}
+                    <TextField
+                        label="Limit Config (file path)"
+                        value={params.priceConfig}
+                        onChange={(e) =>
+                            setTensorSdkParams({ ...params, priceConfig: e.target.value })
+                        }
+                    />
+                </Box>
+            );
+        }
+            // -------------
+        // launch_my_nft (НОВЫЙ МОДУЛЬ)
+        else if (selectedModule === "launch_my_nft") {
+            const p = launchMyNftParams;
+            return (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 500 }}>
+                    <Typography variant="h6">LaunchMyNft Parameters</Typography>
+
+                    {/* Task Name */}
+                    <TextField
+                        label="Task Name"
+                        value={taskName}
+                        onChange={(e) => setTaskName(e.target.value)}
+                    />
+
+                    <Divider sx={{ my: 2 }} />
+
+                    <TextField
+                        label="Target URL"
+                        value={p.target_url}
+                        onChange={(e) =>
+                            setLaunchMyNftParams({ ...p, target_url: e.target.value })
+                        }
+                    />
+
+                    <TextField
+                        label="Total Priority Fee (lamports)"
+                        type="number"
+                        value={p.total_priority_fee}
+                        onChange={(e) =>
+                            setLaunchMyNftParams({
+                                ...p,
+                                total_priority_fee: parseInt(e.target.value) || 0,
+                            })
+                        }
+                    />
+
+                    <TextField
+                        label="Compute Unit Limit"
+                        type="number"
+                        value={p.compute_unit_limit}
+                        onChange={(e) =>
+                            setLaunchMyNftParams({
+                                ...p,
+                                compute_unit_limit: parseInt(e.target.value) || 1400000,
+                            })
+                        }
+                    />
+
+                    {/* useJito */}
+                    <Box>
+                        <Typography>Use Jito?</Typography>
+                        <RadioGroup
+                            row
+                            value={p.useJito ? "yes" : "no"}
+                            onChange={(e) =>
+                                setLaunchMyNftParams({
+                                    ...p,
+                                    useJito: e.target.value === "yes",
+                                })
+                            }
+                        >
+                            <FormControlLabel value="yes" control={<Radio />} label="Yes" />
+                            <FormControlLabel value="no" control={<Radio />} label="No" />
+                        </RadioGroup>
+                    </Box>
+
+                    {p.useJito && (
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                            <TextField
+                                label="Jito Tip Account"
+                                value={p.jito_tip_account}
+                                onChange={(e) =>
+                                    setLaunchMyNftParams({
+                                        ...p,
+                                        jito_tip_account: e.target.value,
+                                    })
+                                }
+                            />
+                            <TextField
+                                label="Jito Tip Amount (lamports)"
+                                type="number"
+                                value={p.jito_tip_amount}
+                                onChange={(e) =>
+                                    setLaunchMyNftParams({
+                                        ...p,
+                                        jito_tip_amount: parseInt(e.target.value) || 1000,
+                                    })
+                                }
+                            />
+                            <TextField
+                                label="Jito Region"
+                                value={p.jito_region}
+                                onChange={(e) =>
+                                    setLaunchMyNftParams({
+                                        ...p,
+                                        jito_region: e.target.value,
+                                    })
+                                }
+                            />
+                        </Box>
+                    )}
+
+                    <TextField
+                        label="Delay when sending (ms)"
+                        type="number"
+                        value={p.delay_when_sending}
+                        onChange={(e) =>
+                            setLaunchMyNftParams({
+                                ...p,
+                                delay_when_sending: parseInt(e.target.value) || 0,
+                            })
+                        }
+                    />
+
+                    <TextField
+                        label="Delay before sending (ms)"
+                        type="number"
+                        value={p.delay_before_sending}
+                        onChange={(e) =>
+                            setLaunchMyNftParams({
+                                ...p,
+                                delay_before_sending: parseInt(e.target.value) || 0,
+                            })
+                        }
+                    />
+
+                    <TextField
+                        label="NFTs to buy per account"
+                        type="number"
+                        value={p.nfts_to_buy_per_account}
+                        onChange={(e) =>
+                            setLaunchMyNftParams({
+                                ...p,
+                                nfts_to_buy_per_account: parseInt(e.target.value) || 1,
+                            })
+                        }
+                    />
+
+                    <Divider sx={{ my: 2 }} />
+
+                    {/* Выбор: Single Wallet / Wallet Set */}
+                    <Typography variant="subtitle1">Wallet Choice</Typography>
+                    <RadioGroup
+                        row
+                        value={p.walletApproach}
+                        onChange={(e) =>
+                            setLaunchMyNftParams({
+                                ...p,
+                                walletApproach: e.target.value as 'single' | 'set',
+                            })
+                        }
+                    >
+                        <FormControlLabel
+                            value="single"
+                            control={<Radio />}
+                            label="Use single wallet"
+                        />
+                        <FormControlLabel
+                            value="set"
+                            control={<Radio />}
+                            label="Use wallet set"
+                        />
+                    </RadioGroup>
+
+                    {/* Если single → radio: existing/manual */}
+                    {p.walletApproach === "single" && (
+                        <>
+                            <RadioGroup
+                                row
+                                value={p.singleWalletMethod}
+                                onChange={(e) =>
+                                    setLaunchMyNftParams({
+                                        ...p,
+                                        singleWalletMethod: e.target.value as 'existing' | 'manual',
+                                    })
+                                }
+                            >
+                                <FormControlLabel
+                                    value="existing"
+                                    control={<Radio />}
+                                    label="Existing Wallet"
+                                />
+                                <FormControlLabel
+                                    value="manual"
+                                    control={<Radio />}
+                                    label="Manual Private Key"
+                                />
+                            </RadioGroup>
+
+                            {p.singleWalletMethod === "existing" ? (
+                                <FormControl fullWidth>
+                                    <InputLabel>Select Wallet</InputLabel>
+                                    <Select
+                                        value={p.selectedWalletPublicKey}
+                                        label="Select Wallet"
+                                        onChange={(e) =>
+                                            setLaunchMyNftParams({
+                                                ...p,
+                                                selectedWalletPublicKey: e.target.value as string,
+                                            })
+                                        }
+                                    >
+                                        {wallets.map((w) => (
+                                            <MenuItem key={w.publicKey} value={w.publicKey}>
+                                                {w.publicKey}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            ) : (
+                                <TextField
+                                    label="Private Key"
+                                    type="password"
+                                    value={p.manualPrivateKey}
+                                    onChange={(e) =>
+                                        setLaunchMyNftParams({
+                                            ...p,
+                                            manualPrivateKey: e.target.value,
+                                        })
+                                    }
+                                    fullWidth
+                                />
+                            )}
+                        </>
+                    )}
+
+                    {/* Если set → выпадающий список с именами сетов */}
+                    {p.walletApproach === "set" && (
+                        <FormControl fullWidth>
+                            <InputLabel>Select Wallet Set</InputLabel>
+                            <Select
+                                value={p.chosenSetName}
+                                label="Select Wallet Set"
+                                onChange={(e) =>
+                                    setLaunchMyNftParams({
+                                        ...p,
+                                        chosenSetName: e.target.value as string,
+                                    })
+                                }
+                            >
+                                {walletSets.map((setName) => (
+                                    <MenuItem key={setName} value={setName}>
+                                        {setName}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    )}
+                </Box>
+            );
         }
 
-        // Заглушка для недоступных модулей
+        // -------------
+        // Иначе заглушка
         return (
             <Typography color="error">
                 This module is not yet supported.
@@ -450,83 +996,63 @@ export default function CreateTaskWizard({
         );
     };
 
-    // Шаг 2: вывод выбранных параметров + «Confirm»
+    // Шаг 2: Review выбранных параметров
     const renderStepReview = () => {
         if (selectedModule === "tensor_sdk") {
-            const p = tensorSdkParams;
+            // Упрощённая заглушка
+            return <Typography>Review Tensor SDK (не меняем)</Typography>;
+        } else if (selectedModule === "tensor_reprice") {
+            return <Typography>Review Tensor Reprice (не меняем)</Typography>;
+        } else if (selectedModule === "launch_my_nft") {
+            const p = launchMyNftParams;
             return (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 500 }}>
-                    <Typography variant="h6">Review your parameters</Typography>
-                    <Typography>
-                        <b>Task Name:</b> {taskName}
-                    </Typography>
-                    <Typography>
-                        <b>Module:</b> Tensor sniper (SDK)
-                    </Typography>
-                    <Typography>
-                        <b>collectionId:</b> {p.collectionId}
-                    </Typography>
-                    <Typography>
-                        <b>Wallet Source:</b> {p.walletSource === 'existing'
-                        ? 'Existing Wallet'
-                        : 'Manual Entry'}
-                    </Typography>
-                    <Typography>
-                        <b>Wallet:</b> {p.walletSource === 'existing'
-                        ? wallets.find(w => w.privateKey === p.privateKey)?.publicKey
-                        : '*********'}
-                    </Typography>
-                    <Typography>
-                        <b>priceByName:</b> {p.priceByName ? "Yes" : "No"}
-                    </Typography>
-                    {p.priceByName && (
-                        <Typography>
-                            <b>priceConfig:</b> {p.priceConfig}
-                        </Typography>
-                    )}
-                    {!p.priceByName && (
-                        <Typography>
-                            <b>thresholdPrice (SOL):</b> {p.thresholdPrice}
-                        </Typography>
-                    )}
-
-                    <Typography>
-                        <b>useJito:</b> {p.useJito ? "Yes" : "No"}
-                    </Typography>
+                    <Typography variant="h6">Review LaunchMyNft Params</Typography>
+                    <Typography><b>Task Name:</b> {taskName}</Typography>
+                    <Typography><b>Module:</b> LaunchMyNft</Typography>
+                    <Typography><b>Target URL:</b> {p.target_url}</Typography>
+                    <Typography><b>Priority Fee:</b> {p.total_priority_fee}</Typography>
+                    <Typography><b>Compute Unit Limit:</b> {p.compute_unit_limit}</Typography>
+                    <Typography><b>useJito:</b> {p.useJito ? 'Yes' : 'No'}</Typography>
                     {p.useJito && (
                         <>
-                            <Typography>
-                                <b>jitoRegion:</b> {p.jitoRegion}
-                            </Typography>
-                            <Typography>
-                                <b>jitoTipLamports:</b> {p.jitoTipLamports}
-                            </Typography>
+                            <Typography><b>jito_tip_account:</b> {p.jito_tip_account}</Typography>
+                            <Typography><b>jito_tip_amount:</b> {p.jito_tip_amount}</Typography>
+                            <Typography><b>jito_region:</b> {p.jito_region}</Typography>
                         </>
                     )}
+                    <Typography><b>delay_when_sending:</b> {p.delay_when_sending}</Typography>
+                    <Typography><b>delay_before_sending:</b> {p.delay_before_sending}</Typography>
+                    <Typography><b>nfts_to_buy_per_account:</b> {p.nfts_to_buy_per_account}</Typography>
 
-                    <Typography>
-                        <b>useBloxroute:</b> {p.useBloxroute ? "Yes" : "No"}
-                    </Typography>
-                    {p.useBloxroute && (
+                    <Divider sx={{ my: 2 }} />
+
+                    <Typography><b>Wallet Approach:</b> {p.walletApproach === 'single' ? 'Single wallet' : 'Wallet set'}</Typography>
+                    {p.walletApproach === 'single' ? (
                         <>
-                            <Typography>
-                                <b>bloxrouteRegion:</b> {p.bloxrouteRegion}
-                            </Typography>
-                            <Typography>
-                                <b>bloxrouteTipLamports:</b> {p.bloxrouteTipLamports}
-                            </Typography>
+                            <Typography><b>Method:</b> {p.singleWalletMethod}</Typography>
+                            {p.singleWalletMethod === 'existing' ? (
+                                <Typography>
+                                    <b>Selected Wallet:</b> {p.selectedWalletPublicKey}
+                                </Typography>
+                            ) : (
+                                <Typography>
+                                    <b>Manual Private Key:</b> **** (hidden)
+                                </Typography>
+                            )}
                         </>
+                    ) : (
+                        <Typography><b>Chosen Set:</b> {p.chosenSetName}</Typography>
                     )}
-
-                    <Typography>
-                        <b>txToSend:</b> {p.txToSend}
-                    </Typography>
                 </Box>
             );
         }
         return null;
     };
 
+    // ------------------------
+    // Основной рендер
+    // ------------------------
     return (
         <Dialog open={open} onClose={handleClose} maxWidth="lg" fullWidth>
             <DialogTitle>Create Task</DialogTitle>

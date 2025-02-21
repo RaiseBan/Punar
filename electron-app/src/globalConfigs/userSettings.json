@@ -1,11 +1,21 @@
 {
-  "scriptDirectory": "C:\\Users\\user\\WebstormProjects\\tensor-sdk",
-  "heliusRpcs": [
-    "f20cc51e-8516-4603-b26d-d27d7b49d49f",
-    "b7d3b06f-b1f9-49ed-b4f4-43b70dae66d4",
-    "bdd61b38-c3e0-4064-8b79-f70bc73bda4d",
-    "d069229e-d958-48a8-8b5f-bf83a5ae9729",
-    "e3789e21-b1c6-4478-a3d3-c46fbbe3c98d"
-  ],
-  "mainRpc": "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f"
+  "walletsSet": {
+    "11212": [
+      {
+        "publicKey": "6BeNMNMoxyW8CN86HjK2415z9HQvPciYPQcC1zR3aEwf",
+        "privateKey": "5HCaLXo5JJbda1YPohJUKRhoXnnon88gYVsBMweM8sUxg8Waj59Ma3k2TEHGaZRcRfUekuJfoCSG2r2MtaxHNRky"
+      },
+      {
+        "publicKey": "Ei1GRB7dmJdMQ2C4PQmsKNkZeg3cLzRgsryvsVkXgSV6",
+        "privateKey": "2fLaJ5MagZdAQhA7oYfKaL8aD5eTmJKoEsEBqQ5wcChYM3BZuvdjcbAD4yimvjc39FenQpZxxxWufnaDn5wFhqon"
+      },
+      {
+        "publicKey": "8Mwxw9zyxt6bFPd6CoiqyLLZyS3cqSay49ckvXKa9cUC",
+        "privateKey": "5sjcxtsPiEA8BK3QLrtdEq7RBBmkQgEZKSkW6k9SeooCYkzwa6RtFUdVftApSGMwePPpd5wcCUBNz8TxtHLNc6Hi"
+      }
+    ]
+  },
+  "scriptDirectory": "1212",
+  "mainRpc": "12",
+  "tensor_api_token": "1212"
 }

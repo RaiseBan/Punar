@@ -3,10 +3,16 @@ declare module "*.module.css" {
     const classes: { [key: string]: string };
     export default classes;
 }
-interface AppSettings {
+export interface AppSettings {
+    walletsSet?: {
+        [setName: string]: Wallet[];
+    };
+    // ... остальные поля, которые могут быть в общих настройках
     scriptDirectory?: string;
     mainRpc?: string;
     heliusRpcs?: string[];
+    tensor_api_token?: string;
+    bloxroute_api_token?: string;
 }
 
 export {};

@@ -8,6 +8,8 @@ interface AppSettings {
     scriptDirectory?: string;
     mainRpc?: string;
     heliusRpcs?: string[];
+    tensor_api_token?: string;
+    bloxroute_api_token?: string;
 }
 
 export default function Settings() {
@@ -84,6 +86,30 @@ export default function Settings() {
                     onChange={handleChange('mainRpc')}
                     margin="normal"
                 />
+            </Box>
+            {/* API keys */}
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                    API KEYS
+                    <TextField
+                        label="Tensor API key"
+                        fullWidth
+                        value={settings.tensor_api_token || ""}
+                        onChange={handleChange('tensor_api_token')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="Bloxroute API key"
+                        fullWidth
+                        value={settings.bloxroute_api_token || ""}
+                        onChange={handleChange('bloxroute_api_token')}
+                        margin="normal"
+                    />
+
+                </Typography>
+
+
             </Box>
 
             {/* Helius RPCs */}

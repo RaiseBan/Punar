@@ -1053,3 +1053,15 @@ export default tasksSlice.reducer;
                         <Route path="/wallets" element={<Wallets />} />
                         <Route path="/settings" element={<Settings />} />
                     </Routes>
+
+
+
+
+36aec14311298426396c030000000000396c03009d3a0065d23c6c05730979bcfd56090deba9db9a72b382203522220fcfe52cb003c20383c95eb1052e1265136557647d72d5f4dd4339551183cdc0fffd562b68e5789e1f0b00beb12cb63f9270e1a0ef60fb7a5e71fce7bbef2dc99d0c184b8a40420f000000000000000001beea608273776d1de046fd23b9adc923df538fa524241ecf5f5d82aa1cbf40c1
+36 ae c1 43 11 29 84 26 f86d020000000000f86d0200b15f65dfd47a0147bf493a4d8da5578dfc019af8ad98735768bf2017c58c847ad6842c459ff78d7b52c1068fd7719f27621e4d427a862aa2d34451cdc886bcbd84a3ea9fad6d394a70ad4d45dee3c43dbd8cf524668bf70d810c83f524e6f41bdc410f000000000000000000
+
+0fb72156571c9791 b6e235050000000000000001beea608273776d1de046fd23b9adc923df538fa524241ecf5f5d82aa1cbf40c1
+
+GT8s3zXajUBRxmEjucRWu1RA1QxTsC4ahRh3B3cbruGB
+
+C:\Users\Administrator\Desktop\tensor-nft-sdk\src\config\out_prices.json

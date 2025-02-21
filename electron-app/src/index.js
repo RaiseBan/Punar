@@ -141,7 +141,7 @@ app.whenReady().then(() => {
 ipcMain.on("start-process", (event, {taskId, config}) => {
   // const taskId = Date.now();
   console.log(`Создан taskId: ${taskId}, запускаем процесс...`);
-  console.log(`taskConfig: ${JSON.stringify(config)}`);
+  console.log(`taskConfig: ${JSON.stringify(config, null, 2)}`);
   // Сразу говорим рендеру "process-started"
   event.reply("process-started", { taskId, config: config });
 

@@ -21,7 +21,7 @@ export const MODULES: ModuleItem[] = [
         id: "launch_my_nft",
         label: "LaunchMyNft",
         icon: <RocketLaunchIcon />,
-        isDisabled: true,
+        isDisabled: false,
     },
     {
         id: "tensor_api",
@@ -39,7 +39,7 @@ export const MODULES: ModuleItem[] = [
         id: "tensor_reprice",
         label: "Tensor reprice",
         icon: <SettingsEthernetIcon />,
-        isDisabled: true,
+        isDisabled: false,
     },
     {
         id: "pump_fun",
@@ -57,6 +57,6 @@ export const MODULES: ModuleItem[] = [
 
 export const COLS_NAMES: Map<string, string[]> = new Map([
     ["Tensor sniper (SDK)", ["NFT name", "price", "seller", "buyer"]],
-    ["users", ["ID", "Имя", "Роль"]]
+    ["Tensor reprice", ["ACTION", "NFT", "PRICE", "LIMIT"]]
 ]);
 

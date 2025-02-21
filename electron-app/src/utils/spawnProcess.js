@@ -48,8 +48,17 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
     // Запускаем дочерний процесс с заданным рабочим каталогом (cwd) и переменными окружения
     console.log(`scriptsDirectoryPath: ${scriptsDirectoryPath}`)
     console.log(`start process: \nPath: ${path.join(scriptsDirectoryPath, "src", "index.ts")} \nConfigPath: ${configPath}`);
+    let moduleDir = ""
+    let fileToExecute = ""
+    if (taskConfig.module_name === "Tensor sniper (SDK)"){
+        moduleDir = "tensor_buy_sdk";
+        fileToExecute = "index.ts"
+    }else if(taskConfig.module_name === "Tensor reprice"){
+        moduleDir = ""
+        fileToExecute = "index.ts"
+    }
 
-    const child = spawn("npx", ["tsx", path.join(scriptsDirectoryPath, "src", "index.ts")], {
+    const child = spawn("npx", ["tsx", path.join(scriptsDirectoryPath, moduleDir, "src", fileToExecute)], {
         stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
         shell: true, // Используем shell для корректного выполнения
         cwd: scriptsDirectoryPath, // Устанавливаем рабочую директорию для процесса
