@@ -65,7 +65,7 @@ interface LaunchMyNftParams {
     total_priority_fee: number;
     compute_unit_limit: number;
     useJito: boolean;
-    jito_tip_account: string;
+    // jito_tip_account: string;
     jito_tip_amount: number;
     jito_region: string;
     delay_when_sending: number;
@@ -133,14 +133,14 @@ export default function CreateTaskWizard({
     // ---- НОВОЕ: Параметры LaunchMyNft
     const [launchMyNftParams, setLaunchMyNftParams] = useState<LaunchMyNftParams>({
         target_url: "",
-        total_priority_fee: 0,
+        total_priority_fee: 70000,
         compute_unit_limit: 1400000, // к примеру
         useJito: false,
-        jito_tip_account: "",
-        jito_tip_amount: 10000,
+        // jito_tip_account: "",
+        jito_tip_amount: 1000,
         jito_region: "",
-        delay_when_sending: 0,
-        delay_before_sending: 0,
+        delay_when_sending: 10,
+        delay_before_sending: 800,
         nfts_to_buy_per_account: 1,
 
         walletApproach: 'single',
@@ -189,7 +189,7 @@ export default function CreateTaskWizard({
             total_priority_fee: 0,
             compute_unit_limit: 1400000,
             useJito: false,
-            jito_tip_account: "",
+            // jito_tip_account: "",
             jito_tip_amount: 10000,
             jito_region: "",
             delay_when_sending: 0,
@@ -288,7 +288,7 @@ export default function CreateTaskWizard({
                 total_priority_fee: p.total_priority_fee,
                 compute_unit_limit: p.compute_unit_limit,
                 use_jito: p.useJito,
-                jito_tip_account: p.jito_tip_account,
+                // jito_tip_account: p.jito_tip_account,
                 jito_tip_amount: p.jito_tip_amount,
                 jito_region: p.jito_region,
                 delay_when_sending: p.delay_when_sending,
@@ -803,16 +803,16 @@ export default function CreateTaskWizard({
 
                     {p.useJito && (
                         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                            <TextField
-                                label="Jito Tip Account"
-                                value={p.jito_tip_account}
-                                onChange={(e) =>
-                                    setLaunchMyNftParams({
-                                        ...p,
-                                        jito_tip_account: e.target.value,
-                                    })
-                                }
-                            />
+                            {/*<TextField*/}
+                            {/*    label="Jito Tip Account"*/}
+                            {/*    value={p.jito_tip_account}*/}
+                            {/*    onChange={(e) =>*/}
+                            {/*        setLaunchMyNftParams({*/}
+                            {/*            ...p,*/}
+                            {/*            jito_tip_account: e.target.value,*/}
+                            {/*        })*/}
+                            {/*    }*/}
+                            {/*/>*/}
                             <TextField
                                 label="Jito Tip Amount (lamports)"
                                 type="number"
@@ -824,17 +824,32 @@ export default function CreateTaskWizard({
                                     })
                                 }
                             />
-                            <TextField
-                                label="Jito Region"
+                            {/*<TextField*/}
+                            {/*    label="Jito Region"*/}
+                            {/*    value={p.jito_region}*/}
+                            {/*    onChange={(e) =>*/}
+                            {/*        setLaunchMyNftParams({*/}
+                            {/*            ...p,*/}
+                            {/*            jito_region: e.target.value,*/}
+                            {/*        })*/}
+                            {/*    }*/}
+                            {/*/>*/}
+                            <InputLabel>Region</InputLabel>
+                            <Select
+                                label="Region"
                                 value={p.jito_region}
                                 onChange={(e) =>
-                                    setLaunchMyNftParams({
-                                        ...p,
-                                        jito_region: e.target.value,
-                                    })
+                                    setLaunchMyNftParams({ ...p, jito_region: e.target.value })
                                 }
-                            />
+                            >
+                                <MenuItem value="https://amsterdam.mainnet.block-engine.jito.wtf">🇳🇱 Amsterdam</MenuItem>
+                                <MenuItem value="https://frankfurt.mainnet.block-engine.jito.wtf">🇩🇪 Frankfurt</MenuItem>
+                                <MenuItem value="https://ny.mainnet.block-engine.jito.wtf">🇺🇸 New York</MenuItem>
+                                <MenuItem value="https://tokyo.mainnet.block-engine.jito.wtf">🇯🇵 Tokyo</MenuItem>
+                                <MenuItem value="https://slc.mainnet.block-engine.jito.wtf">🇺🇸 Salt Lake City</MenuItem>
+                            </Select>
                         </Box>
+
                     )}
 
                     <TextField
@@ -1016,7 +1031,7 @@ export default function CreateTaskWizard({
                     <Typography><b>useJito:</b> {p.useJito ? 'Yes' : 'No'}</Typography>
                     {p.useJito && (
                         <>
-                            <Typography><b>jito_tip_account:</b> {p.jito_tip_account}</Typography>
+                            {/*<Typography><b>jito_tip_account:</b> {p.jito_tip_account}</Typography>*/}
                             <Typography><b>jito_tip_amount:</b> {p.jito_tip_amount}</Typography>
                             <Typography><b>jito_region:</b> {p.jito_region}</Typography>
                         </>

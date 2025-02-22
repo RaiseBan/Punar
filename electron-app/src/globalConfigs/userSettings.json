@@ -13,6 +13,20 @@
         "publicKey": "8Mwxw9zyxt6bFPd6CoiqyLLZyS3cqSay49ckvXKa9cUC",
         "privateKey": "5sjcxtsPiEA8BK3QLrtdEq7RBBmkQgEZKSkW6k9SeooCYkzwa6RtFUdVftApSGMwePPpd5wcCUBNz8TxtHLNc6Hi"
       }
+    ],
+    "3 wallets": [
+      {
+        "publicKey": "Fi7TVnLmd8qBwEPRtDrjMnYqjNDKdou19TSMN8ymNSyS",
+        "privateKey": "nMpwSddruH2uvcAunebZYMVX4Bm7TS41fLFEnxPHiXQjohq6vNdxRTmjPXwgqqPubyzGJG2CVcrphC2razCfUSY"
+      },
+      {
+        "publicKey": "J5EuPrTUQgeV169uPxNcoSZkkLPoZJyDkdnwwx89PhKw",
+        "privateKey": "4PsoivzswCemkvacedpakRAyNmfz4yf861u44Ma9nvpCcCMCWCjPdnZGZE9TXcQZVSDb8dGHVMtx3hW12nzNLtcy"
+      },
+      {
+        "publicKey": "BGYYNCR9akepN3dwYP1iYVPPxp9VYxabPh4YriJBpxNX",
+        "privateKey": "2CKVFzFrGQneDyGpYjWc5zmMonQsNHJUu8wyTgaNGG2vLrBkA12NHXyNVRf4kmaQRBqehKivGx6NdeZDwoB6KiQT"
+      }
     ]
   },
   "scriptDirectory": "1212",

@@ -8,6 +8,7 @@ import {Provider} from "react-redux";
 import {store} from "./store/store";
 import './styles/global.css'
 import Header from "./components/Header";
+import Tools from "./components/Tools";
 
 const darkTheme = createTheme({
     palette: {
@@ -63,6 +64,7 @@ function Layout() {
                             <Route path="/tasks" element={<TasksPage />} />
                             <Route path="/wallets" element={<Wallets />} />
                             <Route path="/settings" element={<Settings />} />
+                            <Route path="/tools" element={<Tools />} />
                         </Routes>
                     </Box>
                 </Box>
