@@ -345,44 +345,51 @@ export default function Wallets() {
             </Box>
 
             <List>
-                {wallets.map((wallet, index) => (
-                    <ListItem
-                        key={wallet.publicKey}
-                        sx={{
-                            border: '1px solid #ccc',
-                            borderRadius: '8px',
-                            marginBottom: '10px',
-                            padding: '10px',
-                        }}
-                    >
-                        <ListItemText
-                            primary={`Public Key: ${wallet.publicKey}`}
-                            secondary={
-                                <Box display="flex" alignItems="center">
-                                    <span style={{ marginRight: '10px' }}>Private Key: </span>
-                                    {showPrivateKey === index ? (
-                                        <TextField value={wallet.privateKey} InputProps={{ readOnly: true }} fullWidth />
-                                    ) : (
-                                        <span>••••••••••••</span>
-                                    )}
-                                    <IconButton
-                                        onClick={() => toggleShowPrivateKey(index)}
-                                        sx={{ marginLeft: '10px' }}
-                                    >
-                                        {showPrivateKey === index ? <VisibilityOff /> : <Visibility />}
-                                    </IconButton>
-                                    <IconButton
-                                        onClick={() => handleDeleteWallet(wallet.publicKey)}
-                                        sx={{ marginLeft: '10px', color: 'red' }}
-                                    >
-                                        <Delete />
-                                    </IconButton>
-                                </Box>
-                            }
-                        />
-                    </ListItem>
-                ))}
+                {wallets.length > 0 ? (
+                    wallets.map((wallet, index) => (
+                        <ListItem
+                            key={wallet.publicKey}
+                            sx={{
+                                border: '1px solid #ccc',
+                                borderRadius: '8px',
+                                marginBottom: '10px',
+                                padding: '10px',
+                            }}
+                        >
+                            <ListItemText
+                                primary={`Public Key: ${wallet.publicKey}`}
+                                secondary={
+                                    <Box display="flex" alignItems="center">
+                                        <span style={{ marginRight: '10px' }}>Private Key: </span>
+                                        {showPrivateKey === index ? (
+                                            <TextField value={wallet.privateKey} InputProps={{ readOnly: true }} fullWidth />
+                                        ) : (
+                                            <span>••••••••••••</span>
+                                        )}
+                                        <IconButton
+                                            onClick={() => toggleShowPrivateKey(index)}
+                                            sx={{ marginLeft: '10px' }}
+                                        >
+                                            {showPrivateKey === index ? <VisibilityOff /> : <Visibility />}
+                                        </IconButton>
+                                        <IconButton
+                                            onClick={() => handleDeleteWallet(wallet.publicKey)}
+                                            sx={{ marginLeft: '10px', color: 'red' }}
+                                        >
+                                            <Delete />
+                                        </IconButton>
+                                    </Box>
+                                }
+                            />
+                        </ListItem>
+                    ))
+                ) : (
+                    <Typography variant="body1" sx={{ textAlign: 'center', marginTop: '20px', color: '#888' }}>
+                        Create your wallet
+                    </Typography>
+                )}
             </List>
+
 
             {/* Диалог: импорт одиночного кошелька */}
             <Dialog open={openImportDialog} onClose={handleCloseDialog}>
