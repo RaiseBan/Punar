@@ -468,7 +468,11 @@ export default function CreateTaskWizard({
                         <FormControl fullWidth>
                             <InputLabel>Select Wallet</InputLabel>
                             <Select
-                                value={wallets.find(w => w.privateKey === params.privateKey)?.publicKey || ''}
+                                value={
+                                    wallets.length > 0
+                                        ? wallets.find(w => w.privateKey === params.privateKey)?.publicKey || ''
+                                        : ''
+                                }
                                 onChange={(e) => {
                                     const selectedWallet = wallets.find(w => w.publicKey === e.target.value);
                                     if (selectedWallet) {
@@ -479,12 +483,17 @@ export default function CreateTaskWizard({
                                     }
                                 }}
                                 label="Select Wallet"
+                                disabled={wallets.length === 0} // Блокируем, если нет кошельков
                             >
-                                {wallets.map((wallet) => (
-                                    <MenuItem key={wallet.publicKey} value={wallet.publicKey}>
-                                        {wallet.publicKey}
-                                    </MenuItem>
-                                ))}
+                                {wallets.length > 0 ? (
+                                    wallets.map((wallet) => (
+                                        <MenuItem key={wallet.publicKey} value={wallet.publicKey}>
+                                            {wallet.publicKey}
+                                        </MenuItem>
+                                    ))
+                                ) : (
+                                    <MenuItem disabled>No wallets available</MenuItem>
+                                )}
                             </Select>
                         </FormControl>
                     ) : (
@@ -498,6 +507,7 @@ export default function CreateTaskWizard({
                             fullWidth
                         />
                     )}
+
 
 
 
@@ -679,7 +689,11 @@ export default function CreateTaskWizard({
                         <FormControl fullWidth>
                             <InputLabel>Select Wallet</InputLabel>
                             <Select
-                                value={wallets.find(w => w.privateKey === params.privateKey)?.publicKey || ''}
+                                value={
+                                    wallets.length > 0
+                                        ? wallets.find(w => w.privateKey === params.privateKey)?.publicKey || ''
+                                        : ''
+                                }
                                 onChange={(e) => {
                                     const selectedWallet = wallets.find(w => w.publicKey === e.target.value);
                                     if (selectedWallet) {
@@ -690,12 +704,17 @@ export default function CreateTaskWizard({
                                     }
                                 }}
                                 label="Select Wallet"
+                                disabled={wallets.length === 0} // Блокируем, если нет кошельков
                             >
-                                {wallets.map((wallet) => (
-                                    <MenuItem key={wallet.publicKey} value={wallet.publicKey}>
-                                        {wallet.publicKey}
-                                    </MenuItem>
-                                ))}
+                                {wallets.length > 0 ? (
+                                    wallets.map((wallet) => (
+                                        <MenuItem key={wallet.publicKey} value={wallet.publicKey}>
+                                            {wallet.publicKey}
+                                        </MenuItem>
+                                    ))
+                                ) : (
+                                    <MenuItem disabled>No wallets available</MenuItem>
+                                )}
                             </Select>
                         </FormControl>
                     ) : (
@@ -709,6 +728,7 @@ export default function CreateTaskWizard({
                             fullWidth
                         />
                     )}
+
 
                     {/* Delta */}
                     <TextField
@@ -943,7 +963,7 @@ export default function CreateTaskWizard({
                                 <FormControl fullWidth>
                                     <InputLabel>Select Wallet</InputLabel>
                                     <Select
-                                        value={p.selectedWalletPublicKey}
+                                        value={wallets.length > 0 ? p.selectedWalletPublicKey : ""}
                                         label="Select Wallet"
                                         onChange={(e) =>
                                             setLaunchMyNftParams({
@@ -951,12 +971,17 @@ export default function CreateTaskWizard({
                                                 selectedWalletPublicKey: e.target.value as string,
                                             })
                                         }
+                                        disabled={wallets.length === 0} // Блокируем, если нет кошельков
                                     >
-                                        {wallets.map((w) => (
-                                            <MenuItem key={w.publicKey} value={w.publicKey}>
-                                                {w.publicKey}
-                                            </MenuItem>
-                                        ))}
+                                        {wallets.length > 0 ? (
+                                            wallets.map((w) => (
+                                                <MenuItem key={w.publicKey} value={w.publicKey}>
+                                                    {w.publicKey}
+                                                </MenuItem>
+                                            ))
+                                        ) : (
+                                            <MenuItem disabled>No wallets available</MenuItem>
+                                        )}
                                     </Select>
                                 </FormControl>
                             ) : (
@@ -973,6 +998,7 @@ export default function CreateTaskWizard({
                                     fullWidth
                                 />
                             )}
+
                         </>
                     )}
 
@@ -1014,11 +1040,108 @@ export default function CreateTaskWizard({
     // Шаг 2: Review выбранных параметров
     const renderStepReview = () => {
         if (selectedModule === "tensor_sdk") {
-            // Упрощённая заглушка
-            return <Typography>Review Tensor SDK (не меняем)</Typography>;
-        } else if (selectedModule === "tensor_reprice") {
-            return <Typography>Review Tensor Reprice (не меняем)</Typography>;
-        } else if (selectedModule === "launch_my_nft") {
+            const p = tensorSdkParams;
+            return (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 500 }}>
+                    <Typography variant="h6">Review your parameters</Typography>
+                    <Typography>
+                        <b>Task Name:</b> {taskName}
+                    </Typography>
+                    <Typography>
+                        <b>Module:</b> Tensor sniper (SDK)
+                    </Typography>
+                    <Typography>
+                        <b>collectionId:</b> {p.collectionId}
+                    </Typography>
+                    <Typography>
+                        <b>Wallet Source:</b> {p.walletSource === 'existing'
+                        ? 'Existing Wallet'
+                        : 'Manual Entry'}
+                    </Typography>
+                    <Typography>
+                        <b>Wallet:</b> {p.walletSource === 'existing'
+                        ? wallets.length > 0
+                            ? wallets.find(w => w.privateKey === p.privateKey)?.publicKey || 'Wallet not found'
+                            : 'No wallets available'
+                        : '*********'}
+                    </Typography>
+
+                    <Typography>
+                        <b>priceByName:</b> {p.priceByName ? "Yes" : "No"}
+                    </Typography>
+                    {p.priceByName && (
+                        <Typography>
+                            <b>priceConfig:</b> {p.priceConfig}
+                        </Typography>
+                    )}
+                    {!p.priceByName && (
+                        <Typography>
+                            <b>thresholdPrice (SOL):</b> {p.thresholdPrice}
+                        </Typography>
+                    )}
+
+                    <Typography>
+                        <b>useJito:</b> {p.useJito ? "Yes" : "No"}
+                    </Typography>
+                    {p.useJito && (
+                        <>
+                            <Typography>
+                                <b>jitoRegion:</b> {p.jitoRegion}
+                            </Typography>
+                            <Typography>
+                                <b>jitoTipLamports:</b> {p.jitoTipLamports}
+                            </Typography>
+                        </>
+                    )}
+
+                    <Typography>
+                        <b>useBloxroute:</b> {p.useBloxroute ? "Yes" : "No"}
+                    </Typography>
+                    {p.useBloxroute && (
+                        <>
+                            <Typography>
+                                <b>bloxrouteRegion:</b> {p.bloxrouteRegion}
+                            </Typography>
+                            <Typography>
+                                <b>bloxrouteTipLamports:</b> {p.bloxrouteTipLamports}
+                            </Typography>
+                        </>
+                    )}
+
+                    <Typography>
+                        <b>txToSend:</b> {p.txToSend}
+                    </Typography>
+                </Box>
+            );
+        }else if (selectedModule === "tensor_reprice") {
+            const p = tensorSdkParams;
+            return (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 500 }}>
+                    <Typography variant="h6">Review your parameters</Typography>
+                    <Typography><b>Task Name:</b> {taskName}</Typography>
+                    <Typography><b>Module:</b> Tensor Reprice</Typography>
+                    <Typography><b>Collection ID:</b> {p.collectionId}</Typography>
+
+                    <Typography>
+                        <b>Wallet Source:</b> {p.walletSource === 'existing'
+                        ? 'Existing Wallet'
+                        : 'Manual Entry'}
+                    </Typography>
+                    <Typography>
+                        <b>Wallet:</b> {p.walletSource === 'existing'
+                        ? wallets.length > 0
+                            ? wallets.find(w => w.privateKey === p.privateKey)?.publicKey || 'Wallet not found'
+                            : 'No wallets available'
+                        : '*********'}
+                    </Typography>
+
+
+                    <Typography><b>Delta:</b> {p.delta}</Typography>
+                    <Typography><b>Limit Config:</b> {p.priceConfig}</Typography>
+                </Box>
+            );
+        }
+        else if (selectedModule === "launch_my_nft") {
             const p = launchMyNftParams;
             return (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 500 }}>

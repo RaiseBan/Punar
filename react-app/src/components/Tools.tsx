@@ -331,7 +331,7 @@ export default function Tools() {
                 <Box mt={2}>
                     <TextField
                         fullWidth
-                        label="Amount"
+                        label="sol"
                         type="number"
                         value={amount}
                         onChange={handleAmountChange}
