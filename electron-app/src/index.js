@@ -4,6 +4,7 @@ const { spawn } = require("child_process");
 const { spawnProcess } = require("./utils/spawnProcess");
 const { getGlobalConfigDirectory } = require("./utils/wallet");
 const fs = require("fs");
+const treeKill = require("tree-kill"); // Установи: npm install tree-kill
 
 let mainWindow;
 const processes = {}; // Храним child_process по taskId
@@ -173,12 +174,17 @@ ipcMain.on("stop-process", (event, taskId) => {
   const child = processes[taskId];
 
   if (child && !child.killed) {
-    child.stdin.write("terminate-workers\n"); // Передаем команду через stdin
+    child.stdin.write("terminate-workers\n");
 
     setTimeout(() => {
       if (!child.killed) {
-        child.kill(); // Гарантированно убиваем процесс
-        console.log(`Процесс ${taskId} остановлен`);
+        treeKill(child.pid, "SIGKILL", (err) => {
+          if (err) {
+            console.error(`Ошибка при завершении процесса ${taskId}:`, err);
+          } else {
+            console.log(`Процесс ${taskId} и все его дочерние процессы убиты`);
+          }
+        });
       }
     }, 1000);
   }
