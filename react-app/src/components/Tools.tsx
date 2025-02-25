@@ -239,12 +239,17 @@ export default function Tools() {
                             fullWidth
                             value={fromSelectedPrivateKey}
                             onChange={(e) => setFromSelectedPrivateKey(e.target.value)}
+                            disabled={wallets.length === 0} // Блокируем, если нет кошельков
                         >
-                            {wallets.map((wallet) => (
-                                <MenuItem key={wallet.publicKey} value={wallet.privateKey}>
-                                    {wallet.publicKey}
-                                </MenuItem>
-                            ))}
+                            {wallets.length > 0 ? (
+                                wallets.map((wallet) => (
+                                    <MenuItem key={wallet.publicKey} value={wallet.privateKey}>
+                                        {wallet.publicKey}
+                                    </MenuItem>
+                                ))
+                            ) : (
+                                <MenuItem disabled>No wallets available</MenuItem>
+                            )}
                         </Select>
                     </Box>
                 )}
@@ -281,12 +286,17 @@ export default function Tools() {
                             fullWidth
                             value={toSelectedPubKey}
                             onChange={(e) => setToSelectedPubKey(e.target.value)}
+                            disabled={wallets.length === 0} // Блокируем, если нет кошельков
                         >
-                            {wallets.map((wallet) => (
-                                <MenuItem key={wallet.publicKey} value={wallet.publicKey}>
-                                    {wallet.publicKey}
-                                </MenuItem>
-                            ))}
+                            {wallets.length > 0 ? (
+                                wallets.map((wallet) => (
+                                    <MenuItem key={wallet.publicKey} value={wallet.publicKey}>
+                                        {wallet.publicKey}
+                                    </MenuItem>
+                                ))
+                            ) : (
+                                <MenuItem disabled>No wallets available</MenuItem>
+                            )}
                         </Select>
                     </Box>
                 )}
