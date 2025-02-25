@@ -236,7 +236,7 @@ export default function WithdrawBalances({
                             sx={{
                                 backgroundColor: 'background.paper',
                                 px: 1,
-                                transform: 'translate(14px, -6px)'
+                                transform: 'translate(14px, -6px)',
                             }}
                         >
                             Select Wallet
@@ -250,22 +250,27 @@ export default function WithdrawBalances({
                                 PaperProps: {
                                     sx: {
                                         maxHeight: 200,
-                                        mt: 1
-                                    }
-                                }
+                                        mt: 1,
+                                    },
+                                },
                             }}
+                            disabled={wallets.length === 0} // Блокируем, если нет кошельков
                         >
-                            {wallets.map((wallet) => (
-                                <MenuItem
-                                    key={wallet.publicKey}
-                                    value={wallet.privateKey}
-                                    sx={{ py: 1 }}
-                                >
-                                    <Typography variant="body2">
-                                        {wallet.publicKey}
-                                    </Typography>
-                                </MenuItem>
-                            ))}
+                            {wallets.length > 0 ? (
+                                wallets.map((wallet) => (
+                                    <MenuItem
+                                        key={wallet.publicKey}
+                                        value={wallet.privateKey}
+                                        sx={{ py: 1 }}
+                                    >
+                                        <Typography variant="body2">
+                                            {wallet.publicKey}
+                                        </Typography>
+                                    </MenuItem>
+                                ))
+                            ) : (
+                                <MenuItem disabled>No wallets available</MenuItem>
+                            )}
                         </Select>
                     </FormControl>
                 )}
@@ -352,7 +357,7 @@ export default function WithdrawBalances({
                             sx={{
                                 backgroundColor: 'background.paper',
                                 px: 1,
-                                transform: 'translate(14px, -6px)'
+                                transform: 'translate(14px, -6px)',
                             }}
                         >
                             Select Recipient
@@ -362,18 +367,23 @@ export default function WithdrawBalances({
                             value={toAddress}
                             onChange={(e) => setToAddress(e.target.value)}
                             sx={{ mt: 1 }}
+                            disabled={wallets.length === 0} // Блокируем, если нет кошельков
                         >
-                            {wallets.map((wallet) => (
-                                <MenuItem
-                                    key={wallet.publicKey}
-                                    value={wallet.publicKey}
-                                    sx={{ py: 1 }}
-                                >
-                                    <Typography variant="body2">
-                                        {wallet.publicKey}
-                                    </Typography>
-                                </MenuItem>
-                            ))}
+                            {wallets.length > 0 ? (
+                                wallets.map((wallet) => (
+                                    <MenuItem
+                                        key={wallet.publicKey}
+                                        value={wallet.publicKey}
+                                        sx={{ py: 1 }}
+                                    >
+                                        <Typography variant="body2">
+                                            {wallet.publicKey}
+                                        </Typography>
+                                    </MenuItem>
+                                ))
+                            ) : (
+                                <MenuItem disabled>No wallets available</MenuItem>
+                            )}
                         </Select>
                     </FormControl>
                 ) : (
@@ -385,7 +395,7 @@ export default function WithdrawBalances({
                         sx={{ mt: 1 }}
                         InputLabelProps={{
                             shrink: true,
-                            sx: { backgroundColor: 'background.paper', px: 1 }
+                            sx: { backgroundColor: 'background.paper', px: 1 },
                         }}
                     />
                 )}
