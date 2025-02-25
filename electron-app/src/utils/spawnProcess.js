@@ -64,6 +64,7 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
     const child = spawn("npx", ["tsx", path.join(scriptsDirectoryPath, moduleDir, "src", fileToExecute)], {
         stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
         shell: true, // Используем shell для корректного выполнения
+        detached: false,
         cwd: scriptsDirectoryPath, // Устанавливаем рабочую директорию для процесса
         env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath } // Передаем CONFIG_PATH в переменные окружения
     });
