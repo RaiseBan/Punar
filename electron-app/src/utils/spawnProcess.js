@@ -51,11 +51,14 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
     let moduleDir = ""
     let fileToExecute = ""
     if (taskConfig.module_name === "Tensor sniper (SDK)"){
-        moduleDir = "tensor_buy_sdk";
+        moduleDir = "tensor-nft-sdk";
         fileToExecute = "index.ts"
     }else if(taskConfig.module_name === "Tensor reprice"){
-        moduleDir = ""
+        moduleDir = "tensor_reprice"
         fileToExecute = "index.ts"
+    }else if(taskConfig.module_name === "LaunchMyNft"){
+        moduleDir = "mint"
+        fileToExecute = "starter.ts"
     }
 
     const child = spawn("npx", ["tsx", path.join(scriptsDirectoryPath, moduleDir, "src", fileToExecute)], {
