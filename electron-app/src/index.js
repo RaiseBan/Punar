@@ -15,6 +15,7 @@ function createWindow() {
     height: 800,
     frame: false,
     webPreferences: {
+      webSecurity: false,
       preload: path.join(__dirname, "preload.js"),
       overlayScrollbars: true,
       nodeIntegration: false,
@@ -131,11 +132,12 @@ ipcMain.handle("save-settings", (_, settings) => {
 
 
 
-
+app.commandLine.appendSwitch("ignore-certificate-errors");
 app.whenReady().then(() => {
   createWindow();
 
 });
+
 
 // Запуск нового процесса
 ipcMain.on("start-process", (event, {taskId, config}) => {
