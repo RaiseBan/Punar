@@ -1,7 +1,8 @@
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { app } = require("electron");  // Получаем доступ к Electron API
+const { app } = require("electron");
+const {updateConfigCollectionId} = require("./updateService");  // Получаем доступ к Electron API
 
 // Функция для получения директории конфигов, с учетом работы в dev и prod
 function getConfigDirectory() {
@@ -41,8 +42,11 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
     const configFileName = `${moduleName}_${taskName}.json`;
     const configPath = path.join(configDir, configFileName);
 
+
+    const updatedTaskConfig = updateConfigCollectionId(taskConfig);
+
     // Записываем конфиг в файл
-    fs.writeFileSync(configPath, JSON.stringify(taskConfig, null, 2), "utf-8");
+    fs.writeFileSync(configPath, JSON.stringify(updatedTaskConfig, null, 2), "utf-8");
     console.log(`Конфигурация сохранена: ${configPath}`);
 
     // Запускаем дочерний процесс с заданным рабочим каталогом (cwd) и переменными окружения
@@ -50,13 +54,13 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
     console.log(`start process: \nPath: ${path.join(scriptsDirectoryPath, "src", "index.ts")} \nConfigPath: ${configPath}`);
     let moduleDir = ""
     let fileToExecute = ""
-    if (taskConfig.module_name === "Tensor sniper (SDK)"){
+    if (updatedTaskConfig.module_name === "Tensor sniper (SDK)"){
         moduleDir = "tensor-nft-sdk";
         fileToExecute = "index.ts"
-    }else if(taskConfig.module_name === "Tensor reprice"){
+    }else if(updatedTaskConfig.module_name === "Tensor reprice"){
         moduleDir = "tensor_reprice"
         fileToExecute = "index.ts"
-    }else if(taskConfig.module_name === "LaunchMyNft"){
+    }else if(updatedTaskConfig.module_name === "LaunchMyNft"){
         moduleDir = "mint"
         fileToExecute = "starter.ts"
     }

@@ -33,9 +33,10 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 
 import {useDispatch, useSelector} from "react-redux";
-import { removeTask, updateTask } from "../store/tasksSlice";
+import {removeTask, updateTask} from "../store/tasksSlice";
 import {RootState} from "../store/store";
 import {COLS_NAMES} from "../constants";
+import {fetchImageUrl} from "../utils/tensorFunctions";
 
 export interface TaskDataRow {
     cells: string[];
@@ -48,13 +49,17 @@ export interface TaskProps {
     status: string;
     columns: string[];
     data: TaskDataRow[];
-    config?: any; // <-- теперь храним конфиг
+    config?: any; // <-- теперь храним конфиг (например, { collectionId: "...", module_name: "Tensor sniper (SDK)", ... })
 }
 
 const statusColorMap: Record<string, string> = {
     Running: "#00c853",
     Stopped: "#f44336",
 };
+
+/** Пример фейковой функции, возвращающей ссылку на картинку.
+ *  Замените на реальный вызов своего API или electronAPI.
+ */
 
 export default function Task({
                                  id,
@@ -75,47 +80,78 @@ export default function Task({
     const [tableCollapsed, setTableCollapsed] = useState(true);
 
     // Локальная копия config для редактирования
-    // (Если модуль "tensor_sdk", тогда там есть task_name, threshold_price и т.д.)
     const [editConfig, setEditConfig] = useState<any>(config || {});
-
-    // Можно отдельно хранить новое имя, или брать из editConfig
+    // Локальные «имя» и «moduleName»
     const [editName, setEditName] = useState(name);
     const [editModuleName, setEditModuleName] = useState(moduleName);
 
     const chipColor = statusColorMap[status] || "#ff9e44";
 
-    // -----------------------
-    //  Логика кнопок
-    // -----------------------
-    const handleOpenSettings = () => {
-        // Обновляем локальные стейты из актуальных значений
-        setEditName(name);
-        setEditModuleName(moduleName);
-        setEditConfig(config || {});
-        setSettingsOpen(true);
-    };
+    // =======================
+    //  ИЗОБРАЖЕНИЕ ДЛЯ TENSOR SDK
+    // =======================
+    const [imageUrl, setImageUrl] = useState<string>("");
 
+    // Если модуль = "Tensor sniper (SDK)" и есть config.collectionId => грузим картинку
+    useEffect(() => {
+        let isMounted = true;
+        console.log(`moduleName: ${moduleName}`)
+        console.log(moduleName === "Tensor sniper (SDK)")
+        console.log(config?.collection_id)
+        if (moduleName === "Tensor sniper (SDK)" && config?.collection_id) {
+            console.log("yep")
+            console.log(JSON.stringify(config, null, 2))
+            fetchImageUrl(config.collection_id).then((url) => {
+                if (isMounted) {
+                    console.log(`url: ${url}`);
+                    setImageUrl(url!)
+                }
+                console.log(url)
+            });
+        } else {
+            console.log("no")
+            setImageUrl("");
+        }
+        return () => {
+            isMounted = false;
+        };
+    }, [moduleName, config?.collection_id]);
+
+    // Сформируем label для коллекции (последняя часть пути + toUpperCase)
+    let collectionLabel = "";
+    if (moduleName === "Tensor sniper (SDK)" && config?.collection_id) {
+        const parts = config.collection_id.split("/");
+        const lastPart = parts[parts.length - 1] || "";
+        collectionLabel = lastPart.toUpperCase();
+    }
 
     // Получаем логи из Redux
     const logs = useSelector((state: RootState) =>
         state.tasks.tasks.find((task) => task.id === id)?.logs || []
     );
-    const handleCloseSettings = () => setSettingsOpen(false);
+
     useEffect(() => {
-        console.log("Logs updated for Task", id, logs);  // Логи обновляются
+        console.log("Logs updated for Task", id, logs);
     }, [logs]);
 
-    const finalColumns =
-        columns && columns.length > 0 ? columns : COLS_NAMES.get(moduleName) || [];
+    // -----------------------
+    // Кнопки
+    // -----------------------
+    const handleOpenSettings = () => {
+        setEditName(name);
+        setEditModuleName(moduleName);
+        setEditConfig(config || {});
+        setSettingsOpen(true);
+    };
+    const handleCloseSettings = () => setSettingsOpen(false);
 
     const handleSaveSettings = () => {
-        // Сохраняем изменения в Redux
         dispatch(
             updateTask({
                 id,
                 name: editName,
                 moduleName: editModuleName,
-                config: editConfig, // <-- сохраняем новый config
+                config: editConfig,
             })
         );
         setSettingsOpen(false);
@@ -129,13 +165,13 @@ export default function Task({
 
     const handleStop = () => {
         window.electronAPI?.stopProcess(id);
-        dispatch(updateTask({ id, status: "Stopped" }));
+        dispatch(updateTask({id, status: "Stopped"}));
     };
 
     const handleResume = () => {
         // При возобновлении берём обновлённый config
         window.electronAPI?.resumeProcess(id, editConfig || {});
-        dispatch(updateTask({ id, status: "Running" }));
+        dispatch(updateTask({id, status: "Running"}));
     };
 
     const handleDelete = () => {
@@ -145,20 +181,11 @@ export default function Task({
         dispatch(removeTask(id));
     };
 
-    // Переключение свёрнуто/развёрнуто
-    const toggleTable = () => {
-        setTableCollapsed(!tableCollapsed);
-    };
-
-    // Определяем, сколько строк показывать
+    const toggleTable = () => setTableCollapsed(!tableCollapsed);
     const displayedData = tableCollapsed ? data.slice(0, 2) : data;
 
-    // Разрешаем ли редактировать поля конфигурации? Только если Stopped
+    const finalColumns = columns && columns.length > 0 ? columns : COLS_NAMES.get(moduleName) || [];
     const canEditConfig = status === "Stopped";
-
-    useEffect(() => {
-        console.log("Logs updated for Task", id, logs);  // Логи обновляются
-    }, [logs]);
 
     return (
         <>
@@ -172,7 +199,7 @@ export default function Task({
                     padding: "10px",
                 }}
             >
-                <CardContent sx={{ padding: "10px" }}>
+                <CardContent sx={{padding: "10px"}}>
                     <Box
                         sx={{
                             display: "flex",
@@ -183,15 +210,38 @@ export default function Task({
                         }}
                     >
                         {/* Левая часть: Название, Модуль, Статус */}
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                            <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
-                                    {name}
-                                </Typography>
-                                <Typography variant="caption" sx={{ color: "#999" }}>
-                                    Module: {moduleName}
-                                </Typography>
-                            </Box>
+                        <Box sx={{display: "flex", flexDirection: "column", gap: 0.5}}>
+                            <Typography variant="subtitle1" sx={{fontWeight: "bold"}}>
+                                {name}
+                            </Typography>
+                            <Typography variant="caption" sx={{color: "#999"}}>
+                                Module: {moduleName}
+                            </Typography>
+
+                            {/* Если это Tensor sniper (SDK), покажем картинку и label коллекции */}
+                            {moduleName === "Tensor sniper (SDK)" && config?.collection_id && (
+                                <Box sx={{display: "flex", alignItems: "center", gap: 1, mt: 0.5}}>
+                                    {imageUrl && (
+                                        <img
+                                            src={imageUrl}
+                                            alt="Collection"
+                                            style={{
+                                                width: 32,
+                                                height: 32,
+                                                borderRadius: 4,
+                                                objectFit: "cover",
+                                                border: "1px solid #333",
+                                            }}
+                                        />
+                                    )}
+                                    <Typography variant="caption" sx={{fontWeight: "bold", color: "#ccc"}}>
+                                        {collectionLabel}
+                                    </Typography>
+                                </Box>
+                            )}
+                        </Box>
+
+                        <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
                             <Chip
                                 label={status}
                                 sx={{
@@ -200,64 +250,56 @@ export default function Task({
                                     fontWeight: "bold",
                                 }}
                             />
-                        </Box>
+                            {/* Иконки действий */}
+                            <Box sx={{display: "flex", gap: 1}}>
+                                <IconButton sx={{color: "#fff"}} onClick={toggleTable}>
+                                    {tableCollapsed ? <ExpandMoreIcon/> : <ExpandLessIcon/>}
+                                </IconButton>
 
-                        {/* Правая часть: иконки */}
-                        <Box sx={{ display: "flex", gap: 1 }}>
-                            {/* Кнопка развернуть/свернуть таблицу */}
-                            <IconButton sx={{ color: "#fff" }} onClick={toggleTable}>
-                                {tableCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
-                            </IconButton>
+                                <IconButton sx={{color: "#fff"}} onClick={handleOpenFullView}>
+                                    <OpenInFullIcon/>
+                                </IconButton>
 
-                            {/* FullView */}
-                            <IconButton sx={{ color: "#fff" }} onClick={handleOpenFullView}>
-                                <OpenInFullIcon />
-                            </IconButton>
+                                <IconButton sx={{color: "#ff9e44"}} onClick={handleOpenSettings}>
+                                    <SettingsIcon/>
+                                </IconButton>
 
-                            {/* Settings */}
-                            <IconButton sx={{ color: "#ff9e44" }} onClick={handleOpenSettings}>
-                                <SettingsIcon />
-                            </IconButton>
+                                <IconButton sx={{color: "#ccc"}} onClick={handleOpenLogs}>
+                                    <VisibilityIcon/>
+                                </IconButton>
 
-                            {/* Logs */}
-                            <IconButton sx={{ color: "#ccc" }} onClick={handleOpenLogs}>
-                                <VisibilityIcon />
-                            </IconButton>
+                                <IconButton
+                                    sx={{color: "#f44336"}}
+                                    onClick={handleStop}
+                                    disabled={status !== "Running"}
+                                >
+                                    <StopIcon/>
+                                </IconButton>
 
-                            {/* Stop */}
-                            <IconButton
-                                sx={{ color: "#f44336" }}
-                                onClick={handleStop}
-                                disabled={status !== "Running"}
-                            >
-                                <StopIcon />
-                            </IconButton>
+                                <IconButton
+                                    sx={{color: "#00c853"}}
+                                    onClick={handleResume}
+                                    disabled={status !== "Stopped"}
+                                >
+                                    <PlayArrowIcon/>
+                                </IconButton>
 
-                            {/* Resume */}
-                            <IconButton
-                                sx={{ color: "#00c853" }}
-                                onClick={handleResume}
-                                disabled={status !== "Stopped"}
-                            >
-                                <PlayArrowIcon />
-                            </IconButton>
-
-                            {/* Delete */}
-                            <IconButton onClick={handleDelete} sx={{ color: "red" }}>
-                                <DeleteIcon />
-                            </IconButton>
+                                <IconButton onClick={handleDelete} sx={{color: "red"}}>
+                                    <DeleteIcon/>
+                                </IconButton>
+                            </Box>
                         </Box>
                     </Box>
 
                     {/* Таблица (2 строки если tableCollapsed=true) */}
-                    <Box sx={{ width: "100%", marginTop: "10px", overflowX: "auto" }}>
-                        <Table sx={{ minWidth: 500 }}>
+                    <Box sx={{width: "100%", marginTop: "10px", overflowX: "auto"}}>
+                        <Table sx={{minWidth: 500}}>
                             <TableHead>
                                 <TableRow>
                                     {finalColumns.map((col, i) => (
                                         <TableCell
                                             key={i}
-                                            sx={{ color: "#ff9e44", borderBottom: "1px solid #2A2A2A" }}
+                                            sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
                                         >
                                             {col}
                                         </TableCell>
@@ -270,7 +312,7 @@ export default function Task({
                                         {row.cells.map((cell, cellIndex) => (
                                             <TableCell
                                                 key={cellIndex}
-                                                sx={{ color: "#fff", borderBottom: "1px solid #2A2A2A" }}
+                                                sx={{color: "#fff", borderBottom: "1px solid #2A2A2A"}}
                                             >
                                                 {cell}
                                             </TableCell>
@@ -286,17 +328,15 @@ export default function Task({
             {/* Диалог Settings */}
             <Dialog open={settingsOpen} onClose={handleCloseSettings} maxWidth="sm" fullWidth>
                 <DialogTitle>Task Settings</DialogTitle>
-                <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
-                    {/* Пример: имя таска */}
+                <DialogContent sx={{display: "flex", flexDirection: "column", gap: 2, mt: 1}}>
                     <TextField
                         label="Task Name"
                         variant="outlined"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        disabled={!canEditConfig} // Только если Stopped
+                        disabled={!canEditConfig}
                     />
 
-                    {/* Module Name */}
                     <TextField
                         label="Module Name"
                         variant="outlined"
@@ -305,7 +345,7 @@ export default function Task({
                         disabled={!canEditConfig}
                     />
 
-                    {/* Пример: если модуль "Tensor sniper (SDK)", тогда редактируем threshold_price */}
+                    {/* Если модуль "Tensor sniper (SDK)", показываем threshold_price (пример) */}
                     {editConfig?.module_name === "Tensor sniper (SDK)" && (
                         <TextField
                             label="Threshold Price"
@@ -313,15 +353,15 @@ export default function Task({
                             value={editConfig.threshold_price ?? 0}
                             disabled={!canEditConfig}
                             onChange={(e) =>
-                                setEditConfig({
-                                    ...editConfig,
+                                setEditConfig((prev: any) => ({
+                                    ...prev,
                                     threshold_price: parseFloat(e.target.value),
-                                })
+                                }))
                             }
                         />
                     )}
 
-                    {/* Можете добавить и другие поля из config, если нужно */}
+                    {/* Можно добавить другие поля для редактирования из config */}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseSettings} color="inherit">
@@ -331,25 +371,25 @@ export default function Task({
                         variant="contained"
                         color="primary"
                         onClick={handleSaveSettings}
-                        disabled={!canEditConfig} // Сохранить только если Stopped
+                        disabled={!canEditConfig}
                     >
                         Save
                     </Button>
                 </DialogActions>
             </Dialog>
 
-            {/* Диалог FullView (показывает всю таблицу и т.д.) */}
+            {/* Диалог FullView */}
             <Dialog open={fullViewOpen} onClose={handleCloseFullView} fullWidth maxWidth="lg">
                 <DialogTitle>Full View: {name}</DialogTitle>
                 <DialogContent>
-                    <Box sx={{ overflowX: "auto" }}>
-                        <Table sx={{ minWidth: 800 }}>
+                    <Box sx={{overflowX: "auto"}}>
+                        <Table sx={{minWidth: 800}}>
                             <TableHead>
-                                <TableRow sx={{ backgroundColor: "#1E1E1E" }}>
+                                <TableRow sx={{backgroundColor: "#1E1E1E"}}>
                                     {columns.map((col, i) => (
                                         <TableCell
                                             key={i}
-                                            sx={{ color: "#ff9e44", borderBottom: "1px solid #2A2A2A" }}
+                                            sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
                                         >
                                             {col}
                                         </TableCell>
@@ -362,7 +402,7 @@ export default function Task({
                                         {row.cells.map((cell, cellIndex) => (
                                             <TableCell
                                                 key={cellIndex}
-                                                sx={{ color: "#fff", borderBottom: "1px solid #2A2A2A" }}
+                                                sx={{color: "#fff", borderBottom: "1px solid #2A2A2A"}}
                                             >
                                                 {cell}
                                             </TableCell>
@@ -384,9 +424,9 @@ export default function Task({
             <Dialog open={logsOpen} onClose={handleCloseLogs} fullWidth maxWidth="md">
                 <DialogTitle>Logs for {name}</DialogTitle>
                 <DialogContent dividers>
-                    <Box sx={{ maxHeight: 400, overflowY: "auto" }}>
+                    <Box sx={{maxHeight: 400, overflowY: "auto"}}>
                         {logs.map((log, index) => (
-                            <Typography key={index} variant="body2" sx={{ color: "#fff" }}>
+                            <Typography key={index} variant="body2" sx={{color: "#fff"}}>
                                 {log}
                             </Typography>
                         ))}

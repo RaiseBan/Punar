@@ -2,10 +2,10 @@ import React, { useState, useCallback } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import AddTaskIcon from "@mui/icons-material/AddTask";
 import Task from "./Task";
-import CreateTaskWizard from "./CreateTaskWizard";
 import { useDispatch, useSelector } from "react-redux";
 import { addOrUpdateTask } from "../store/tasksSlice";
 import { RootState } from "../store/store";
+import CreateTaskWizard from "./CreateTaskWizard/CreateTaskWizard";
 
 export default function TasksPage() {
     const tasks = useSelector((state: RootState) => state.tasks.tasks);
@@ -45,7 +45,7 @@ export default function TasksPage() {
                     },
                 }}
             >
-                Create Task +
+                Create Task
             </Button>
 
             <Box sx={{ mt: 3, display: "flex", flexDirection: "column", gap: 2 }}>

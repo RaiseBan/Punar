@@ -7,6 +7,7 @@ const { getGlobalConfigDirectory, ensureConfigDirectory} = require("./utils/wall
 const fs = require("fs");
 const treeKill = require("tree-kill"); // Установи: npm install tree-kill
 const fsSync = require('fs');
+const {getSettings} = require("./utils/fsHelper");
 const fsProm = require('fs').promises;
 
 
@@ -53,22 +54,6 @@ ipcMain.handle('closeWindow', () => {
 });
 
 // Получение настроек
-function getSettings(){ // можно будет потом отрефакторить код и сделать какой-то Type (кароче удобно)
-  const settingsDir = getGlobalConfigDirectory();
-  const settingsFilePath = path.join(settingsDir, 'userSettings.json');
-
-  if (!fs.existsSync(settingsFilePath)) {
-    return {};
-  }
-
-  try {
-    const data = fs.readFileSync(settingsFilePath, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('Error reading settings:', error);
-    return {};
-  }
-}
 
 ipcMain.handle("get-settings", async () => {
   return getSettings();
@@ -108,8 +93,8 @@ ipcMain.on("start-process", (event, {taskId, config}) => {
 
   const scriptPath = getSettings();
   // Передаем путь к проекту и конфиг в spawnProcess
-  const child = spawnProcess(config, scriptPath.scriptDirectory);
-  // const child = spawn("node", ["your_script.js", scriptDirectory]);
+  // const child = spawnProcess(config, scriptPath.scriptDirectory);
+  const child = spawn("node", ["your_script.js", scriptDirectory]);
   processes[taskId] = child;
 
   child.stdout.on("data", (data) => {
@@ -157,8 +142,8 @@ ipcMain.on("resume-process", (event, { taskId, config }) => {
 
   event.reply("process-started", { taskId, config });
   const scriptPath = getSettings();
-  const child = spawnProcess(config, scriptPath.scriptDirectory);
-  // const child = spawn("node", ["your_script.js", scriptDirectory]);
+  // const child = spawnProcess(config, scriptPath.scriptDirectory);
+  const child = spawn("node", ["your_script.js", scriptDirectory]);
   processes[taskId] = child;
 
   child.stdout.on("data", (data) => {
@@ -352,4 +337,4 @@ ipcMain.handle('get-config-paths', async (_, configType) => {
 
 
 
-
+module.exports = {getSettings}
