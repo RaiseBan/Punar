@@ -68,6 +68,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Функция для закрытия окна
     closeWindow: () => ipcRenderer.invoke("closeWindow"),
 
-    enableDrag: () => ipcRenderer.send('enable-drag')
+    enableDrag: () => ipcRenderer.send('enable-drag'),
+
+    // Новые методы
+    saveConfig: (configType, fileName, content) =>
+        ipcRenderer.invoke('save-config', configType, fileName, content),
+    getConfigs: (configType) =>
+        ipcRenderer.invoke('get-configs', configType),
+    getConfig: (configType, fileName) =>
+        ipcRenderer.invoke('get-config', configType, fileName),
+    deleteConfig: (configType, fileName) =>
+        ipcRenderer.invoke('delete-config', configType, fileName),
+    getConfigPaths: (configType) =>
+        ipcRenderer.invoke('get-config-paths', configType),
+
 
 });

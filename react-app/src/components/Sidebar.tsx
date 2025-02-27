@@ -1,13 +1,32 @@
-import { List, ListItem, ListItemButton, ListItemText, Drawer, Toolbar, Typography } from "@mui/material";
+import {
+    List,
+    ListItem,
+    ListItemButton,
+    ListItemText,
+    Drawer,
+    Toolbar,
+    Typography,
+    ListItemIcon
+} from "@mui/material";
 import { Link, useLocation } from "react-router-dom";
 
+// Иконки из MUI
+import HomeIcon from "@mui/icons-material/Home";
+import AssignmentIcon from "@mui/icons-material/Assignment";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import SettingsInputAntennaIcon from "@mui/icons-material/SettingsInputAntenna";
+import BuildIcon from "@mui/icons-material/Build";
+import SettingsIcon from "@mui/icons-material/Settings";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+
 const menuItems = [
-    { text: "Home", path: "/home", icon: "🏠" },
-    { text: "TasksPage", path: "/tasks", icon: "📝" },
-    { text: "Wallets", path: "/wallets", icon: "💰" },
-    { text: "Proxies", path: "/proxies", icon: "📡" },
-    { text: "Tools", path: "/tools", icon: "🛠" },
-    { text: "Settings", path: "/settings", icon: "⚙️" },
+    { text: "Home", path: "/home", icon: <HomeIcon /> },
+    { text: "TasksPage", path: "/tasks", icon: <AssignmentIcon /> },
+    { text: "Wallets", path: "/wallets", icon: <AccountBalanceWalletIcon /> },
+    { text: "Config", path: "/scriptConfigs", icon: <SettingsInputAntennaIcon /> },
+    { text: "Tools", path: "/tools", icon: <BuildIcon /> },
+    { text: "Settings", path: "/settings", icon: <SettingsIcon /> },
+    { text: "Statistic", path: "/statistic", icon: <TrendingUpIcon /> },
 ];
 
 export default function Sidebar() {
@@ -21,7 +40,7 @@ export default function Sidebar() {
                 flexShrink: 0,
                 "& .MuiDrawer-paper": {
                     width: 250,
-                    backgroundColor: "#0e0e0e", // Sidebar ЧЕРНЫЙ
+                    backgroundColor: "#0e0e0e",
                     color: "#fff",
                     borderRight: "1px solid #1c1c1c",
                     padding: "10px",
@@ -29,31 +48,62 @@ export default function Sidebar() {
             }}
         >
             <Toolbar>
-                <Typography variant="h6" sx={{ color: "#fff", margin: "auto" }}>
+                <Typography
+                    variant="h6"
+                    sx={{
+                        color: "#fff",
+                        margin: "auto",
+                        fontWeight: "bold",
+                        letterSpacing: "0.05em",
+                        textTransform: "uppercase"
+                    }}
+                >
                     Lunar
                 </Typography>
             </Toolbar>
-            <List>
+
+            <List sx={{ mt: 2 }}>
                 {menuItems.map((item) => {
                     const isActive = location.pathname === item.path;
                     return (
-                        <ListItem key={item.text} disablePadding>
+                        <ListItem
+                            key={item.text}
+                            disablePadding
+                            sx={{
+                                mb: 0.5,
+                                opacity: isActive ? 1 : 0.9,
+                            }}
+                        >
                             <ListItemButton
                                 component={Link}
                                 to={item.path}
                                 sx={{
-                                    backgroundColor: isActive ? "rgba(255,136,0,0.52)" : "transparent", // Оранжевый, но прозрачный
-                                    color: isActive ? "#000" : "#fff", // Черный текст в активной вкладке
+                                    backgroundColor: isActive ? "rgba(255,111,0,0.71)" : "transparent",
+                                    color: isActive ? "#000" : "#fff",
                                     borderRadius: "8px",
                                     margin: "4px",
                                     fontWeight: isActive ? "bold" : "normal",
-                                    transition: "background-color 0.2s ease-in-out",
+                                    transition: "all 0.2s ease-in-out",
                                     "&:hover": {
-                                        backgroundColor: isActive ? "rgba(255, 158, 68, 0.8)" : "#292929", // Чуть ярче при наведении
+                                        backgroundColor: isActive
+                                            ? "rgba(232,121,28,0.8)"
+                                            : "rgba(255, 255, 255, 0.05)",
+                                        transform: "translateX(4px)",
+                                    },
+                                    "& .MuiListItemIcon-root": {
+                                        color: isActive ? "#000" : "#fff",
                                     },
                                 }}
                             >
-                                <span style={{ marginRight: "10px" }}>{item.icon}</span>
+                                <ListItemIcon
+                                    sx={{
+                                        minWidth: "40px",
+                                        color: "inherit", // Наследует цвет от родителя (кнопки)
+                                        transition: "transform 0.2s",
+                                    }}
+                                >
+                                    {item.icon}
+                                </ListItemIcon>
                                 <ListItemText primary={item.text} />
                             </ListItemButton>
                         </ListItem>

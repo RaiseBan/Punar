@@ -83,6 +83,11 @@ declare global {
 
             enableDrag: () => void;
 
+            saveConfig: (configType: 'reprice_config' | 'snipe_config', fileName: string, content: any) => Promise<boolean>;
+            getConfigs: (configType: 'reprice_config' | 'snipe_config') => Promise<string[]>;
+            getConfig: (configType: 'reprice_config' | 'snipe_config', fileName: string) => Promise<any>;
+            deleteConfig: (configType: 'reprice_config' | 'snipe_config', fileName: string) => Promise<boolean>;
+            getConfigPaths: (configType: 'reprice_config' | 'snipe_config') => Promise<{ name: string; path: string }[]>;
 
         };
     }

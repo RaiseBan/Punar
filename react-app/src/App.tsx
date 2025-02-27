@@ -9,6 +9,8 @@ import {store} from "./store/store";
 import './styles/global.css'
 import Header from "./components/Header";
 import Tools from "./components/Tools";
+import ConfigManager from "./components/ConfigManager";
+import Statistic from "./components/Statistic";
 
 const darkTheme = createTheme({
     palette: {
@@ -63,8 +65,10 @@ function Layout() {
                             <Route path="/" element={<Navigate to="/tasks" replace />} />
                             <Route path="/tasks" element={<TasksPage />} />
                             <Route path="/wallets" element={<Wallets />} />
+                            <Route path="/scriptConfigs" element={<ConfigManager />} />
                             <Route path="/settings" element={<Settings />} />
                             <Route path="/tools" element={<Tools />} />
+                            <Route path="/statistic" element={<Statistic />} />
                         </Routes>
                     </Box>
                 </Box>

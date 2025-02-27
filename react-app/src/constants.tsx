@@ -15,6 +15,11 @@ export interface ModuleItem {
     isDisabled?: boolean;
 }
 
+export const collections: Map<string, string> = new Map([
+    ["Jupiter", "a2e9e503-b8d5-4024-8837-538c5b879ec4"],
+    ["chill", "a2e9e503-b8d5-4024-8837-538c5b879ec3"]
+]);
+
 
 export const MODULES: ModuleItem[] = [
     {

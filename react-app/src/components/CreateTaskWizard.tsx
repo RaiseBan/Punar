@@ -24,7 +24,6 @@ import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
 import {MODULES} from "../constants";
 // Импорт, если иконка ещё не добавлена
 
-
 interface ModuleItem {
     id: string;
     label: string;
@@ -306,7 +305,8 @@ export default function CreateTaskWizard({
         }
         handleClose();
     };
-
+    const [repriceConfigs, setRepriceConfigs] = useState<string[]>([]);
+    const [snipeConfigs, setSnipeConfigs] = useState<string[]>([]);
     // ------------------------
     // При открытии диалога загружаем одиночные кошельки + имена сетов
     useEffect(() => {
@@ -329,6 +329,17 @@ export default function CreateTaskWizard({
                 }
             }
         };
+        const loadConfigPaths = async () => {
+            const repricePaths = await window.electronAPI?.getConfigPaths("reprice_config") || [];
+            const snipePaths = await window.electronAPI?.getConfigPaths("snipe_config") || [];
+            console.log(repricePaths)
+            console.log(snipePaths)
+            setRepriceConfigs(repricePaths.map(config => config.path)); // Оставляем только path
+            setSnipeConfigs(snipePaths.map(config => config.path)); // Оставляем только path
+        };
+
+
+        loadConfigPaths();
         fetchData();
     }, [open]);
 
@@ -410,16 +421,9 @@ export default function CreateTaskWizard({
                         </RadioGroup>
                     </Box>
 
-                    {/* Если priceByName = true => Price config (строка/файл) */}
-                    {params.priceByName && (
-                        <TextField
-                            label="Price config (file path)"
-                            value={params.priceConfig}
-                            onChange={(e) =>
-                                setTensorSdkParams({ ...params, priceConfig: e.target.value })
-                            }
-                        />
-                    )}
+                    {/* Price Config */}
+
+
 
                     {/* Если priceByName = false => thresholdPrice (число) */}
                     {!params.priceByName && (
@@ -434,6 +438,22 @@ export default function CreateTaskWizard({
                                 })
                             }
                         />
+                    )}
+                    {params.priceByName && (
+                        <FormControl fullWidth>
+                            <InputLabel>Price Config</InputLabel>
+                            <Select
+                                value={params.priceConfig}
+                                onChange={(e) => setTensorSdkParams({ ...params, priceConfig: e.target.value })}
+                            >
+                                {snipeConfigs.map((filePath) => (
+                                    <MenuItem key={filePath} value={filePath}>
+                                        {filePath.split(/[/\\]/).pop()} {/* Поддержка и Windows, и Linux */}
+                                    </MenuItem>
+                                ))}
+
+                            </Select>
+                        </FormControl>
                     )}
 
 
@@ -744,13 +764,20 @@ export default function CreateTaskWizard({
                     />
 
                     {/* Limit Config */}
-                    <TextField
-                        label="Limit Config (file path)"
-                        value={params.priceConfig}
-                        onChange={(e) =>
-                            setTensorSdkParams({ ...params, priceConfig: e.target.value })
-                        }
-                    />
+                    <FormControl fullWidth>
+                        <InputLabel>Price Config</InputLabel>
+                        <Select
+                            value={params.priceConfig}
+                            onChange={(e) => setTensorSdkParams({ ...params, priceConfig: e.target.value })}
+                        >
+                            {repriceConfigs.map((filePath) => (
+                                <MenuItem key={filePath} value={filePath}>
+                                    {filePath.split(/[/\\]/).pop()} {/* Поддержка и Windows, и Linux */}
+                                </MenuItem>
+                            ))}
+
+                        </Select>
+                    </FormControl>
                 </Box>
             );
         }

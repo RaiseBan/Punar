@@ -1,10 +1,14 @@
+//index.js
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const { spawn } = require("child_process");
 const { spawnProcess } = require("./utils/spawnProcess");
-const { getGlobalConfigDirectory } = require("./utils/wallet");
+const { getGlobalConfigDirectory, ensureConfigDirectory} = require("./utils/wallet");
 const fs = require("fs");
 const treeKill = require("tree-kill"); // Установи: npm install tree-kill
+const fsSync = require('fs');
+const fsProm = require('fs').promises;
+
 
 let mainWindow;
 const processes = {}; // Храним child_process по taskId
@@ -15,6 +19,8 @@ function createWindow() {
     width: 1200,
     height: 800,
     frame: false,
+    transparent: true, // Добавить прозрачность
+    backgroundColor: '#00000000', // Прозрачный фон
     webPreferences: {
       webSecurity: false,
       preload: path.join(__dirname, "preload.js"),
@@ -22,7 +28,12 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
+    roundedCorners: true,
+
   });
+  if (process.platform === 'win32') {
+    mainWindow.setBackgroundColor('#00000000');
+  }
 
   mainWindow.setMenuBarVisibility(false);
   mainWindow.loadURL(
@@ -40,62 +51,9 @@ ipcMain.handle('minimizeWindow', () => {
 ipcMain.handle('closeWindow', () => {
   mainWindow.close();
 });
-// Путь к директории globalSettings
-
-// Обработчик сохранения пути к директории
-// ipcMain.on("save-script-directory", (event, directory) => {
-//   const settingsDir = getGlobalConfigDirectory()
-//   const settingsFilePath = path.join(settingsDir, 'userSettings.json');
-//
-//   // Создаем директорию, если она не существует
-//   if (!fs.existsSync(settingsDir)) {
-//     fs.mkdirSync(settingsDir, { recursive: true });
-//   }
-//
-//   // Если файл не существует, создаем его с начальной структурой
-//   if (!fs.existsSync(settingsFilePath)) {
-//     const initialSettings = { scriptDirectory: directory };
-//     fs.writeFileSync(settingsFilePath, JSON.stringify(initialSettings, null, 2));
-//     console.log(`Создан файл с настройками, путь сохранен: ${directory}`);
-//   } else {
-//     // Если файл существует, обновляем только поле scriptDirectory
-//     try {
-//       const data = fs.readFileSync(settingsFilePath, 'utf-8');
-//       const settings = JSON.parse(data);
-//
-//       // Обновляем только поле scriptDirectory
-//       settings.scriptDirectory = directory;
-//
-//       fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
-//       console.log(`Путь обновлен: ${directory}`);
-//     } catch (error) {
-//       console.error('Ошибка при чтении или записи файла настроек:', error);
-//     }
-//   }
-// });
-//
-// function getScriptPath(){
-//   const settingsDir = getGlobalConfigDirectory();
-//   const settingsFilePath = path.join(settingsDir, 'userSettings.json');
-//   if (!fs.existsSync(settingsFilePath)) {
-//     return null; // Если файл не существует, возвращаем null
-//   }
-//   try {
-//     const data = fs.readFileSync(settingsFilePath, 'utf-8');
-//     const settings = JSON.parse(data);
-//     return settings.scriptDirectory; // Возвращаем путь
-//   } catch (error) {
-//     console.error('Ошибка при чтении файла настроек:', error);
-//     return null;
-//   }
-// }
-// // Получение пути к директории из userSettings.json
-// ipcMain.handle("get-script-directory", () => {
-//   return getScriptPath()
-// });
 
 // Получение настроек
-function getSettings(){
+function getSettings(){ // можно будет потом отрефакторить код и сделать какой-то Type (кароче удобно)
   const settingsDir = getGlobalConfigDirectory();
   const settingsFilePath = path.join(settingsDir, 'userSettings.json');
 
@@ -296,6 +254,102 @@ ipcMain.handle('deleteWallet', async (event, publicKey) => {
     console.error('Ошибка при удалении кошелька:', error);
   }
 });
+
+
+
+
+
+
+
+
+
+// Добавить обработчики IPC
+ipcMain.handle('save-config', async (_, configType, fileName, content) => {
+  try {
+    const baseDir = await ensureConfigDirectory();
+    const configDir = path.join(baseDir, configType);
+
+    if (!fsSync.existsSync(configDir)) {
+      await fsProm.mkdir(configDir, { recursive: true });
+    }
+
+    const filePath = path.join(configDir, `${fileName}.json`);
+    await fsProm.writeFile(filePath, JSON.stringify(content, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Error saving config:', error);
+    return false;
+  }
+});
+
+ipcMain.handle('get-configs', async (_, configType) => {
+  try {
+    const baseDir = await ensureConfigDirectory();
+    const configDir = path.join(baseDir, configType);
+
+    if (!fsSync.existsSync(configDir)) {
+      return [];
+    }
+
+    const files = await fsProm.readdir(configDir);
+    return files
+        .filter(file => file.endsWith('.json'))
+        .map(file => file.replace(/\.json$/, ''));
+  } catch (error) {
+    console.error('Error reading configs:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('get-config', async (_, configType, fileName) => {
+  try {
+    const baseDir = await ensureConfigDirectory();
+    const filePath = path.join(baseDir, configType, `${fileName}.json`);
+
+    const data = await fsProm.readFile(filePath, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading config:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('delete-config', async (_, configType, fileName) => {
+  try {
+    const baseDir = await ensureConfigDirectory();
+    const filePath = path.join(baseDir, configType, `${fileName}.json`);
+
+    await fsProm.unlink(filePath);
+    return true;
+  } catch (error) {
+    console.error('Error deleting config:', error);
+    return false;
+  }
+});
+
+
+ipcMain.handle('get-config-paths', async (_, configType) => {
+  try {
+    const baseDir = await ensureConfigDirectory();
+    const configDir = path.join(baseDir, configType);
+
+    if (!fsSync.existsSync(configDir)) {
+      return [];
+    }
+
+    const files = await fsProm.readdir(configDir);
+    return files
+        .filter(file => file.endsWith('.json'))
+        .map(file => ({
+          name: file.replace(/\.json$/, ''), // Оставляем только имя без `.json`
+          path: path.join(configDir, file),  // Абсолютный путь к файлу
+        }));
+  } catch (error) {
+    console.error('Error getting config paths:', error);
+    return [];
+  }
+});
+
 
 
 
