@@ -89,6 +89,12 @@ declare global {
             deleteConfig: (configType: 'reprice_config' | 'snipe_config', fileName: string) => Promise<boolean>;
             getConfigPaths: (configType: 'reprice_config' | 'snipe_config') => Promise<{ name: string; path: string }[]>;
 
+
+            // tensor api
+            tensorAPI: {
+                getCollectionInfo: (slug: string) => Promise<string | null>;
+                getNftsForCollection: (collId: string, limit?: number, onlyListings?: boolean) => Promise<any>;
+            };
         };
     }
 }

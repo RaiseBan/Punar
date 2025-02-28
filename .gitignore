@@ -9,7 +9,7 @@ build/
 .npm/
 .DS_Store
 Thumbs.db
-
+/docs
 # Electron (electron-app)
 electron-app/node_modules/
 electron-app/dist/

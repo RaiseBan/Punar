@@ -82,5 +82,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getConfigPaths: (configType) =>
         ipcRenderer.invoke('get-config-paths', configType),
 
+    // tensor api:
+    getCollectionInfo: (slug) => ipcRenderer.invoke("get-collectionInfo", slug),
+    getNftsForCollection: (collId, limit = 1, onlyListings = false) =>
+        ipcRenderer.invoke("get-nftsForCollection", collId, limit, onlyListings),
 
 });
