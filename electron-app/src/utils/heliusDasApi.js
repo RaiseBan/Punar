@@ -1,9 +1,10 @@
-const {getSettings} = require("../index");
 const axios = require("axios");
+const {getSettings} = require("./fsHelper");
 
 async function retrieveDASAssetFields(mint) {
     let attempts = 0;
-    const helius_url = getSettings().heliusRpcs[0];
+    const helius_url = "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f"
+    // const helius_url = getSettings().heliusRpcs[0];
     while (attempts < 5) {
 
         try {
@@ -40,5 +41,11 @@ async function retrieveDASAssetFields(mint) {
     console.error(`[retrieveDASAssetFields] Failed`);
     throw new Error("Failed to fetch asset fields after multiple retries");
 }
+
+
+(async ()=>{
+    const res = await retrieveDASAssetFields("GGc8j744twRwakBXVKJuhhUSKrR6z5o8bnXERivz8Es5");
+    console.log(JSON.stringify(res, null, 2))
+})()
 
 module.exports = {retrieveDASAssetFields}
