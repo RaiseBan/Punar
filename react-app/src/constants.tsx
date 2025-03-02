@@ -60,8 +60,13 @@ export const MODULES: ModuleItem[] = [
     },
 ];
 
+// export const COLS_NAMES: Map<string, string[]> = new Map([
+//     ["Tensor sniper (SDK)", ["NFT name", "price", "seller", "buyer"]],
+//     ["Tensor reprice", ["ACTION", "NFT", "PRICE", "LIMIT"]]
+// ]);
+
 export const COLS_NAMES: Map<string, string[]> = new Map([
     ["Tensor sniper (SDK)", ["NFT name", "price", "seller", "buyer"]],
-    ["Tensor reprice", ["ACTION", "NFT", "PRICE", "LIMIT"]]
+    ["Tensor reprice", ["NFT name", "price", "seller", "buyer"]]
 ]);
 

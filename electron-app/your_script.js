@@ -7,7 +7,7 @@ function sleep(ms) {
     while (true){
         i++
         if (i % 5 === 0) {
-            console.log(`[TABLE_DATA] NFT #123 | 0.1 SOL | someSeller | someBuyer`)
+            console.log(`[TABLE_DATA] NFT #123 | 0.1 SOL | someSeller | someBuyer [END]`)
         }else{
             console.log(`iteration ${i}`)
         }
