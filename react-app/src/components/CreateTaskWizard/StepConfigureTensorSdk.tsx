@@ -182,10 +182,11 @@ export default function StepConfigureTensorSdk({
                             value={jitoRegion}
                             onChange={(e) => handleSetParam("jitoRegion", e.target.value)}
                         >
-                            <MenuItem value="">-- Select Jito region --</MenuItem>
                             <MenuItem value="https://amsterdam.mainnet.block-engine.jito.wtf">Amsterdam</MenuItem>
+                            <MenuItem value="https://frankfurt.mainnet.block-engine.jito.wtf">Frankfurt</MenuItem>
                             <MenuItem value="https://ny.mainnet.block-engine.jito.wtf">New York</MenuItem>
-                            {/* ...другие регионы */}
+                            <MenuItem value="https://tokyo.mainnet.block-engine.jito.wtf">Tokyo</MenuItem>
+                            <MenuItem value="https://slc.mainnet.block-engine.jito.wtf">Salt Lake City</MenuItem>
                         </Select>
                     </FormControl>
 
@@ -220,9 +221,12 @@ export default function StepConfigureTensorSdk({
                             onChange={(e) => handleSetParam("bloxrouteRegion", e.target.value)}
                         >
                             <MenuItem value="">-- Select Bloxroute region --</MenuItem>
-                            <MenuItem value="England">England</MenuItem>
-                            <MenuItem value="New York">New York</MenuItem>
-                            {/* ...и т.д. */}
+                            <MenuItem value="England">🇬🇧 England</MenuItem>
+                            <MenuItem value="New York">🇺🇸 New York</MenuItem>
+                            <MenuItem value="Los Angeles">🇺🇸 Los Angeles</MenuItem>
+                            <MenuItem value="Frankfurt">🇩🇪 Frankfurt</MenuItem>
+                            <MenuItem value="Amsterdam">🇳🇱 Amsterdam</MenuItem>
+                            <MenuItem value="Tokyo">🇯🇵 Tokyo</MenuItem>
                         </Select>
                     </FormControl>
 
