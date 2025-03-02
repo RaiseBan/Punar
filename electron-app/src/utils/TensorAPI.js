@@ -1,5 +1,6 @@
-const { getSettings } = require("../utils/fsHelper");
-const { TENSOR_ENDPOINTS } = require("./constants");
+const {getSettings} = require("../utils/fsHelper");
+const {TENSOR_ENDPOINTS} = require("./constants");
+const {sleep} = require("./solanaUtils");
 
 class TensorAPI {
     static instance = null;
@@ -15,7 +16,7 @@ class TensorAPI {
     // === Singleton: получаем один объект на все приложение ===
     static getInstance() {
         if (!TensorAPI.instance) {
-            const { tensor_api_token: apiKey } = getSettings();
+            const {tensor_api_token: apiKey} = getSettings();
             TensorAPI.instance = new TensorAPI(apiKey);
         }
         return TensorAPI.instance;
@@ -28,7 +29,7 @@ class TensorAPI {
     }
 
     // === Поиск ID коллекции по slug ===
-    fetchCollectionId(slug) {
+    fetchCollections(slug) {
         this.reset(); // Очищаем перед новым запросом
         this.endpoint = TENSOR_ENDPOINTS.SEARCH_COLLECTION;
         this.params.query = slug;
@@ -48,15 +49,75 @@ class TensorAPI {
         return this;
     }
 
+    // fetchTxHistory(collId, limit = 1, txTypes,
+    //                minPrice,
+    //                maxPrice,
+    //                traits,
+    //                wallet,
+    //                cursor
+    // ) {
+    //     this.reset();
+    //     this.endpoint = TENSOR_ENDPOINTS.TX_HISTORY;
+    //     this.params = {
+    //         collId,
+    //         limit,
+    //         traits,
+    //         wallet,
+    //         cursor,
+    //     }
+    //     return this;
+    // }
+
     // === Выполнение запроса ===
+    // Метод fetchTxHistory в классе TensorAPI
+    fetchTxHistory({
+                       collId,
+                       limit = 1,
+                       txTypes,
+                       minPrice,
+                       maxPrice,
+                       traits,
+                       wallet,
+                       cursor
+                   }) {
+        this.reset();
+        this.endpoint = TENSOR_ENDPOINTS.TX_HISTORY;
+
+        // Формируем объект параметров
+        this.params = {
+            collId,
+            limit,
+            // Особые случаи:
+            ...(txTypes?.length && {txTypes}), // Добавляем только если массив не пустой
+            ...(minPrice !== undefined && {minPrice}),
+            ...(maxPrice !== undefined && {maxPrice}),
+            ...(traits && {traits: JSON.stringify(traits)}),
+            ...(wallet && {wallet}),
+            ...(cursor && {cursor})
+        };
+        console.log(JSON.stringify(this.params, null, 2))
+
+        return this;
+    }
+
+// Метод send() (обновленная обработка параметров)
     async send() {
         if (!this.endpoint) {
             throw new Error("Endpoint не установлен! Вызови fetchCollectionId() или fetchCollectionNfts() перед send().");
         }
 
         const url = new URL(this.endpoint);
+
+        // Обрабатываем параметры с поддержкой массивов
         Object.entries(this.params).forEach(([key, value]) => {
-            url.searchParams.append(key, value);
+            if (value === undefined) return;
+
+            if (Array.isArray(value)) {
+                // Добавляем каждый элемент массива отдельно
+                value.forEach(item => url.searchParams.append(key, item));
+            } else {
+                url.searchParams.append(key, value);
+            }
         });
 
         const options = {
@@ -67,18 +128,35 @@ class TensorAPI {
             },
         };
 
-        try {
-            const response = await fetch(url.toString(), options);
-            if (!response.ok) {
-                throw new Error(`Ошибка запроса: ${response.status} ${response.statusText}`);
+
+        let attempt = 0;
+        let maxAttempts = 5;
+        while (attempt < maxAttempts) {
+            try {
+                await sleep(200);
+                let response = await fetch(url.toString(), options);
+                if (!response.ok) {
+                    throw new Error(`Ошибка запроса: ${response.status} ${response.statusText}`);
+                } else {
+                    this.reset();
+                    return await response.json();
+                }
+
+            } catch (error) {
+                console.error(error.message);
+                if (error.message.includes("429 Too Many Requests")){
+                    console.log(`sleep...`)
+                    await sleep(1000)
+                }else{
+                    this.reset()
+                    return null;
+                }
             }
-            return await response.json();
-        } catch (error) {
-            console.error(error.message);
-            return null;
-        } finally {
-            this.reset(); // Авто-сброс после запроса
+            attempt++;
+
         }
+
+
     }
 }
 

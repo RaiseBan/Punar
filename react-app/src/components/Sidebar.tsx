@@ -18,6 +18,7 @@ import SettingsInputAntennaIcon from "@mui/icons-material/SettingsInputAntenna";
 import BuildIcon from "@mui/icons-material/Build";
 import SettingsIcon from "@mui/icons-material/Settings";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import ManageHistoryIcon from '@mui/icons-material/ManageHistory';
 
 const menuItems = [
     { text: "Home", path: "/home", icon: <HomeIcon /> },
@@ -27,6 +28,7 @@ const menuItems = [
     { text: "Tools", path: "/tools", icon: <BuildIcon /> },
     { text: "Settings", path: "/settings", icon: <SettingsIcon /> },
     { text: "Statistic", path: "/statistic", icon: <TrendingUpIcon /> },
+    { text: "TxHistory", path: "/lag", icon: <ManageHistoryIcon /> },
 ];
 
 export default function Sidebar() {
@@ -58,7 +60,7 @@ export default function Sidebar() {
                         textTransform: "uppercase"
                     }}
                 >
-                    Lunar
+                    TRAHER V1.0
                 </Typography>
             </Toolbar>
 

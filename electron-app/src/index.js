@@ -4,6 +4,7 @@ const { initializeProcessHandlers } = require("./ipcHandlers/processHandler");
 const { initializeWalletHandlers } = require("./ipcHandlers/walletHandler");
 const { initializeConfigHandlers } = require("./ipcHandlers/configHandler");
 const { initializeWindowHandlers } = require("./ipcHandlers/windowHandler");
+const {initializeApiHandlers} = require("./ipcHandlers/tensorApiHandler");
 
 let mainWindow;
 
@@ -43,6 +44,7 @@ app.whenReady().then(() => {
   initializeWalletHandlers(ipcMain);
   initializeConfigHandlers(ipcMain);
   initializeWindowHandlers(ipcMain, mainWindow);
+  initializeApiHandlers(ipcMain);
 });
 
 app.commandLine.appendSwitch("ignore-certificate-errors");

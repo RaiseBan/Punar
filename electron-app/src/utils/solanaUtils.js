@@ -1,7 +1,4 @@
 const {retrieveDASAssetFields} = require("./heliusDasApi");
-const {PublicKey} = require("@solana/web3.js");
-const {Metaplex} = require("@metaplex-foundation/js");
-const {metaplex} = require("./constants");
 
 async function getCollectionAddress(mint){
     const asset = await retrieveDASAssetFields(mint);
@@ -28,27 +25,9 @@ async function getCollectionAddress(mint){
 
 }
 
-// metaplex nft
-
-async function getMetadata(mintAddress) {
-    // Инициализация Metaplex SDK
-
-    try {
-        // Получение данных метадаты токена
-        console.log(await metaplex.nfts().findByMint({ mintAddress: new PublicKey(mintAddress)})) // delete later
-        return await metaplex.nfts().findByMint({ mintAddress });
-
-
-
-        // console.log("Metadata:", nft);
-    } catch (error) {
-        console.error("Error fetching metadata:", error);
-    }
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 
-(async () => {
-    await getMetadata("GGc8j744twRwakBXVKJuhhUSKrR6z5o8bnXERivz8Es5")
-})()
-
-module.exports = {getCollectionAddress}
+module.exports = {getCollectionAddress, sleep}

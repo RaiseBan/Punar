@@ -1,5 +1,5 @@
 const {getCollectionAddress} = require("./solanaUtils");
-const {TensorAPI} = require("./TensorAPI");
+const TensorAPI = require("./TensorAPI");
 
 
 /**
@@ -12,11 +12,8 @@ async function updateConfigCollectionId(config) {
 
     const tensorApi = TensorAPI.getInstance();
 
-    const result = await tensorApi.fetchCollectionId(slug).send();
-    console.log(JSON.stringify(result, null, 2));
 
-    const collection = result.collections.find(col => col.slugDisplay === slug);
-    const collId = collection.collId;
+    const collId = await getCollIdBySlug(slug);
 
     if (!collId) {
         console.error("Collection ID not found!");
@@ -38,4 +35,13 @@ async function updateConfigCollectionId(config) {
     return { ...config, collection_id: collectionAddress };
 }
 
-module.exports = { updateConfigCollectionId };
+async function getCollIdBySlug(slug) {
+    const tensorApi = TensorAPI.getInstance();
+    console.log(tensorApi);
+    const result = await tensorApi.fetchCollections(slug).send();
+    // console.log(JSON.stringify(result, null, 2));
+    const collection = result.collections.find(col => col.slugDisplay === slug);
+    return collection.collId;
+}
+
+module.exports = { updateConfigCollectionId, getCollIdBySlug };

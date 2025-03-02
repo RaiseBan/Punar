@@ -11,6 +11,7 @@ import Header from "./components/Header";
 import Tools from "./components/Tools";
 import ConfigManager from "./components/ConfigManager";
 import Statistic from "./components/Statistic";
+import TxHistorySearch from "./components/TransactionHistory";
 
 const darkTheme = createTheme({
     palette: {
@@ -69,6 +70,7 @@ function Layout() {
                             <Route path="/settings" element={<Settings />} />
                             <Route path="/tools" element={<Tools />} />
                             <Route path="/statistic" element={<Statistic />} />
+                            <Route path="/lag" element={<TxHistorySearch />} />
                         </Routes>
                     </Box>
                 </Box>

@@ -93,7 +93,18 @@ declare global {
             // tensor api
             tensorAPI: {
                 getCollectionInfo: (slug: string) => Promise<string | null>;
+                getCollIdByUrl: (url: string) => Promise<string | null>;
                 getNftsForCollection: (collId: string, limit?: number, onlyListings?: boolean) => Promise<any>;
+                getTxHistory: (params: {
+                    collId: string;
+                    limit?: number;
+                    txTypes?: string[];
+                    minPrice?: number;
+                    maxPrice?: number;
+                    traits?: Record<string, any>;
+                    wallet?: string;
+                    cursor?: string;
+                }) => Promise<any>;
             };
         };
     }
