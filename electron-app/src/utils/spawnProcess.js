@@ -41,14 +41,18 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
     const taskName = sanitizeFileName(taskConfig.task_name);
     const configFileName = `${moduleName}_${taskName}.json`;
     const configPath = path.join(configDir, configFileName);
+    let updatedTaskConfig;
+    if (taskConfig.module_name === "Tensor sniper (SDK)" || taskConfig.module_name === "Tensor reprice") {
+        updatedTaskConfig = updateConfigCollectionId(taskConfig);
+    }else{
+        updatedTaskConfig = taskConfig;
+    }
 
-
-    const updatedTaskConfig = updateConfigCollectionId(taskConfig);
 
     // Записываем конфиг в файл
     fs.writeFileSync(configPath, JSON.stringify(updatedTaskConfig, null, 2), "utf-8");
     console.log(`Конфигурация сохранена: ${configPath}`);
-
+    return;
     // Запускаем дочерний процесс с заданным рабочим каталогом (cwd) и переменными окружения
     console.log(`scriptsDirectoryPath: ${scriptsDirectoryPath}`)
     console.log(`start process: \nPath: ${path.join(scriptsDirectoryPath, "src", "index.ts")} \nConfigPath: ${configPath}`);

@@ -1,4 +1,6 @@
 // global.d.ts
+import {Wallet} from "./types";
+
 declare module "*.module.css" {
     const classes: { [key: string]: string };
     export default classes;
@@ -13,6 +15,8 @@ export interface AppSettings {
     heliusRpcs?: string[];
     tensor_api_token?: string;
     bloxroute_api_token?: string;
+    thor_streamer_address?: string,
+    thor_streamer_token?: string;
 }
 
 export {};

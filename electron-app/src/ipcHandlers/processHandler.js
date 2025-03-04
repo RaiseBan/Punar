@@ -1,6 +1,7 @@
 const { spawn } = require("child_process");
 const treeKill = require("tree-kill");
 const {getSettings} = require("../utils/fsHelper");
+const {spawnProcess} = require("../utils/spawnProcess");
 
 const processes = {};
 
@@ -9,8 +10,8 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         console.log(`Создан taskId: ${taskId}, запускаем процесс...`);
         const scriptPath = getSettings();
         event.reply("process-started", { taskId, config });
-        // const child = spawnProcess(config, scriptPath.scriptDirectory);
-        const child = spawn("node", ["your_script.js"]);
+        const child = spawnProcess(config, scriptPath.scriptDirectory);
+        // const child = spawn("node", ["your_script.js"]);
         processes[taskId] = child;
 
         child.stdout.on("data", (data) => {

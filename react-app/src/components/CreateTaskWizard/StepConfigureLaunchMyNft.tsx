@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 
 import { LaunchMyNftParams, Wallet } from "../../types";
+import {JITO_REGIONS} from "../../constants";
 
 export interface IStepConfigureLaunchMyNftProps {
     taskName: string;
@@ -115,9 +116,11 @@ export default function StepConfigureLaunchMyNft({
                             onChange={(e) => handleSetParam("jito_region", e.target.value)}
                         >
                             <MenuItem value="">-- Select region --</MenuItem>
-                            <MenuItem value="https://amsterdam.mainnet.block-engine.jito.wtf">Amsterdam</MenuItem>
-                            <MenuItem value="https://ny.mainnet.block-engine.jito.wtf">New York</MenuItem>
-                            {/* ...etc */}
+                            {JITO_REGIONS.map((region) => (
+                                <MenuItem key={region.value} value={region.value}>
+                                    {region.label}
+                                </MenuItem>
+                            ))}
                         </Select>
                     </FormControl>
 

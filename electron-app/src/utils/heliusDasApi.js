@@ -43,9 +43,9 @@ async function retrieveDASAssetFields(mint) {
 }
 
 
-(async ()=>{
-    const res = await retrieveDASAssetFields("GGc8j744twRwakBXVKJuhhUSKrR6z5o8bnXERivz8Es5");
-    console.log(JSON.stringify(res, null, 2))
-})()
+// (async ()=>{
+//     const res = await retrieveDASAssetFields("GGc8j744twRwakBXVKJuhhUSKrR6z5o8bnXERivz8Es5");
+//     console.log(JSON.stringify(res, null, 2))
+// })()
 
 module.exports = {retrieveDASAssetFields}

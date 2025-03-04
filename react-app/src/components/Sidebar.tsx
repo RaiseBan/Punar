@@ -21,8 +21,7 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import ManageHistoryIcon from '@mui/icons-material/ManageHistory';
 
 const menuItems = [
-    { text: "Home", path: "/home", icon: <HomeIcon /> },
-    { text: "TasksPage", path: "/tasks", icon: <AssignmentIcon /> },
+    { text: "Tasks", path: "/tasks", icon: <AssignmentIcon /> },
     { text: "Wallets", path: "/wallets", icon: <AccountBalanceWalletIcon /> },
     { text: "Config", path: "/scriptConfigs", icon: <SettingsInputAntennaIcon /> },
     { text: "Tools", path: "/tools", icon: <BuildIcon /> },

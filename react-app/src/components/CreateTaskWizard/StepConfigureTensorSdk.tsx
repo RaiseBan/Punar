@@ -13,6 +13,7 @@ import {
 } from "@mui/material";
 
 import { Wallet, TensorSdkParams } from "../../types";
+import {JITO_REGIONS} from "../../constants";
 
 export interface IStepConfigureTensorSdkProps {
     taskName: string;
@@ -182,11 +183,12 @@ export default function StepConfigureTensorSdk({
                             value={jitoRegion}
                             onChange={(e) => handleSetParam("jitoRegion", e.target.value)}
                         >
-                            <MenuItem value="https://amsterdam.mainnet.block-engine.jito.wtf">Amsterdam</MenuItem>
-                            <MenuItem value="https://frankfurt.mainnet.block-engine.jito.wtf">Frankfurt</MenuItem>
-                            <MenuItem value="https://ny.mainnet.block-engine.jito.wtf">New York</MenuItem>
-                            <MenuItem value="https://tokyo.mainnet.block-engine.jito.wtf">Tokyo</MenuItem>
-                            <MenuItem value="https://slc.mainnet.block-engine.jito.wtf">Salt Lake City</MenuItem>
+                            <MenuItem value="">-- Select region --</MenuItem>
+                            {JITO_REGIONS.map((region) => (
+                                <MenuItem key={region.value} value={region.value}>
+                                    {region.label}
+                                </MenuItem>
+                            ))}
                         </Select>
                     </FormControl>
 

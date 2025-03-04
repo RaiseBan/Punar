@@ -2,13 +2,14 @@ import React from "react";
 import { Box, Typography } from "@mui/material";
 
 // Импорты типов (скорректируйте под себя)
-import { Wallet, TensorSdkParams, LaunchMyNftParams } from "../../types";
+import {Wallet, TensorSdkParams, LaunchMyNftParams, MeteoraParams} from "../../types";
 
 interface StepReviewProps {
     selectedModule: string | null;
     taskName: string;
     tensorSdkParams: TensorSdkParams;
     launchMyNftParams: LaunchMyNftParams;
+    meteoraParams: MeteoraParams; // Добавлен новый параметр
     wallets: Wallet[];
 }
 
@@ -17,6 +18,7 @@ export default function StepReview({
                                        taskName,
                                        tensorSdkParams,
                                        launchMyNftParams,
+                                       meteoraParams,
                                        wallets,
                                    }: StepReviewProps) {
     // Можем отрендерить разные данные в зависимости от модуля:
@@ -160,6 +162,43 @@ export default function StepReview({
                         <b>Chosen Set Name:</b> {chosenSetName}
                     </Typography>
                 )}
+            </Box>
+        );
+    }else if (selectedModule === "meteora_dlmm"){
+        const {
+            accounts,
+            useJito,
+            jitoRegion,
+            jitoTipAmount,
+            additionalParams
+        } = meteoraParams;
+
+        const filteredAccounts = accounts.filter((acc: string) => acc.trim() !== "");
+
+        return (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <Typography variant="h6">Review your parameters (Meteora DLMM)</Typography>
+                <Typography><b>Task Name:</b> {taskName}</Typography>
+
+                <Typography><b>Accounts:</b> {filteredAccounts.length} added</Typography>
+
+                <Typography><b>Use Jito:</b> {useJito ? "Yes" : "No"}</Typography>
+                {useJito && (
+                    <>
+                        <Typography><b>Jito Region:</b> {jitoRegion || 'Not selected'}</Typography>
+                        <Typography><b>Jito Tip Amount:</b> {jitoTipAmount} lamports</Typography>
+                    </>
+                )}
+
+                <Typography variant="subtitle1" sx={{ mt: 1 }}>Advanced Parameters:</Typography>
+                <Typography><b>Confirmation Timeout:</b> {additionalParams.CONFIRMATION_TIMEOUT}ms</Typography>
+                <Typography><b>Max TX Attempts:</b> {additionalParams.MAX_TX_ATTEMPTS}</Typography>
+                <Typography><b>Slippage:</b> {additionalParams.SLIPPAGE}%</Typography>
+                <Typography><b>Additional Fee on Failed:</b> {additionalParams.ADDITIONAL_FEE_ON_FAILED}</Typography>
+                <Typography><b>Fee Add Liquidity:</b> {additionalParams.FEE_ADD_LIQUIDITY}</Typography>
+                <Typography><b>Fee Claim Fee:</b> {additionalParams.FEE_CLAIM_FEE}</Typography>
+                <Typography><b>Fee Remove Liquidity:</b> {additionalParams.FEE_REMOVE_LIQUIDITY}</Typography>
+                <Typography><b>Fee Create Position:</b> {additionalParams.FEE_CREATE_POSITION}</Typography>
             </Box>
         );
     }

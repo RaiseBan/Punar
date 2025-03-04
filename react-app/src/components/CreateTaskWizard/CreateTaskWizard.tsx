@@ -18,7 +18,8 @@ import StepConfigureLaunchMyNft from "./StepConfigureLaunchMyNft";
 import StepReview from "./StepReview";
 
 // Типы (скорректируйте пути под свой проект)
-import { Wallet, TensorSdkParams, LaunchMyNftParams } from "../../types";
+import {Wallet, TensorSdkParams, LaunchMyNftParams, MeteoraParams} from "../../types";
+import StepConfigureMeteora from "./StepConfigureMeteora";
 
 // ------------------------
 const STEPS = ["Choose module", "Configure module", "Review & Create"];
@@ -82,6 +83,23 @@ export default function CreateTaskWizard({
         selectedWalletPublicKey: "",
         manualPrivateKey: "",
         chosenSetName: "",
+    });
+
+    const [meteoraParams, setMeteoraParams] = useState<MeteoraParams>({
+        accounts: [],
+        useJito: false,
+        jitoRegion: "",
+        jitoTipAmount: 1000,
+        additionalParams: {
+            CONFIRMATION_TIMEOUT: 6000,
+            MAX_TX_ATTEMPTS: 10,
+            SLIPPAGE: 7,
+            ADDITIONAL_FEE_ON_FAILED: 100000,
+            FEE_ADD_LIQUIDITY: 500000,
+            FEE_CLAIM_FEE: 180000,
+            FEE_REMOVE_LIQUIDITY: 500000,
+            FEE_CREATE_POSITION: 500000,
+        },
     });
 
     // ------------------------
@@ -156,6 +174,23 @@ export default function CreateTaskWizard({
             selectedWalletPublicKey: "",
             manualPrivateKey: "",
             chosenSetName: "",
+        });
+
+        setMeteoraParams({
+            accounts: [],
+            useJito: false,
+            jitoRegion: "",
+            jitoTipAmount: 1000,
+            additionalParams: {
+                CONFIRMATION_TIMEOUT: 6000,
+                MAX_TX_ATTEMPTS: 10,
+                SLIPPAGE: 7,
+                ADDITIONAL_FEE_ON_FAILED: 100000,
+                FEE_ADD_LIQUIDITY: 500000,
+                FEE_CLAIM_FEE: 180000,
+                FEE_REMOVE_LIQUIDITY: 500000,
+                FEE_CREATE_POSITION: 500000,
+            },
         });
 
         onClose();
@@ -253,6 +288,23 @@ export default function CreateTaskWizard({
                 main_rpc: settings?.mainRpc || "",
             };
             onCreateTask(cfg);
+        }else if (selectedModule === "meteora_dlmm") {
+            const settings = await window.electronAPI?.getSettings();
+            const cfg = {
+                module_name: "Meteora DLMM",
+                task_name: taskName,
+                accounts: meteoraParams.accounts.filter(a => a.trim() !== ""),
+                use_jito: meteoraParams.useJito,
+                jito_region: meteoraParams.jitoRegion,
+                jito_tip_amount: meteoraParams.jitoTipAmount,
+                ...meteoraParams.additionalParams,
+                main_rpc: settings?.mainRpc || "",
+                thor_streamer_address: settings?.thor_streamer_address,
+                thor_streamer_token: settings?.thor_streamer_token,
+
+
+            };
+            onCreateTask(cfg);
         }
 
         handleClose();
@@ -313,6 +365,14 @@ export default function CreateTaskWizard({
                         walletSets={walletSets}
                     />
                 )}
+                {step === 1 && selectedModule === "meteora_dlmm" && (
+                    <StepConfigureMeteora
+                        taskName={taskName}
+                        setTaskName={setTaskName}
+                        meteoraParams={meteoraParams}
+                        setMeteoraParams={setMeteoraParams}
+                    />
+                )}
 
                 {/* Шаг 2: Review & Create */}
                 {step === 2 && (
@@ -321,6 +381,7 @@ export default function CreateTaskWizard({
                         taskName={taskName}
                         tensorSdkParams={tensorSdkParams}
                         launchMyNftParams={launchMyNftParams}
+                        meteoraParams={meteoraParams}
                         wallets={wallets}
                     />
                 )}

@@ -60,3 +60,20 @@ export interface LaunchMyNftParams {
     // Если set → пользователь выбирает имя сета
     chosenSetName: string;
 }
+
+export interface MeteoraParams {
+    accounts: string[];
+    useJito: boolean;
+    jitoRegion: string;
+    jitoTipAmount: number;
+    additionalParams: {
+        CONFIRMATION_TIMEOUT: number;
+        MAX_TX_ATTEMPTS: number;
+        SLIPPAGE: number;
+        ADDITIONAL_FEE_ON_FAILED: number;
+        FEE_ADD_LIQUIDITY: number;
+        FEE_CLAIM_FEE: number;
+        FEE_REMOVE_LIQUIDITY: number;
+        FEE_CREATE_POSITION: number;
+    };
+}

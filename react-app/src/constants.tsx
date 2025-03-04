@@ -56,7 +56,7 @@ export const MODULES: ModuleItem[] = [
         id: "meteora_dlmm",
         label: "Meteora DLMM",
         icon: <CloudIcon />,
-        isDisabled: true,
+        isDisabled: false,
     },
 ];
 
@@ -69,4 +69,11 @@ export const COLS_NAMES: Map<string, string[]> = new Map([
     ["Tensor sniper (SDK)", ["NFT name", "price", "seller", "buyer"]],
     ["Tensor reprice", ["NFT name", "price", "seller", "buyer"]]
 ]);
+
+export const JITO_REGIONS = [
+    { value: "https://amsterdam.mainnet.block-engine.jito.wtf", label: "Amsterdam" },
+    { value: "https://ny.mainnet.block-engine.jito.wtf", label: "New York" },
+    { value: "https://tokyo.mainnet.block-engine.jito.wtf", label: "Tokyo" },
+    { value: "https://slc.mainnet.block-engine.jito.wtf", label: "Salt Lake City" },
+];
 

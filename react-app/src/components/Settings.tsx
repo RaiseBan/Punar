@@ -10,6 +10,8 @@ interface AppSettings {
     heliusRpcs?: string[];
     tensor_api_token?: string;
     bloxroute_api_token?: string;
+    thor_streamer_address?: string;
+    thor_streamer_token?: string;
 }
 
 export default function Settings() {
@@ -104,6 +106,29 @@ export default function Settings() {
                         fullWidth
                         value={settings.bloxroute_api_token || ""}
                         onChange={handleChange('bloxroute_api_token')}
+                        margin="normal"
+                    />
+
+                </Typography>
+
+
+            </Box>
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                    THOR STREAMER
+                    <TextField
+                        label="ADDRESS"
+                        fullWidth
+                        value={settings.thor_streamer_address || ""}
+                        onChange={handleChange('thor_streamer_address')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="TOKEN"
+                        fullWidth
+                        value={settings.thor_streamer_token || ""}
+                        onChange={handleChange('thor_streamer_token')}
                         margin="normal"
                     />
 
