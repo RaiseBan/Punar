@@ -47,28 +47,32 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
     }else{
         updatedTaskConfig = taskConfig;
     }
-
+    if (!updatedTaskConfig){
+        return;
+    }
 
     // Записываем конфиг в файл
     fs.writeFileSync(configPath, JSON.stringify(updatedTaskConfig, null, 2), "utf-8");
     console.log(`Конфигурация сохранена: ${configPath}`);
-    return;
     // Запускаем дочерний процесс с заданным рабочим каталогом (cwd) и переменными окружения
     console.log(`scriptsDirectoryPath: ${scriptsDirectoryPath}`)
     console.log(`start process: \nPath: ${path.join(scriptsDirectoryPath, "src", "index.ts")} \nConfigPath: ${configPath}`);
     let moduleDir = ""
-    let fileToExecute = ""
+    let fileToExecute = "index.ts";
     if (updatedTaskConfig.module_name === "Tensor sniper (SDK)"){
         moduleDir = "tensor-nft-sdk";
-        fileToExecute = "index.ts"
     }else if(updatedTaskConfig.module_name === "Tensor reprice"){
-        moduleDir = "tensor_reprice"
-        fileToExecute = "index.ts"
+        moduleDir = "tensor_reprice";
     }else if(updatedTaskConfig.module_name === "LaunchMyNft"){
-        moduleDir = "mint"
-        fileToExecute = "starter.ts"
+        moduleDir = "mint";
+        fileToExecute = "starter.ts";
+    }else if (updatedTaskConfig.module_name === "Meteora DLMM"){
+        moduleDir = "meteora";
+    }else {
+        console.log(`bullshit`)
+        return;
     }
-
+    return;
     const child = spawn("npx", ["tsx", path.join(scriptsDirectoryPath, moduleDir, "src", fileToExecute)], {
         stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
         shell: true, // Используем shell для корректного выполнения

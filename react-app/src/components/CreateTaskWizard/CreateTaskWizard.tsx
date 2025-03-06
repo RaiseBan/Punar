@@ -90,6 +90,9 @@ export default function CreateTaskWizard({
         useJito: false,
         jitoRegion: "",
         jitoTipAmount: 1000,
+        walletSource: "existing",
+        privateKey: "",
+        strategy: "",
         additionalParams: {
             CONFIRMATION_TIMEOUT: 6000,
             MAX_TX_ATTEMPTS: 10,
@@ -181,6 +184,9 @@ export default function CreateTaskWizard({
             useJito: false,
             jitoRegion: "",
             jitoTipAmount: 1000,
+            walletSource: "existing",
+            privateKey: "",
+            strategy: "",
             additionalParams: {
                 CONFIRMATION_TIMEOUT: 6000,
                 MAX_TX_ATTEMPTS: 10,
@@ -297,6 +303,8 @@ export default function CreateTaskWizard({
                 use_jito: meteoraParams.useJito,
                 jito_region: meteoraParams.jitoRegion,
                 jito_tip_amount: meteoraParams.jitoTipAmount,
+                strategy: meteoraParams.strategy,
+                private_key: meteoraParams.privateKey,
                 ...meteoraParams.additionalParams,
                 main_rpc: settings?.mainRpc || "",
                 thor_streamer_address: settings?.thor_streamer_address,
@@ -371,6 +379,7 @@ export default function CreateTaskWizard({
                         setTaskName={setTaskName}
                         meteoraParams={meteoraParams}
                         setMeteoraParams={setMeteoraParams}
+                        wallets={wallets}
                     />
                 )}
 

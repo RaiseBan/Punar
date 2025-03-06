@@ -66,6 +66,9 @@ export interface MeteoraParams {
     useJito: boolean;
     jitoRegion: string;
     jitoTipAmount: number;
+    strategy: string;
+    walletSource: "existing" | "manual";
+    privateKey: string;
     additionalParams: {
         CONFIRMATION_TIMEOUT: number;
         MAX_TX_ATTEMPTS: number;

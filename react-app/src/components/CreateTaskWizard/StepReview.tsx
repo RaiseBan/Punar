@@ -169,6 +169,7 @@ export default function StepReview({
             accounts,
             useJito,
             jitoRegion,
+            strategy,
             jitoTipAmount,
             additionalParams
         } = meteoraParams;
@@ -189,6 +190,7 @@ export default function StepReview({
                         <Typography><b>Jito Tip Amount:</b> {jitoTipAmount} lamports</Typography>
                     </>
                 )}
+                <Typography><b>use strategy:</b> {strategy}</Typography>
 
                 <Typography variant="subtitle1" sx={{ mt: 1 }}>Advanced Parameters:</Typography>
                 <Typography><b>Confirmation Timeout:</b> {additionalParams.CONFIRMATION_TIMEOUT}ms</Typography>

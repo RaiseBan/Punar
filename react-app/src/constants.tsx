@@ -77,3 +77,7 @@ export const JITO_REGIONS = [
     { value: "https://slc.mainnet.block-engine.jito.wtf", label: "Salt Lake City" },
 ];
 
+export const STRATEGY = [
+    { value: "PROPORTION", label: "PROPORTION (target balance / your balance)" },
+]
+
