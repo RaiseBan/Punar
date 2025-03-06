@@ -4,11 +4,25 @@ const path = require("path");
 const { ensureConfigDirectory, getGlobalConfigDirectory} = require("../utils/wallet");
 const {getSettings} = require("../utils/fsHelper");
 
+async function directoryExists(path) {
+    try {
+        await fs.access(path);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 function initializeConfigHandlers(ipcMain) {
     ipcMain.handle("save-config", async (_, configType, fileName, content) => {
         try {
             const baseDir = await ensureConfigDirectory();
-            const filePath = path.join(baseDir, configType, `${fileName}.json`);
+            const configDir = path.join(baseDir, configType);
+
+            // Создаем директорию конфига, если не существует
+            await fs.mkdir(configDir, { recursive: true });
+
+            const filePath = path.join(configDir, `${fileName}.json`);
             await fs.writeFile(filePath, JSON.stringify(content, null, 2));
             return true;
         } catch (error) {
@@ -22,34 +36,53 @@ function initializeConfigHandlers(ipcMain) {
             const baseDir = await ensureConfigDirectory();
             const configDir = path.join(baseDir, configType);
 
+            // Возвращаем пустой массив если директория не существует
+            if (!(await directoryExists(configDir))) {
+                return [];
+            }
+
             const files = await fs.readdir(configDir);
-            return files.filter((file) => file.endsWith(".json")).map((file) => file.replace(/\.json$/, ""));
+            return files
+                .filter(file => file.endsWith(".json"))
+                .map(file => file.replace(/\.json$/, ""));
         } catch (error) {
             console.error("Error reading configs:", error);
             return [];
         }
     });
+
     ipcMain.handle('get-config', async (_, configType, fileName) => {
         try {
             const baseDir = await ensureConfigDirectory();
             const filePath = path.join(baseDir, configType, `${fileName}.json`);
 
+            // Подавляем ошибку если файл не существует
+            if (!(await directoryExists(path.dirname(filePath)))) return null;
+
             const data = await fs.readFile(filePath, 'utf-8');
             return JSON.parse(data);
         } catch (error) {
-            console.error('Error reading config:', error);
+            if (error.code !== 'ENOENT') {
+                console.error('Error reading config:', error);
+            }
             return null;
         }
     });
+
     ipcMain.handle('delete-config', async (_, configType, fileName) => {
         try {
             const baseDir = await ensureConfigDirectory();
             const filePath = path.join(baseDir, configType, `${fileName}.json`);
 
+            // Не пытаемся удалять несуществующие файлы
+            if (!(await directoryExists(filePath))) return true;
+
             await fs.unlink(filePath);
             return true;
         } catch (error) {
-            console.error('Error deleting config:', error);
+            if (error.code !== 'ENOENT') {
+                console.error('Error deleting config:', error);
+            }
             return false;
         }
     });
@@ -59,7 +92,8 @@ function initializeConfigHandlers(ipcMain) {
             const baseDir = await ensureConfigDirectory();
             const configDir = path.join(baseDir, configType);
 
-            if (!base_fs.existsSync(configDir)) {
+            // Возвращаем пустой массив если директория не существует
+            if (!(await directoryExists(configDir))) {
                 return [];
             }
 
@@ -67,8 +101,8 @@ function initializeConfigHandlers(ipcMain) {
             return files
                 .filter(file => file.endsWith('.json'))
                 .map(file => ({
-                    name: file.replace(/\.json$/, ''), // Оставляем только имя без `.json`
-                    path: path.join(configDir, file),  // Абсолютный путь к файлу
+                    name: file.replace(/\.json$/, ''),
+                    path: path.join(configDir, file),
                 }));
         } catch (error) {
             console.error('Error getting config paths:', error);
