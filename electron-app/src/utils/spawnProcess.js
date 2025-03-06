@@ -72,7 +72,7 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
         console.log(`bullshit`)
         return;
     }
-    return;
+
     const child = spawn("npx", ["tsx", path.join(scriptsDirectoryPath, moduleDir, "src", fileToExecute)], {
         stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
         shell: true, // Используем shell для корректного выполнения

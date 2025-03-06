@@ -34,8 +34,8 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
         event.reply("process-started", { taskId, config });
         const scriptPath = getSettings();
-        // const child = spawnProcess(config, scriptPath.scriptDirectory);
-        const child = spawn("node", ["your_script.js"]);
+        const child = spawnProcess(config, scriptPath.scriptDirectory);
+        // const child = spawn("node", ["your_script.js"]);
         processes[taskId] = child;
 
         child.stdout.on("data", (data) => {
