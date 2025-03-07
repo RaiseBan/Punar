@@ -41,6 +41,7 @@ async function spawnProcess(taskConfig, scriptsDirectoryPath) {
     const taskName = sanitizeFileName(taskConfig.task_name);
     const configFileName = `${moduleName}_${taskName}.json`;
     const configPath = path.join(configDir, configFileName);
+    console.log(JSON.stringify(taskConfig, null, 2));
     let updatedTaskConfig;
     if (taskConfig.module_name === "Tensor sniper (SDK)" || taskConfig.module_name === "Tensor reprice") {
         updatedTaskConfig = await updateConfigCollectionId(taskConfig);

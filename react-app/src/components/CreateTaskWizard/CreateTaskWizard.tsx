@@ -230,6 +230,8 @@ export default function CreateTaskWizard({
                 privateKey: p.privateKey,
                 main_rpc: settings?.mainRpc || "",
                 helius_rpcs: settings?.heliusRpcs || [],
+                thor_streamer_address: settings?.thor_streamer_address,
+                thor_streamer_token: settings?.thor_streamer_token,
             };
             onCreateTask(cfg);
         }
