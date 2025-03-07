@@ -21,7 +21,7 @@ function sanitizeFileName(name) {
 }
 
 // Функция запуска дочернего процесса с конфигом
-function spawnProcess(taskConfig, scriptsDirectoryPath) {
+async function spawnProcess(taskConfig, scriptsDirectoryPath) {
 
     if (!taskConfig.module_name || !taskConfig.task_name) {
         console.error("Ошибка: taskConfig должен содержать module_name и task_name");
@@ -43,7 +43,7 @@ function spawnProcess(taskConfig, scriptsDirectoryPath) {
     const configPath = path.join(configDir, configFileName);
     let updatedTaskConfig;
     if (taskConfig.module_name === "Tensor sniper (SDK)" || taskConfig.module_name === "Tensor reprice") {
-        updatedTaskConfig = updateConfigCollectionId(taskConfig);
+        updatedTaskConfig = await updateConfigCollectionId(taskConfig);
     }else{
         updatedTaskConfig = taskConfig;
     }

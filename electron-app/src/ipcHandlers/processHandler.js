@@ -6,17 +6,17 @@ const {spawnProcess} = require("../utils/spawnProcess");
 const processes = {};
 
 function initializeProcessHandlers(ipcMain, mainWindow) {
-    ipcMain.on("start-process", (event, { taskId, config }) => {
+    ipcMain.on("start-process", async (event, {taskId, config}) => {
         console.log(`Создан taskId: ${taskId}, запускаем процесс...`);
         const scriptPath = getSettings();
-        event.reply("process-started", { taskId, config });
-        const child = spawnProcess(config, scriptPath.scriptDirectory);
+        event.reply("process-started", {taskId, config});
+        const child = await spawnProcess(config, scriptPath.scriptDirectory);
         // const child = spawn("node", ["your_script.js"]);
         processes[taskId] = child;
 
         child.stdout.on("data", (data) => {
             console.log(`STDOUT [Task ${taskId}]:`, data.toString());
-            mainWindow?.webContents.send("process-output", { taskId, log: data.toString() });
+            mainWindow?.webContents.send("process-output", {taskId, log: data.toString()});
         });
 
         child.stderr.on("data", (data) => {
@@ -25,22 +25,22 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
         child.on("exit", (code) => {
             console.log(`Процесс Task ${taskId} завершился с кодом ${code}`);
-            mainWindow?.webContents.send("process-exit", { taskId, code });
+            mainWindow?.webContents.send("process-exit", {taskId, code});
         });
     });
     // Возобновление процесса
-    ipcMain.on("resume-process", (event, { taskId, config }) => {
+    ipcMain.on("resume-process", async (event, {taskId, config}) => {
         console.log(`Resume-process: Task ${taskId}, config:`, config);
 
-        event.reply("process-started", { taskId, config });
+        event.reply("process-started", {taskId, config});
         const scriptPath = getSettings();
-        const child = spawnProcess(config, scriptPath.scriptDirectory);
+        const child = await spawnProcess(config, scriptPath.scriptDirectory);
         // const child = spawn("node", ["your_script.js"]);
         processes[taskId] = child;
 
         child.stdout.on("data", (data) => {
             console.log(`STDOUT [Task ${taskId}]:`, data.toString());
-            mainWindow?.webContents.send("process-output", { taskId, log: data.toString() });
+            mainWindow?.webContents.send("process-output", {taskId, log: data.toString()});
         });
 
         child.stderr.on("data", (data) => {
@@ -49,7 +49,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
         child.on("exit", (code) => {
             console.log(`Процесс Task ${taskId} (resume) завершился с кодом ${code}`);
-            mainWindow?.webContents.send("process-exit", { taskId, code });
+            mainWindow?.webContents.send("process-exit", {taskId, code});
         });
     });
 
