@@ -14,6 +14,7 @@ async function updateConfigCollectionId(config) {
 
 
     const collId = await getCollIdBySlug(slug);
+    console.log(`collId: ${ collId }`);
 
     if (!collId) {
         console.error("Collection ID not found!");
@@ -21,15 +22,16 @@ async function updateConfigCollectionId(config) {
     }
 
     const nftData = await tensorApi.fetchCollectionNfts(collId).send();
+    console.log(`nftData: ${nftData}`);
     if (!nftData) {
         console.error("Error fetching NFT data.");
         return config;
     }
 
     const mint = nftData.mints[0].mint;
-    const collectionAddress = getCollectionAddress(mint);
+    const collectionAddress = await getCollectionAddress(mint);
 
-    console.log(collectionAddress);
+    console.log(`collectionAddress: ${collectionAddress}`);
 
     // Обновляем collection_id в конфиге
     return { ...config, collection_id: collectionAddress };
