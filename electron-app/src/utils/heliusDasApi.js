@@ -3,7 +3,7 @@ const {getSettings} = require("./fsHelper");
 
 async function retrieveDASAssetFields(mint) {
     let attempts = 0;
-    const helius_url = "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f"
+    const helius_url = "https://mainnet.helius-rpc.com/?api-key=6809eb27-d499-4284-9d03-775699a69949"
     // const helius_url = getSettings().heliusRpcs[0];
     while (attempts < 5) {
 
