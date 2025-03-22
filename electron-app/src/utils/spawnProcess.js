@@ -129,7 +129,7 @@ async function spawnProcess(taskConfig, userSettings) {
         console.log(`toml file path: ${configFilePath}`);
         const wslPath = convertWindowsPathToWSL(configFilePath);
         console.log(`wslPath: ${wslPath}`);
-        const program = `.${convertWindowsPathToWSL(userSettings.mevBotDirectory)}/${fileToExecute}`
+        const program = `${convertWindowsPathToWSL(userSettings.mevBotDirectory)}/${fileToExecute}`
         const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
         // const wslCommand = `${fileToExecute} ${configFilePath}`;
 
