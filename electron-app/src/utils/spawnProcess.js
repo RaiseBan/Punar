@@ -76,7 +76,7 @@ async function spawnProcess(taskConfig, userSettings) {
         moduleDir = "mev";
     }else if (updatedTaskConfig.module_name === "mev_subtask"){
         moduleDir = "mev_subtask";
-        fileToExecute = "sbm-onchain"
+        fileToExecute = "smb-onchain"
     } else {
         console.log(`bullshit`)
         return;
