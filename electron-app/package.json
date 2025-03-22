@@ -43,7 +43,10 @@
     "wait-on": "^8.0.2"
   },
   "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "@solana/web3.js": "^1.98.0",
     "axios": "^1.8.1",
+    "bs58": "^6.0.0",
     "buffer": "^6.0.3",
     "electron-squirrel-startup": "^1.0.1",
     "tree-kill": "^1.2.2"

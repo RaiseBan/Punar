@@ -60,7 +60,14 @@ export interface LaunchMyNftParams {
     // Если set → пользователь выбирает имя сета
     chosenSetName: string;
 }
-
+export interface MevParams {
+    volumeThreshold: number;
+    checkInterval: number;
+    maxAttempts: number;
+    threadWorkers: number;
+    walletSource: "existing" | "manual";
+    privateKey: string;
+}
 export interface MeteoraParams {
     accounts: string[];
     useJito: boolean;

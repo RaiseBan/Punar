@@ -33,7 +33,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 
 import {useDispatch, useSelector} from "react-redux";
-import {removeTask, updateTask} from "../store/tasksSlice";
+import {removeTask, updateTask, addOrUpdateTask} from "../store/tasksSlice";
 import {RootState} from "../store/store";
 import {COLS_NAMES} from "../constants";
 import {fetchImageUrl} from "../utils/tensorFunctions";
@@ -49,17 +49,13 @@ export interface TaskProps {
     status: string;
     columns: string[];
     data: TaskDataRow[];
-    config?: any; // <-- теперь храним конфиг (например, { collectionId: "...", module_name: "Tensor sniper (SDK)", ... })
+    config?: any;
 }
 
 const statusColorMap: Record<string, string> = {
     Running: "#00c853",
     Stopped: "#f44336",
 };
-
-/** Пример фейковой функции, возвращающей ссылку на картинку.
- *  Замените на реальный вызов своего API или electronAPI.
- */
 
 export default function Task({
                                  id,
@@ -181,11 +177,70 @@ export default function Task({
         dispatch(removeTask(id));
     };
 
+    // Функция для создания новой задачи с тем же конфигом
+    const handleRunMEVTask = async (rowIndex: number) => {
+        const taskId = Date.now();
+
+        // Get the token (first cell) and volume_change (second cell) from the selected row
+        const token = data[rowIndex]?.cells[0] || "";
+        const volume_change = data[rowIndex]?.cells[1] || "";
+
+        // Create the new task name format: ${token}_${volume_change}_subTask_${task_name}
+        const newTaskName = `${token}_${volume_change}_subTask_${name}`;
+
+        // Create the modified config for the new task
+        const settings = await window.electronAPI?.getSettings();
+        const newConfig = {
+            ...config,
+            module_name: "mev_subtask", // Change module_name to mev_subtask
+            task_name: newTaskName, // Set the new task name
+            // Keep all other config parameters the same
+            rowData: data[rowIndex]?.cells,
+            sourceTaskId: id,
+            additionalRpc: settings?.additionalRpc,
+        };
+
+        // Add the new task to the store - using the correct parameter format
+        dispatch(addOrUpdateTask({
+            taskId,
+            config: newConfig
+        }));
+
+        // Start the process
+        window.electronAPI?.startProcess(taskId, newConfig);
+
+        console.log(`Created new MEV subtask from row ${rowIndex} of task ${id}`);
+        console.log(`New task name: ${newTaskName}`);
+    };
+
+    // Функция для удаления строки из данных задачи
+    const handleDeleteMEVRow = (rowIndex: number) => {
+        console.log(`Attempting to delete row ${rowIndex} from task ${id}`);
+
+        // Create a copy of the data without the row to be deleted
+        const newData = data.filter((_, idx) => idx !== rowIndex);
+
+        console.log(`Original data length: ${data.length}, New data length: ${newData.length}`);
+
+        // Dispatch the updateTask action with the data property
+        dispatch(
+            updateTask({
+                id: id,
+                data: newData
+            })
+        );
+
+        console.log(`Deleted row ${rowIndex} from task ${id}`);
+    };
+
     const toggleTable = () => setTableCollapsed(!tableCollapsed);
     const displayedData = tableCollapsed ? data.slice(0, 2) : data;
 
     const finalColumns = columns && columns.length > 0 ? columns : COLS_NAMES.get(moduleName) || [];
     const canEditConfig = status === "Stopped";
+
+    // Проверяем, является ли модуль "MEV Module"
+    const isMEVModule = moduleName === "MEV Module";
 
     return (
         <>
@@ -304,6 +359,14 @@ export default function Task({
                                             {col}
                                         </TableCell>
                                     ))}
+                                    {/* Добавляем столбец с кнопками только для MEV Module */}
+                                    {isMEVModule && (
+                                        <TableCell
+                                            sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
+                                        >
+                                            Actions
+                                        </TableCell>
+                                    )}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -312,11 +375,46 @@ export default function Task({
                                         {row.cells.map((cell, cellIndex) => (
                                             <TableCell
                                                 key={cellIndex}
-                                                sx={{color: "#fff", borderBottom: "1px solid #2A2A2A"}}
+                                                sx={{ color: "#fff", borderBottom: "1px solid #2A2A2A" }}
                                             >
                                                 {cell}
                                             </TableCell>
                                         ))}
+                                        {/* Добавляем кнопки Run и Delete только для MEV Module */}
+                                        {isMEVModule && (
+                                            <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
+                                                <Box sx={{ display: "flex", gap: 1 }}>
+                                                    <Button
+                                                        variant="contained"
+                                                        size="small"
+                                                        onClick={() => handleRunMEVTask(rowIndex)}
+                                                        sx={{
+                                                            bgcolor: "#00c853",
+                                                            "&:hover": { bgcolor: "#00e676" },
+                                                            color: "white",
+                                                            px: 1.5,
+                                                            py: 0.5
+                                                        }}
+                                                    >
+                                                        Run
+                                                    </Button>
+                                                    <Button
+                                                        variant="contained"
+                                                        size="small"
+                                                        onClick={() => handleDeleteMEVRow(rowIndex)}
+                                                        sx={{
+                                                            bgcolor: "#f44336",
+                                                            "&:hover": { bgcolor: "#ff5252" },
+                                                            color: "white",
+                                                            px: 1.5,
+                                                            py: 0.5
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </Button>
+                                                </Box>
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -394,6 +492,14 @@ export default function Task({
                                             {col}
                                         </TableCell>
                                     ))}
+                                    {/* Добавляем столбец с кнопками только для MEV Module */}
+                                    {isMEVModule && (
+                                        <TableCell
+                                            sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
+                                        >
+                                            Actions
+                                        </TableCell>
+                                    )}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -402,11 +508,46 @@ export default function Task({
                                         {row.cells.map((cell, cellIndex) => (
                                             <TableCell
                                                 key={cellIndex}
-                                                sx={{color: "#fff", borderBottom: "1px solid #2A2A2A"}}
+                                                sx={{ color: "#fff", borderBottom: "1px solid #2A2A2A" }}
                                             >
                                                 {cell}
                                             </TableCell>
                                         ))}
+                                        {/* Добавляем кнопки Run и Delete только для MEV Module */}
+                                        {isMEVModule && (
+                                            <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
+                                                <Box sx={{ display: "flex", gap: 1 }}>
+                                                    <Button
+                                                        variant="contained"
+                                                        size="small"
+                                                        onClick={() => handleRunMEVTask(rowIndex)}
+                                                        sx={{
+                                                            bgcolor: "#00c853",
+                                                            "&:hover": { bgcolor: "#00e676" },
+                                                            color: "white",
+                                                            px: 1.5,
+                                                            py: 0.5
+                                                        }}
+                                                    >
+                                                        Run
+                                                    </Button>
+                                                    <Button
+                                                        variant="contained"
+                                                        size="small"
+                                                        onClick={() => handleDeleteMEVRow(rowIndex)}
+                                                        sx={{
+                                                            bgcolor: "#f44336",
+                                                            "&:hover": { bgcolor: "#ff5252" },
+                                                            color: "white",
+                                                            px: 1.5,
+                                                            py: 0.5
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </Button>
+                                                </Box>
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableBody>

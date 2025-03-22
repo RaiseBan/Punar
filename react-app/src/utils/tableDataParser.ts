@@ -3,6 +3,7 @@
 export function parseTableRowFromLog(log: string): string[] | null {
     const startMarker = "[TABLE_DATA]";
     const endMarker = "[END]";
+    console.log(`log: ${log}`);
 
     // Ищем начало и конец
     const startIdx = log.indexOf(startMarker);
@@ -22,7 +23,7 @@ export function parseTableRowFromLog(log: string): string[] | null {
     if (!tableData) {
         return null;
     }
-
+    console.log(tableData.split("|").map(cell => cell.trim()));
     // Делим по "|" и чистим пробелы
     return tableData.split("|").map(cell => cell.trim());
 }

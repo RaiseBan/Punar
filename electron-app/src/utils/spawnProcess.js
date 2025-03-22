@@ -2,7 +2,8 @@ const {spawn} = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const {app} = require("electron");
-const {updateConfigCollectionId} = require("./updateService");  // Получаем доступ к Electron API
+const {updateConfigCollectionId} = require("./updateService");
+const {generateMevConfig} = require("./generateService");  // Получаем доступ к Electron API
 
 // Функция для получения директории конфигов, с учетом работы в dev и prod
 function getConfigDirectory() {
@@ -21,7 +22,7 @@ function sanitizeFileName(name) {
 }
 
 // Функция запуска дочернего процесса с конфигом
-async function spawnProcess(taskConfig, scriptsDirectoryPath) {
+async function spawnProcess(taskConfig, userSettings) {
 
     if (!taskConfig.module_name || !taskConfig.task_name) {
         console.error("Ошибка: taskConfig должен содержать module_name и task_name");
@@ -56,8 +57,9 @@ async function spawnProcess(taskConfig, scriptsDirectoryPath) {
     fs.writeFileSync(configPath, JSON.stringify(updatedTaskConfig, null, 2), "utf-8");
     console.log(`Конфигурация сохранена: ${configPath}`);
     // Запускаем дочерний процесс с заданным рабочим каталогом (cwd) и переменными окружения
-    console.log(`scriptsDirectoryPath: ${scriptsDirectoryPath}`)
-    console.log(`start process: \nPath: ${path.join(scriptsDirectoryPath, "src", "index.ts")} \nConfigPath: ${configPath}`);
+    console.log(JSON.stringify(userSettings, null, 2));
+    console.log(`scriptsDirectoryPath: ${userSettings.scriptDirectory}`)
+    console.log(`start process: \nPath: ${path.join(userSettings.scriptDirectory, "src", "index.ts")} \nConfigPath: ${configPath}`);
     let moduleDir = ""
     let fileToExecute = "index.ts";
     if (updatedTaskConfig.module_name === "Tensor sniper (SDK)") {
@@ -71,6 +73,9 @@ async function spawnProcess(taskConfig, scriptsDirectoryPath) {
         moduleDir = "meteora";
     } else if (updatedTaskConfig.module_name === "MEV Module") {
         moduleDir = "mev";
+    }else if (updatedTaskConfig.module_name === "mev_subtask"){
+        moduleDir = "mev_subtask";
+        fileToExecute = "./sbm-onchain"
     } else {
         console.log(`bullshit`)
         return;
@@ -110,12 +115,33 @@ async function spawnProcess(taskConfig, scriptsDirectoryPath) {
             env: env
         });
 
+    }else if (moduleDir === "mev_subtask") {
+        console.log(`start mev_subtask processing`)
+        const pythonScriptPath = "C:\\Users\\user\\PycharmProjects\\fuckCloudFlare" // test
+        let configFilePath = await generateMevConfig(
+            userSettings.mevBotDirectory,
+            // path.join(userSettings.scriptDirectory, "mev", "tokens"),
+            path.join(pythonScriptPath, "tokens"),
+            updatedTaskConfig
+        );
+        console.log(`toml file path: ${configFilePath}`);
+        configFilePath = configFilePath.replace(/\\/g, '/');
+        const wslCommand = `${fileToExecute} ${configFilePath}`;
+
+        child = spawn('wsl', [wslCommand], {
+            stdio: 'pipe', // или 'inherit', если нужно выводить логи в терминал
+            shell: true, // Используем shell для корректного выполнения
+            detached: false,
+            cwd: userSettings.mevBotDirectory, // Устанавливаем рабочую директорию для процесса
+        });
+
+
     } else {
-        child = spawn("npx", ["tsx", path.join(scriptsDirectoryPath, moduleDir, "src", fileToExecute)], {
+        child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
             stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
             shell: true, // Используем shell для корректного выполнения
             detached: false,
-            cwd: scriptsDirectoryPath, // Устанавливаем рабочую директорию для процесса
+            cwd: userSettings.scriptDirectory, // Устанавливаем рабочую директорию для процесса
             env: {...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath} // Передаем CONFIG_PATH в переменные окружения
         });
     }

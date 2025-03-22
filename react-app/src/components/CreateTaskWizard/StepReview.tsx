@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Typography } from "@mui/material";
 
 // Импорты типов (скорректируйте под себя)
-import {Wallet, TensorSdkParams, LaunchMyNftParams, MeteoraParams} from "../../types";
+import {Wallet, TensorSdkParams, LaunchMyNftParams, MeteoraParams, MevParams} from "../../types";
 
 interface StepReviewProps {
     selectedModule: string | null;
@@ -11,6 +11,7 @@ interface StepReviewProps {
     launchMyNftParams: LaunchMyNftParams;
     meteoraParams: MeteoraParams; // Добавлен новый параметр
     wallets: Wallet[];
+    mevParams: MevParams;
 }
 
 export default function StepReview({
@@ -20,6 +21,7 @@ export default function StepReview({
                                        launchMyNftParams,
                                        meteoraParams,
                                        wallets,
+                                       mevParams
                                    }: StepReviewProps) {
     // Можем отрендерить разные данные в зависимости от модуля:
     if (selectedModule === "tensor_sdk") {
@@ -201,6 +203,20 @@ export default function StepReview({
                 <Typography><b>Fee Claim Fee:</b> {additionalParams.FEE_CLAIM_FEE}</Typography>
                 <Typography><b>Fee Remove Liquidity:</b> {additionalParams.FEE_REMOVE_LIQUIDITY}</Typography>
                 <Typography><b>Fee Create Position:</b> {additionalParams.FEE_CREATE_POSITION}</Typography>
+            </Box>
+        );
+    }else if (selectedModule === "mev_module") {
+        return (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <Typography variant="h6">Review your parameters (MEV Module)</Typography>
+                <Typography><b>Task Name:</b> {taskName}</Typography>
+                <Typography><b>Volume Threshold:</b> {mevParams.volumeThreshold} USD</Typography>
+                <Typography><b>Check Interval:</b> {mevParams.checkInterval} sec</Typography>
+                <Typography><b>Max Attempts:</b> {mevParams.maxAttempts}</Typography>
+                <Typography><b>Thread Workers:</b> {mevParams.threadWorkers}</Typography>
+                <Typography><b>Wallet:</b> {mevParams.walletSource === "existing"
+                    ? wallets.find(w => w.privateKey === mevParams.privateKey)?.publicKey
+                    : "Manual Input"}</Typography>
             </Box>
         );
     }

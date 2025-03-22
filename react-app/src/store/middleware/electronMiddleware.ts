@@ -16,7 +16,7 @@ export const electronMiddleware: Middleware = (store) => {
             });
 
             window.electronAPI.onProcessOutput((event, data) => {
-                console.log("Middleware: process output", data);
+                // console.log("Middleware: process output", data);
                 // store.dispatch(addTaskLog({ taskId: data.taskId, log: data.log }));
 
                 const rowCells = parseTableRowFromLog(data.log);

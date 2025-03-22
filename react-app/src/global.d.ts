@@ -12,6 +12,7 @@ export interface AppSettings {
     // ... остальные поля, которые могут быть в общих настройках
     scriptDirectory?: string;
     mainRpc?: string;
+    additionalRpc?: string;
     heliusRpcs?: string[];
     tensor_api_token?: string;
     bloxroute_api_token?: string;

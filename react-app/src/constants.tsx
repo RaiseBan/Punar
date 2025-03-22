@@ -6,6 +6,7 @@ import DeviceHubIcon from "@mui/icons-material/DeviceHub";
 import SettingsEthernetIcon from "@mui/icons-material/SettingsEthernet";
 import AutoGraphIcon from "@mui/icons-material/AutoGraph";
 import CloudIcon from "@mui/icons-material/Cloud";
+import {OfflineBolt} from "@mui/icons-material";
 
 /** Наш интерфейс: иконка может быть JSX.Element */
 export interface ModuleItem {
@@ -58,6 +59,12 @@ export const MODULES: ModuleItem[] = [
         icon: <CloudIcon />,
         isDisabled: false,
     },
+    {
+        id: "mev_module",
+        label: "MEV Module",
+        icon: <OfflineBolt />,
+        isDisabled: false
+    }
 ];
 
 // export const COLS_NAMES: Map<string, string[]> = new Map([
@@ -67,7 +74,8 @@ export const MODULES: ModuleItem[] = [
 
 export const COLS_NAMES: Map<string, string[]> = new Map([
     ["Tensor sniper (SDK)", ["NFT name", "price", "seller", "buyer"]],
-    ["Tensor reprice", ["NFT name", "price", "seller", "buyer"]]
+    ["Tensor reprice", ["NFT name", "price", "seller", "buyer"]],
+    ["MEV Module", ["TOKEN", "CHANGES", "ACTION", " "]],
 ]);
 
 export const JITO_REGIONS = [

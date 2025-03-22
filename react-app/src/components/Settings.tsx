@@ -6,7 +6,9 @@ import DeleteIcon from "@mui/icons-material/Delete";
 
 interface AppSettings {
     scriptDirectory?: string;
+    mevBotDirectory?: string;
     mainRpc?: string;
+    additionalRpc?: string;
     heliusRpcs?: string[];
     tensor_api_token?: string;
     bloxroute_api_token?: string;
@@ -79,16 +81,48 @@ export default function Settings() {
                 />
             </Box>
 
-            {/* Main RPC */}
+
             <Box sx={{ mb: 4 }}>
                 <TextField
-                    label="Main RPC"
+                    label="mev directory"
                     fullWidth
-                    value={settings.mainRpc || ""}
-                    onChange={handleChange('mainRpc')}
+                    value={settings.mevBotDirectory || ""}
+                    onChange={handleChange('mevBotDirectory')}
                     margin="normal"
                 />
             </Box>
+
+
+
+            {/* RPCs */}
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                    RPCs
+                    <TextField
+                        label="Main RPC"
+                        fullWidth
+                        value={settings.mainRpc || ""}
+                        onChange={handleChange('mainRpc')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="additional rpc"
+                        fullWidth
+                        value={settings.additionalRpc || ""}
+                        onChange={handleChange('additionalRpc')}
+                        margin="normal"
+                    />
+
+                </Typography>
+
+
+            </Box>
+
+
+
+
+
             {/* API keys */}
             <Box sx={{ mb: 4 }}>
                 <Typography variant="h6" gutterBottom>

@@ -10,7 +10,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         console.log(`Создан taskId: ${taskId}, запускаем процесс...`);
         const scriptPath = getSettings();
         event.reply("process-started", {taskId, config});
-        const child = await spawnProcess(config, scriptPath.scriptDirectory);
+        const child = await spawnProcess(config, scriptPath);
         // const child = spawn("node", ["your_script.js"]);
         processes[taskId] = child;
 
@@ -34,7 +34,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
         event.reply("process-started", {taskId, config});
         const scriptPath = getSettings();
-        const child = await spawnProcess(config, scriptPath.scriptDirectory);
+        const child = await spawnProcess(config, scriptPath);
         // const child = spawn("node", ["your_script.js"]);
         processes[taskId] = child;
 

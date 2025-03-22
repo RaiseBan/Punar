@@ -44,15 +44,16 @@ export const tasksSlice = createSlice({
             state.tasks = state.tasks.filter((task) => task.id !== action.payload);
         },
         updateTask: (state, action) => {
-            console.log(`UPDATE TASK CALLED`);
-            const { id, name, moduleName, status, columns, config } = action.payload;
+            console.log(`UPDATE TASK CALLED`, action.payload);
+            const { id, name, moduleName, status, columns, config, data } = action.payload;
             const task = state.tasks.find((t) => t.id === id);
             if (task) {
                 if (name !== undefined) task.name = name;
                 if (moduleName !== undefined) task.moduleName = moduleName;
                 if (status !== undefined) task.status = status;
                 if (columns !== undefined) task.columns = columns;
-                if (config !== undefined) task.config = config; // ← теперь можно обновлять config
+                if (config !== undefined) task.config = config;
+                if (data !== undefined) task.data = data; // Add support for updating data
             }
         },
         addTaskLog: (state, action: PayloadAction<{ taskId: number; log: string }>) => {
