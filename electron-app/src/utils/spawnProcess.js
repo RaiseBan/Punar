@@ -3,7 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const {app} = require("electron");
 const {updateConfigCollectionId} = require("./updateService");
-const {generateMevConfig} = require("./generateService");  // Получаем доступ к Electron API
+const {generateMevConfig} = require("./generateService");
+const {convertWindowsPathToWSL} = require("./fsHelper");  // Получаем доступ к Electron API
 
 // Функция для получения директории конфигов, с учетом работы в dev и prod
 function getConfigDirectory() {
@@ -75,7 +76,7 @@ async function spawnProcess(taskConfig, userSettings) {
         moduleDir = "mev";
     }else if (updatedTaskConfig.module_name === "mev_subtask"){
         moduleDir = "mev_subtask";
-        fileToExecute = "./sbm-onchain"
+        fileToExecute = "sbm-onchain"
     } else {
         console.log(`bullshit`)
         return;
@@ -117,7 +118,8 @@ async function spawnProcess(taskConfig, userSettings) {
 
     }else if (moduleDir === "mev_subtask") {
         console.log(`start mev_subtask processing`)
-        const pythonScriptPath = "C:\\Users\\user\\PycharmProjects\\fuckCloudFlare" // test
+        // const pythonScriptPath = "C:\\Users\\user\\PycharmProjects\\fuckCloudFlare" // test
+        const pythonScriptPath = path.join(userSettings.scriptDirectory, "mev") // test
         let configFilePath = await generateMevConfig(
             userSettings.mevBotDirectory,
             // path.join(userSettings.scriptDirectory, "mev", "tokens"),
@@ -125,14 +127,17 @@ async function spawnProcess(taskConfig, userSettings) {
             updatedTaskConfig
         );
         console.log(`toml file path: ${configFilePath}`);
-        configFilePath = configFilePath.replace(/\\/g, '/');
-        const wslCommand = `${fileToExecute} ${configFilePath}`;
+        const wslPath = convertWindowsPathToWSL(configFilePath);
+        console.log(`wslPath: ${wslPath}`);
+        const program = `.${convertWindowsPathToWSL(userSettings.mevBotDirectory)}/${fileToExecute}`
+        const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
+        // const wslCommand = `${fileToExecute} ${configFilePath}`;
 
-        child = spawn('wsl', [wslCommand], {
+        child = spawn('wsl', [program, configFilePathWSL], {
             stdio: 'pipe', // или 'inherit', если нужно выводить логи в терминал
             shell: true, // Используем shell для корректного выполнения
             detached: false,
-            cwd: userSettings.mevBotDirectory, // Устанавливаем рабочую директорию для процесса
+            cwd: convertWindowsPathToWSL(userSettings.mevBotDirectory), // Устанавливаем рабочую директорию для процесса
         });
 
 

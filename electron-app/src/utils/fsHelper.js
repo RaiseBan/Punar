@@ -49,4 +49,20 @@ async function getLookupTables() {
     }
 }
 
-module.exports = {getSettings, getLookupTablesFilePath, saveLookupTables, getLookupTables}
+function convertWindowsPathToWSL(windowsPath) {
+    // Заменяем обратные слэши на прямые
+    let unixPath = windowsPath.replace(/\\/g, '/');
+
+    // Преобразуем букву диска (например, C:) в /mnt/c
+    if (unixPath.startsWith('C:')) {
+        unixPath = unixPath.replace(/^C:/, '/mnt/c');
+    } else if (unixPath.startsWith('D:')) {
+        unixPath = unixPath.replace(/^D:/, '/mnt/d');
+    }
+    // Добавьте другие диски по аналогии, если нужно
+
+    return unixPath;
+}
+
+
+module.exports = {getSettings, getLookupTablesFilePath, saveLookupTables, getLookupTables, convertWindowsPathToWSL}
