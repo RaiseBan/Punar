@@ -132,7 +132,7 @@ async function spawnProcess(taskConfig, userSettings) {
         const program = `${convertWindowsPathToWSL(userSettings.mevBotDirectory)}/${fileToExecute}`
         const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
         // const wslCommand = `${fileToExecute} ${configFilePath}`;
-
+        console.log(`full command: wsl ${program} ${configFilePathWSL}`);
         child = spawn('wsl', [program, configFilePathWSL], {
             stdio: 'pipe', // или 'inherit', если нужно выводить логи в терминал
             shell: true, // Используем shell для корректного выполнения
