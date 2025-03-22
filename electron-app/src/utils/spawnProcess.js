@@ -84,7 +84,7 @@ async function spawnProcess(taskConfig, userSettings) {
 
     let child;
     if (moduleDir === "mev") {
-        const pythonScriptPath = "C:\\Users\\user\\PycharmProjects\\fuckCloudFlare";
+        const pythonScriptPath = path.join(userSettings.scriptDirectory, moduleDir);
         const venvPath = path.join(pythonScriptPath, '.venv');
 
         // 1. Активируем переменные окружения вручную
