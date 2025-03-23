@@ -18,4 +18,6 @@ const TX_TYPES = Object.freeze({
 
 })
 
-module.exports = { TENSOR_ENDPOINTS };
+const RAYDIUM_OWNER = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+
+module.exports = { TENSOR_ENDPOINTS, RAYDIUM_OWNER };

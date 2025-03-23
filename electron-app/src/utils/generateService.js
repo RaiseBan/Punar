@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { updateIfNotExistsAndGet } = require("./solanaUtils");
+const { updateIfNotExistsAndGet, getRaydiumPair} = require("./solanaUtils");
 const TOML = require('@iarna/toml');
 
 async function generateMevConfig(targetDir, tokensDirPath, config) {
@@ -21,7 +21,13 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     console.log(2);
     const meteoraPairs = tokenConfig.meteora_pairs;
     console.log(3);
-    const raydiumPair = tokenConfig.raydium_pairs[0];
+    // const raydiumPair = tokenConfig.raydium_pairs[0];
+    const raydiumPair = await getRaydiumPair(config.main_rpc, tokenConfig.raydium_pairs)
+
+    if (!raydiumPair){
+        console.log(`correct raydium pair not found`);
+        return;
+    }
     console.log(4);
 
     console.log(JSON.stringify(tokenConfig, null, 2));

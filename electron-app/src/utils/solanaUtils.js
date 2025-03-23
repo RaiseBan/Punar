@@ -4,6 +4,7 @@ const {Connection, clusterApiUrl, AddressLookupTableProgram, Keypair, PublicKey,
 } = require("@solana/web3.js");
 const bs58 = require("bs58");
 const {saveLookupTables, getLookupTables} = require("./fsHelper");
+const {RAYDIUM_OWNER} = require("./constants");
 
 
 async function getCollectionAddress(mint){
@@ -267,8 +268,19 @@ async function sendTx(connection, ixs, signer){
     }
 }
 
+async function getRaydiumPair(rpcUrl, pairs){
+    const connection = new Connection(rpcUrl);
+    for (const pair of pairs){
+        const owner = (await connection.getAccountInfo(pair)).owner.toBase58();
+        if (owner === RAYDIUM_OWNER){
+            return owner;
+        }
+    }
+}
+
+
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet}
+module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getRaydiumPair}
