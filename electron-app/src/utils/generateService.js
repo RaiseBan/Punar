@@ -5,9 +5,10 @@ const TOML = require('@iarna/toml');
 
 async function generateMevConfig(targetDir, tokensDirPath, config) {
     console.log(`generateMevParams: ${targetDir} | ${tokensDirPath} | ${JSON.stringify(config, null, 2)}`);
-    const value = config.rowData[1].split("->")[1].substring(1).trim();
+    const value = config.rowData[1].split("->")[1].trim().substring(1);
     const fileName = `${config.rowData[0]}_${value}.json`;
     const fullPath = path.join(tokensDirPath, fileName);
+    console.log(`value: ${value}`)
 
     console.log(value, fileName, fullPath)
 
