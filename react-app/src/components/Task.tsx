@@ -80,6 +80,9 @@ export default function Task({
     // Локальные «имя» и «moduleName»
     const [editName, setEditName] = useState(name);
     const [editModuleName, setEditModuleName] = useState(moduleName);
+    const [showRunDialog, setShowRunDialog] = useState(false);
+    const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
+    const [selectedOption, setSelectedOption] = useState("");
 
     const chipColor = statusColorMap[status] || "#ff9e44";
 
@@ -178,39 +181,31 @@ export default function Task({
     };
 
     // Функция для создания новой задачи с тем же конфигом
-    const handleRunMEVTask = async (rowIndex: number) => {
+    const handleRunMEVTask = async (rowIndex: number, strategy: string) => {
         const taskId = Date.now();
-
-        // Get the token (first cell) and volume_change (second cell) from the selected row
         const token = data[rowIndex]?.cells[0] || "";
         const volume_change = data[rowIndex]?.cells[1] || "";
 
-        // Create the new task name format: ${token}_${volume_change}_subTask_${task_name}
-        const newTaskName = `${token}_${volume_change}_subTask_${name}`;
+        // Добавляем стратегию в имя задачи
+        const newTaskName = `${token}_${volume_change}_${strategy}_subTask_${name}`;
 
-        // Create the modified config for the new task
         const settings = await window.electronAPI?.getSettings();
         const newConfig = {
             ...config,
-            module_name: "mev_subtask", // Change module_name to mev_subtask
-            task_name: newTaskName, // Set the new task name
-            // Keep all other config parameters the same
+            module_name: "mev_subtask",
+            task_name: newTaskName,
+            strategy, // Добавляем выбранную стратегию
             rowData: data[rowIndex]?.cells,
             sourceTaskId: id,
             additionalRpc: settings?.additionalRpc,
         };
 
-        // Add the new task to the store - using the correct parameter format
         dispatch(addOrUpdateTask({
             taskId,
             config: newConfig
         }));
 
-        // Start the process
         window.electronAPI?.startProcess(taskId, newConfig);
-
-        console.log(`Created new MEV subtask from row ${rowIndex} of task ${id}`);
-        console.log(`New task name: ${newTaskName}`);
     };
 
     // Функция для удаления строки из данных задачи
@@ -384,10 +379,14 @@ export default function Task({
                                         {isMEVModule && (
                                             <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
                                                 <Box sx={{ display: "flex", gap: 1 }}>
+                                                    // В кнопке Run MEV заменим текущий onClick
                                                     <Button
                                                         variant="contained"
                                                         size="small"
-                                                        onClick={() => handleRunMEVTask(rowIndex)}
+                                                        onClick={() => {
+                                                            setSelectedRowIndex(rowIndex);
+                                                            setShowRunDialog(true);
+                                                        }}
                                                         sx={{
                                                             bgcolor: "#00c853",
                                                             "&:hover": { bgcolor: "#00e676" },
@@ -517,10 +516,14 @@ export default function Task({
                                         {isMEVModule && (
                                             <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
                                                 <Box sx={{ display: "flex", gap: 1 }}>
+                                                    // В кнопке Run MEV заменим текущий onClick
                                                     <Button
                                                         variant="contained"
                                                         size="small"
-                                                        onClick={() => handleRunMEVTask(rowIndex)}
+                                                        onClick={() => {
+                                                            setSelectedRowIndex(rowIndex);
+                                                            setShowRunDialog(true);
+                                                        }}
                                                         sx={{
                                                             bgcolor: "#00c853",
                                                             "&:hover": { bgcolor: "#00e676" },
@@ -579,6 +582,54 @@ export default function Task({
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <Dialog
+                open={showRunDialog}
+                onClose={() => setShowRunDialog(false)}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle>Select Strategy</DialogTitle>
+                <DialogContent sx={{ pt: 3 }}>
+                    <FormControl fullWidth>
+                        <InputLabel>Strategy</InputLabel>
+                        <Select
+                            value={selectedOption}
+                            onChange={(e) => setSelectedOption(e.target.value)}
+                            label="Strategy"
+                            sx={{ mb: 2 }}
+                        >
+                            <MenuItem value="frontrun">Frontrun Strategy</MenuItem>
+                            <MenuItem value="backrun">Backrun Strategy</MenuItem>
+                            <MenuItem value="sandwich">Sandwich Attack</MenuItem>
+                        </Select>
+                    </FormControl>
+                </DialogContent>
+                <DialogActions>
+                    <Button
+                        onClick={() => {
+                            setShowRunDialog(false);
+                            setSelectedOption("");
+                        }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="contained"
+                        onClick={() => {
+                            if (selectedRowIndex !== null && selectedOption) {
+                                handleRunMEVTask(selectedRowIndex, selectedOption);
+                                setShowRunDialog(false);
+                                setSelectedOption("");
+                            }
+                        }}
+                        disabled={!selectedOption}
+                    >
+                        Run
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
         </>
     );
 }
