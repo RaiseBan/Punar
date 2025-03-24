@@ -271,8 +271,8 @@ async function sendTx(connection, ixs, signer){
 async function getRaydiumPair(rpcUrl, pairs){
     const connection = new Connection(rpcUrl);
     for (const pair of pairs){
-        const res = await connection.getAccountInfo(pair);
-        console.log(JSON.stringify(res, null, 2));
+        const res = await connection.getAccountInfo(new PublicKey(pair));
+        // console.log(JSON.stringify(res, null, 2));
         const owner = res.owner;
         console.log(owner);
         if (owner.toString() === RAYDIUM_OWNER){
