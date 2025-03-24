@@ -271,9 +271,10 @@ async function sendTx(connection, ixs, signer){
 async function getRaydiumPair(rpcUrl, pairs){
     const connection = new Connection(rpcUrl);
     for (const pair of pairs){
-        const owner = (await connection.getAccountInfo(pair)).owner.toBase58();
-        if (owner === RAYDIUM_OWNER){
-            return owner;
+        const owner = (await connection.getAccountInfo(pair)).owner;
+        console.log(owner);
+        if (owner.toString() === RAYDIUM_OWNER){
+            return owner.toString();
         }
     }
 }

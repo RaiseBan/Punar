@@ -379,7 +379,6 @@ export default function Task({
                                         {isMEVModule && (
                                             <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
                                                 <Box sx={{ display: "flex", gap: 1 }}>
-                                                    // В кнопке Run MEV заменим текущий onClick
                                                     <Button
                                                         variant="contained"
                                                         size="small"
@@ -516,7 +515,6 @@ export default function Task({
                                         {isMEVModule && (
                                             <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
                                                 <Box sx={{ display: "flex", gap: 1 }}>
-                                                    // В кнопке Run MEV заменим текущий onClick
                                                     <Button
                                                         variant="contained"
                                                         size="small"
