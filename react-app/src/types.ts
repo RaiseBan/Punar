@@ -67,6 +67,7 @@ export interface MevParams {
     threadWorkers: number;
     walletSource: "existing" | "manual";
     privateKey: string;
+    mode: "manual" | "automatic";
 }
 export interface MeteoraParams {
     accounts: string[];

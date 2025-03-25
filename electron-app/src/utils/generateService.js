@@ -21,8 +21,15 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     console.log(2);
     const meteoraPairs = tokenConfig.meteora_pairs;
     console.log(3);
-    // const raydiumPair = tokenConfig.raydium_pairs[0];
-    const raydiumPair = await getRaydiumPair(config.main_rpc, tokenConfig.raydium_pairs)
+
+
+    // if (config.strategy === ""){
+    const raydiumPair = tokenConfig.raydium_pairs[0];
+
+    // if (config.strategy === "raydium"){
+    //     const raydiumPair = await getRaydiumPair(config.main_rpc, tokenConfig.raydium_pairs)
+    // }
+
 
     if (!raydiumPair){
         console.log(`correct raydium pair not found`);

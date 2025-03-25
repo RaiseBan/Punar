@@ -234,8 +234,23 @@ export default function Task({
     const finalColumns = columns && columns.length > 0 ? columns : COLS_NAMES.get(moduleName) || [];
     const canEditConfig = status === "Stopped";
 
-    // Проверяем, является ли модуль "MEV Module"
+    // Проверяем, является ли модуль "MEV Module" и его режим
     const isMEVModule = moduleName === "MEV Module";
+    const isMEVManualMode = isMEVModule && (!config?.mode || config?.mode === "manual");
+    const isMEVAutomaticMode = isMEVModule && config?.mode === "automatic";
+
+    // Автоматически запускать задачи в автоматическом режиме
+    useEffect(() => {
+        if (isMEVAutomaticMode && data.length > 0) {
+            // Проверяем, есть ли новые данные, которые нужно обработать
+            // Можно добавить дополнительную логику здесь для отслеживания новых строк
+            const lastRowIndex = data.length - 1;
+            const strategy = "pumpswap"; // Используем pumpswap по умолчанию для автоматического режима
+            
+            // Запускаем задачу для последней строки
+            handleRunMEVTask(lastRowIndex, strategy);
+        }
+    }, [data.length, isMEVAutomaticMode]);
 
     return (
         <>
@@ -354,8 +369,8 @@ export default function Task({
                                             {col}
                                         </TableCell>
                                     ))}
-                                    {/* Добавляем столбец с кнопками только для MEV Module */}
-                                    {isMEVModule && (
+                                    {/* Добавляем столбец с кнопками только для MEV Module в ручном режиме */}
+                                    {isMEVManualMode && (
                                         <TableCell
                                             sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
                                         >
@@ -375,8 +390,8 @@ export default function Task({
                                                 {cell}
                                             </TableCell>
                                         ))}
-                                        {/* Добавляем кнопки Run и Delete только для MEV Module */}
-                                        {isMEVModule && (
+                                        {/* Добавляем кнопки Run и Delete только для MEV Module в ручном режиме */}
+                                        {isMEVManualMode && (
                                             <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
                                                 <Box sx={{ display: "flex", gap: 1 }}>
                                                     <Button
@@ -490,8 +505,8 @@ export default function Task({
                                             {col}
                                         </TableCell>
                                     ))}
-                                    {/* Добавляем столбец с кнопками только для MEV Module */}
-                                    {isMEVModule && (
+                                    {/* Добавляем столбец с кнопками только для MEV Module в ручном режиме */}
+                                    {isMEVManualMode && (
                                         <TableCell
                                             sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
                                         >
@@ -511,8 +526,8 @@ export default function Task({
                                                 {cell}
                                             </TableCell>
                                         ))}
-                                        {/* Добавляем кнопки Run и Delete только для MEV Module */}
-                                        {isMEVModule && (
+                                        {/* Добавляем кнопки Run и Delete только для MEV Module в ручном режиме */}
+                                        {isMEVManualMode && (
                                             <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
                                                 <Box sx={{ display: "flex", gap: 1 }}>
                                                     <Button
@@ -597,9 +612,8 @@ export default function Task({
                             label="Strategy"
                             sx={{ mb: 2 }}
                         >
-                            <MenuItem value="frontrun">Frontrun Strategy</MenuItem>
-                            <MenuItem value="backrun">Backrun Strategy</MenuItem>
-                            <MenuItem value="sandwich">Sandwich Attack</MenuItem>
+                            <MenuItem value="raydium">raydium</MenuItem>
+                            <MenuItem value="pumpswap">pumpswap</MenuItem>
                         </Select>
                     </FormControl>
                 </DialogContent>

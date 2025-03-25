@@ -72,7 +72,8 @@ export default function CreateTaskWizard({
         maxAttempts: 5,
         threadWorkers: 2,
         walletSource: "existing",
-        privateKey: ""
+        privateKey: "",
+        mode: "manual",
     });
 
 

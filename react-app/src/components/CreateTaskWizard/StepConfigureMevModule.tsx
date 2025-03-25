@@ -21,6 +21,7 @@ interface StepConfigureMevModuleProps {
         checkInterval: number;
         maxAttempts: number;
         threadWorkers: number;
+        mode: "manual" | "automatic"; // Добавлено новое поле
         walletSource: "existing" | "manual";
         privateKey: string;
     };
@@ -29,6 +30,7 @@ interface StepConfigureMevModuleProps {
         checkInterval: number;
         maxAttempts: number;
         threadWorkers: number;
+        mode: "manual" | "automatic"; // Добавлено новое поле
         walletSource: "existing" | "manual";
         privateKey: string;
     }>>;
@@ -88,6 +90,19 @@ export default function StepConfigureMevModule({
                 onChange={(e) => handleParamChange("threadWorkers", Number(e.target.value))}
                 fullWidth
             />
+
+            {/* Добавлен новый Select для режима работы */}
+            <FormControl fullWidth>
+                <InputLabel>Operation Mode</InputLabel>
+                <Select
+                    value={mevParams.mode}
+                    onChange={(e) => handleParamChange("mode", e.target.value as "manual" | "automatic")}
+                    label="Operation Mode"
+                >
+                    <MenuItem value="manual">Manual</MenuItem>
+                    <MenuItem value="automatic">Automatic</MenuItem>
+                </Select>
+            </FormControl>
 
             <Typography variant="subtitle1">Wallet Configuration</Typography>
 
