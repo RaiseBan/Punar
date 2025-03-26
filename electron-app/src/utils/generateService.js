@@ -28,6 +28,12 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     let mint_config_list = [];
     if (config.strategy === "raydium"){
         const raydiumPair = await getRaydiumPair(config.main_rpc, tokenConfig.raydium_pairs)
+
+        if (!raydiumPair){
+            console.log(`correct raydium pair not found`);
+            return;
+        }
+
         mint_config_list = [
             {
                 mint: tokenConfig.token_address,
@@ -37,11 +43,16 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
             }
         ]
     }else if (config.strategy === "pumpswap"){
-        const pumpPair = tokenConfig.pump_swap_pairs; // возможно стоит использовать только первую пару
+        const pumpPairs = tokenConfig.pump_swap_pairs; // возможно стоит использовать только первую пару
+        if (!pumpPairs){
+            console.log(`ERROR: pumpPairs not found`);
+            return;
+        }
+
         mint_config_list = [
             {
                 mint: tokenConfig.token_address,
-                pump_pool_list: pumpPair,
+                pump_pool_list: pumpPairs,
                 meteora_dlmm_pool_list:[],
                 process_delay: 300
             }
@@ -49,10 +60,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     }
 
 
-    if (!raydiumPair){
-        console.log(`correct raydium pair not found`);
-        return;
-    }
+    
     console.log(4);
 
     console.log(JSON.stringify(tokenConfig, null, 2));
