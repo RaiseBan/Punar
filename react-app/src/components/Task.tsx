@@ -182,30 +182,57 @@ export default function Task({
 
     // Функция для создания новой задачи с тем же конфигом
     const handleRunMEVTask = async (rowIndex: number, strategy: string) => {
-        const taskId = Date.now();
+        const taskId1 = Date.now();
+        const taskId2 = Date.now() + 1;
         const token = data[rowIndex]?.cells[0] || "";
         const volume_change = data[rowIndex]?.cells[1] || "";
+        const volume_value = parseFloat(data[rowIndex]?.cells[2] || "0");
 
         // Добавляем стратегию в имя задачи
-        const newTaskName = `${token}_${volume_change}_${strategy}_subTask_${name}`;
+        const newTaskName1 = `${token}_${volume_change}_${strategy}_jito_subTask_${name}`;
+        const newTaskName2 = `${token}_${volume_change}_${strategy}_no_jito_subTask_${name}`;
 
         const settings = await window.electronAPI?.getSettings();
-        const newConfig = {
+        
+        // Конфиг для первого процесса (всегда запускается)
+        const newConfig1 = {
             ...config,
             module_name: "mev_subtask",
-            task_name: newTaskName,
-            strategy, // Добавляем выбранную стратегию
+            task_name: newTaskName1,
+            strategy,
             rowData: data[rowIndex]?.cells,
             sourceTaskId: id,
             additionalRpc: settings?.additionalRpc,
+            useJito: true,
         };
 
-        dispatch(addOrUpdateTask({
-            taskId,
-            config: newConfig
-        }));
+        // Конфиг для второго процесса (запускается при условии)
+        const newConfig2 = {
+            ...config,
+            module_name: "mev_subtask",
+            task_name: newTaskName2,
+            strategy,
+            rowData: data[rowIndex]?.cells,
+            sourceTaskId: id,
+            additionalRpc: settings?.additionalRpc,
+            useJito: false,
+        };
 
-        window.electronAPI?.startProcess(taskId, newConfig);
+        // Запускаем первый процесс всегда
+        dispatch(addOrUpdateTask({
+            taskId: taskId1,
+            config: newConfig1
+        }));
+        window.electronAPI?.startProcess(taskId1, newConfig1);
+
+        // Запускаем второй процесс только если volume_value >= default_bound
+        if (volume_value >= (config?.default_bound || 100_000)) {
+            dispatch(addOrUpdateTask({
+                taskId: taskId2,
+                config: newConfig2
+            }));
+            window.electronAPI?.startProcess(taskId2, newConfig2);
+        }
     };
 
     // Функция для удаления строки из данных задачи

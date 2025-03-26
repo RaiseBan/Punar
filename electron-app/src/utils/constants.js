@@ -18,6 +18,8 @@ const TX_TYPES = Object.freeze({
 
 })
 
+const PRIMARY_IP = "194.55.224.16/32"
+
 const RAYDIUM_OWNER = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
 
-module.exports = { TENSOR_ENDPOINTS, RAYDIUM_OWNER };
+module.exports = { TENSOR_ENDPOINTS, RAYDIUM_OWNER, PRIMARY_IP };

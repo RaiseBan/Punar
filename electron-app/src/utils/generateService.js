@@ -22,13 +22,31 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     const meteoraPairs = tokenConfig.meteora_pairs;
     console.log(3);
 
+    
 
-    // if (config.strategy === ""){
-    const raydiumPair = tokenConfig.raydium_pairs[0];
-
-    // if (config.strategy === "raydium"){
-    //     const raydiumPair = await getRaydiumPair(config.main_rpc, tokenConfig.raydium_pairs)
-    // }
+    // const raydiumPair = tokenConfig.raydium_pairs[0];
+    let mint_config_list = [];
+    if (config.strategy === "raydium"){
+        const raydiumPair = await getRaydiumPair(config.main_rpc, tokenConfig.raydium_pairs)
+        mint_config_list = [
+            {
+                mint: tokenConfig.token_address,
+                raydium_pool: raydiumPair,
+                meteora_dlmm_pool_list: [],
+                process_delay: 300
+            }
+        ]
+    }else if (config.strategy === "pumpswap"){
+        const pumpPair = tokenConfig.pump_swap_pairs; // возможно стоит использовать только первую пару
+        mint_config_list = [
+            {
+                mint: tokenConfig.token_address,
+                pump_pool_list: pumpPair,
+                meteora_dlmm_pool_list:[],
+                process_delay: 300
+            }
+        ]
+    }
 
 
     if (!raydiumPair){
@@ -42,35 +60,28 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     // Формируем базовую структуру TOML файла
     const mevConfig = {
         routing: {
-            mint_config_list: [
-                {
-                    mint: tokenConfig.token_address,
-                    raydium_pool: raydiumPair,
-                    meteora_dlmm_pool_list: [],
-                    process_delay: 300
-                }
-            ]
+            mint_config_list: mint_config_list
         },
         rpc: {
             url: config.main_rpc
         },
         spam: {
-            enabled: true,
+            enabled: !config.useJito,
             sending_rpc_url: config.main_rpc,
             compute_unit_price: 105,
             skip_preflight: true
         },
         jito: {
-            enabled: false,
+            enabled: useJito,
             block_engine_urls: [
-                "https://ny.mainnet.block-engine.jito.wtf/api/v1",
-                "https://tokyo.mainnet.block-engine.jito.wtf/api/v1",
-                "https://slc.mainnet.block-engine.jito.wtf/api/v1",
-                "https://amsterdam.mainnet.block-engine.jito.wtf/api/v1",
-                "https://frankfurt.mainnet.block-engine.jito.wtf/api/v1",
+                "http://localhost:8082/jitoNY/api/v1",
+                "http://localhost:8082/jitoTOKIO/api/v1",
+                "http://localhost:8082/jitoSLC/api/v1",
+                "http://localhost:8082/jitoAMSTERDAM/api/v1",
+                "http://localhost:8082/jitoFRANKFURT/api/v1"
             ],
             uuid: "",
-            ip_addresses: [],
+            ip_addresses: [PRIMARY_IP],
             tip_config: {
                 strategy: "Random",
                 from: 10000,

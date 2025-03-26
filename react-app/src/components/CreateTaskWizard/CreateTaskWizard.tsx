@@ -74,6 +74,7 @@ export default function CreateTaskWizard({
         walletSource: "existing",
         privateKey: "",
         mode: "manual",
+        default_bound: 500,
     });
 
 

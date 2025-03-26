@@ -24,6 +24,7 @@ interface StepConfigureMevModuleProps {
         mode: "manual" | "automatic"; // Добавлено новое поле
         walletSource: "existing" | "manual";
         privateKey: string;
+        default_bound: number;
     };
     setMevParams: React.Dispatch<React.SetStateAction<{
         volumeThreshold: number;
@@ -33,6 +34,7 @@ interface StepConfigureMevModuleProps {
         mode: "manual" | "automatic"; // Добавлено новое поле
         walletSource: "existing" | "manual";
         privateKey: string;
+        default_bound: number;
     }>>;
     wallets?: Wallet[];
 }
@@ -64,6 +66,14 @@ export default function StepConfigureMevModule({
                 type="number"
                 value={mevParams.volumeThreshold}
                 onChange={(e) => handleParamChange("volumeThreshold", Number(e.target.value))}
+                fullWidth
+            />
+
+            <TextField
+                label="Default sending boundary (USD)"
+                type="number"
+                value={mevParams.default_bound}
+                onChange={(e) => handleParamChange("default_bound", Number(e.target.value))}
                 fullWidth
             />
 

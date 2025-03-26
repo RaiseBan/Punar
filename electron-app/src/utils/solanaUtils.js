@@ -54,8 +54,17 @@ async function createLookupTable(rpcUrl, privateKey) {
     console.log("🚀Lookup table created", sig, `\nTable address: ${lookupTableAddress.toBase58()}`);
 
     const tables = await getLookupTables();
-    if (await saveLookupTables(...tables, lookupTableAddress.toBase58()) === false){
-        console.error(`alt not created!@`)
+    console.log(`Current tables:`, tables);
+    
+    // Преобразуем tables в массив, если это строка
+    const tablesArray = Array.isArray(tables) ? tables : (tables ? [tables] : []);
+    
+    // Добавляем новый адрес в массив
+    const newTables = [...tablesArray, lookupTableAddress.toBase58()];
+    console.log(`New tables array:`, newTables);
+    
+    if (await saveLookupTables(newTables) === false){
+        console.error(`Failed to save lookup tables`);
         return;
     }
     return lookupTableAddress.toBase58();
@@ -70,21 +79,56 @@ async function createLookupTable(rpcUrl, privateKey) {
  * @returns {Promise<string>} - The address of the lookup table used
  */
 async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddress){
+    console.log(`appendLookupTable params: ${accounts}, ${rpcUrl}, ${privateKey}, ${lookupTableAddress}`);
     // Check if the accounts can fit in the specified table
     const MAX_ACCOUNTS_PER_TABLE = 256;
     const connection = new Connection(rpcUrl);
+    const USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(privateKey)));
 
-    // Get current addresses in the lookup table
-    const lookupTableAccount = (
-        await connection.getAddressLookupTable(new PublicKey(lookupTableAddress))
-    ).value;
+    // Функция для получения данных таблицы с повторными попытками
+    async function getLookupTableWithRetries() {
+        const MAX_RETRIES = 5;
+        const RETRY_DELAY = 5000; // 5 секунд
 
-    if (!lookupTableAccount) {
-        console.error("Lookup table not found");
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const lookupTableAccount = (
+                    await connection.getAddressLookupTable(new PublicKey(lookupTableAddress))
+                ).value;
+
+                if (lookupTableAccount) {
+                    return lookupTableAccount;
+                }
+
+                console.log(`Attempt ${attempt}/${MAX_RETRIES}: Lookup table not found yet, waiting ${RETRY_DELAY/1000} seconds...`);
+                await sleep(RETRY_DELAY);
+            } catch (error) {
+                console.error(`Attempt ${attempt}/${MAX_RETRIES} failed:`, error);
+                if (attempt === MAX_RETRIES) {
+                    throw error;
+                }
+                await sleep(RETRY_DELAY);
+            }
+        }
+
+        throw new Error(`Failed to get lookup table after ${MAX_RETRIES} attempts`);
+    }
+
+    let lookupTableAccount;
+    try {
+        lookupTableAccount = await getLookupTableWithRetries();
+    } catch (error) {
+        console.error("Failed to get lookup table account:", error);
+        return;
+    }
+
+    if (lookupTableAccount.state.authority.toBase58() !== USER.publicKey.toBase58()){
+        console.error("Lookup table authority does not match");
         return;
     }
 
     const currentAddressCount = lookupTableAccount.state.addresses.length;
+    console.log(`currentAddressCount: ${currentAddressCount}`);
 
     // Check if adding these accounts would exceed the limit
     if (currentAddressCount + accounts.length > MAX_ACCOUNTS_PER_TABLE) {
@@ -117,7 +161,7 @@ async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddres
     }
 
     // If we reach here, there's enough space in the specified table
-    const USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(privateKey)));
+    
 
     const extendInstruction = AddressLookupTableProgram.extendLookupTable({
         payer: USER.publicKey,
@@ -136,20 +180,43 @@ async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddres
     return lookupTableAddress;
 }
 
+// Функция для преобразования объекта с BigInt в обычный объект
+function convertBigIntToString(obj) {
+    if (typeof obj !== 'object' || obj === null) return obj;
+    
+    if (Array.isArray(obj)) {
+        return obj.map(item => convertBigIntToString(item));
+    }
+    
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === 'bigint') {
+            result[key] = value.toString();
+        } else if (typeof value === 'object' && value !== null) {
+            result[key] = convertBigIntToString(value);
+        } else {
+            result[key] = value;
+        }
+    }
+    return result;
+}
+
 // return array of addresses, type string
 async function getAllAddressesFromLookupTable(rpcUrl, lookupTableAddress){
     const connection = new Connection(rpcUrl);
+    console.log(`getAllAddressesFromLookupTable params: ${rpcUrl}, ${lookupTableAddress}`);
+    
+    const lookupTableAccount = await connection.getAddressLookupTable(new PublicKey(lookupTableAddress));
+    
 
-    const lookupTableAccount = (
-        await connection.getAddressLookupTable(new PublicKey(lookupTableAddress))
-    ).value;
-
-    if (!lookupTableAccount) {
+    // console.log(`lookupTableAccount: ${JSON.stringify(convertBigIntToString(lookupTableAccount), null, 2)}`);
+    
+    if (!lookupTableAccount?.value) {
         console.error("Lookup table not found");
         return [];
     }
 
-    return lookupTableAccount.state.addresses.map(address => address.toBase58());
+    return lookupTableAccount.value.state.addresses.map(address => address.toBase58());
 }
 
 /**
@@ -160,17 +227,25 @@ async function getAllAddressesFromLookupTable(rpcUrl, lookupTableAddress){
  * @returns {Promise<string[] | undefined>} - The addresses of the lookup table used
  */
 async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
+    console.log(`start updateIfNotExistsAndGet`)
     const tables = await getLookupTables();
-
+    console.log(`tables: ${tables}`);
+    
     if (!tables || tables.length === 0){
         console.log(`No tables found. Creating...`);
         const tableAddress = await createLookupTable(rpcUrl, private_key);
         if (!tableAddress){
+            console.error("Failed to create initial lookup table");
             return;
         }
 
         // After creating the table, append the accounts
-        return [await appendLookupTable(accounts, rpcUrl, private_key, tableAddress)];
+        const result = await appendLookupTable(accounts, rpcUrl, private_key, tableAddress);
+        if (!result) {
+            console.error("Failed to append accounts to initial table");
+            return;
+        }
+        return [result];
     } else {
         console.log(`Checking if accounts already exist...`);
         let accountsToAppend = [...accounts]; // Create a copy of accounts array
@@ -178,11 +253,12 @@ async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
 
         // Check all tables for existing accounts
         for (const table of tables){
-            const addresses = await getAllAddressesFromLookupTable(rpcUrl, table);
-
+            const tableAddresses = await getAllAddressesFromLookupTable(rpcUrl, table);
+            // console.log(`Table ${table} addresses:`, tableAddresses);
+            
             // Update accountsToAppend to only include accounts not found in any table
             accountsToAppend = accountsToAppend.filter(account => {
-                const exists = addresses.includes(account);
+                const exists = tableAddresses.includes(account);
                 if (exists) {
                     // Track which table contains this account
                     if (!existingTableAddresses.has(account)) {
@@ -195,21 +271,29 @@ async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
 
         // If there are accounts to append
         if (accountsToAppend.length > 0) {
+            console.log(`Found ${accountsToAppend.length} accounts to append`);
+            
             // Try to use an existing table that has space
             for (const table of tables) {
-                const addresses = await getAllAddressesFromLookupTable(rpcUrl, table);
-                if (addresses.length + accountsToAppend.length <= 256) {
-                    // This table has space for all remaining accounts
+                const tableAddresses = await getAllAddressesFromLookupTable(rpcUrl, table);
+                const currentCount = tableAddresses.length;
+                console.log(`Table ${table} current count: ${currentCount}`);
+                
+                if (currentCount + accountsToAppend.length <= 256) {
+                    console.log(`Table ${table} has enough space`);
                     const res = await appendLookupTable(accountsToAppend, rpcUrl, private_key, table);
                     if (!res) {
-                        console.error(`Failed to append accounts to ALT`);
-                        return;
+                        console.error(`Failed to append accounts to table ${table}`);
+                        continue;
                     }
-                    return [res];
+                    // Добавляем новую таблицу к существующим
+                    const allUsedTables = new Set([...existingTableAddresses.values(), res]);
+                    return [...allUsedTables];
                 }
             }
 
             // If no existing table has enough space, create a new one
+            console.log("No existing table has enough space. Creating a new one...");
             const newTableAddr = await createLookupTable(rpcUrl, private_key);
             if (!newTableAddr) {
                 console.error("Failed to create a new lookup table");
@@ -221,7 +305,9 @@ async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
                 console.error(`Failed to append accounts to new ALT`);
                 return;
             }
-            return [res];
+            // Добавляем новую таблицу к существующим
+            const allUsedTables = new Set([...existingTableAddresses.values(), res]);
+            return [...allUsedTables];
         } else {
             console.log(`All accounts already exist in tables`);
 
@@ -229,7 +315,7 @@ async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
             const usedTables = new Set([...existingTableAddresses.values()]);
             if (usedTables.size === 1) {
                 // All accounts are in the same table
-                return [...usedTables][0];
+                return [...usedTables];
             } else {
                 console.log(`Accounts are spread across multiple tables: ${[...usedTables].join(', ')}`);
                 return [...usedTables];
@@ -281,9 +367,37 @@ async function getRaydiumPair(rpcUrl, pairs){
     }
 }
 
+// async function getPumpPair(rpcUrl, pairs){
+//     const connection = new Connection(rpcUrl);
+//     for (const pair of pairs){
+//         const res = await connection.getAccountInfo(new PublicKey(pair));
+//         // console.log(JSON.stringify(res, null, 2));
+//         const owner = res.owner;
+//         console.log(owner);
+//         if (owner.toString() === RAYDIUM_OWNER){
+//             return owner.toString();
+//         }
+//     }
+// }
+
+
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+// (async() => {
+//     const res = await updateIfNotExistsAndGet(
+//         clusterApiUrl("mainnet-beta"),
+//     [
+//         "85vNnKPMM4aHCJ9a6ebMFjqgzNL9jFXF7zW22vjeXziT",
+//         "6qDWicht82dYXj7ModFfdti9f8pfWFDTKt9itvnvCoDH",
+//         "3yLApRRweajdW5U1xtzoRvJrqC5mWCcBkFHccSATgMLG",
+//         "7qt1qBnQ5CNNpMH1no6jYAzuyazP5QWXsUZB7dot5kga"
+//     ],
+//      "7wXu1a3WDJ8fCM69YzQzW4hnaoU6HCTA1WCHMUCmu4D4Qcksvc6jPDu8VWzkomN9GwpSQ26Nuy2GRXfR42Bb9iN");
+//     console.log(res);
+// })()
+
 
 module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getRaydiumPair}
