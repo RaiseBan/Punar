@@ -28,7 +28,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     // const raydiumPair = tokenConfig.raydium_pairs[0];
     let mint_config_list = [];
     if (config.strategy === "raydium"){
-        const raydiumPair = await getFilteredPairs(config.main_rpc, tokenConfig.raydium_pairs, RAYDIUM_OWNER);
+        const raydiumPair = (await getFilteredPairs(config.main_rpc, tokenConfig.raydium_pairs, RAYDIUM_OWNER))[0];
 
         if (!raydiumPair){
             console.log(`correct raydium pair not found`);
@@ -116,12 +116,12 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
         return;
     }
 
-    if (meteoraPairs.length === 1) {
+    if (filteredMeteoraPairs.length === 1) {
         // Если не больше 1 пары, добавляем их в список
-        mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [...meteoraPairs];
+        mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [...filteredMeteoraPairs];
     } else {
-        // Если больше 3 пар, получаем lookup таблицы
-        const lookupTables = await updateIfNotExistsAndGet(config.main_rpc, meteoraPairs, config.private_key);
+        // Если больше 1 пары, получаем lookup таблицы
+        const lookupTables = await updateIfNotExistsAndGet(config.main_rpc, filteredMeteoraPairs, config.private_key);
 
         if (!lookupTables) {
             console.error("Не удалось получить lookup таблицы");

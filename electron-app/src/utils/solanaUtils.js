@@ -355,6 +355,7 @@ async function sendTx(connection, ixs, signer){
 }
 
 async function getFilteredPairs(rpcUrl, pairs, filter){
+    let filteredPairs = [];
     const connection = new Connection(rpcUrl);
     for (const pair of pairs){
         const res = await connection.getAccountInfo(new PublicKey(pair));
@@ -362,9 +363,11 @@ async function getFilteredPairs(rpcUrl, pairs, filter){
         const owner = res.owner;
         console.log(owner);
         if (owner.toString() === filter){
-            return owner.toString();
+            filteredPairs.push(owner.toString());
         }
     }
+
+    return filteredPairs;
 }
 
 
