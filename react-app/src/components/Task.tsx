@@ -226,6 +226,7 @@ export default function Task({
         window.electronAPI?.startProcess(taskId1, newConfig1);
 
         // Запускаем второй процесс только если volume_value >= default_bound
+        console.log(`${volume_value} >= ${config.default_bound}`)
         if (volume_value >= (config?.default_bound || 100_000)) {
             dispatch(addOrUpdateTask({
                 taskId: taskId2,

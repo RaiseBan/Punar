@@ -332,6 +332,7 @@ export default function CreateTaskWizard({
                 module_name: "MEV Module",
                 task_name: taskName,
                 volume_threshold: mevParams.volumeThreshold,
+                default_bound: mevParams.default_bound,
                 check_interval: mevParams.checkInterval,
                 max_attempts: mevParams.maxAttempts,
                 thread_workers: mevParams.threadWorkers,
