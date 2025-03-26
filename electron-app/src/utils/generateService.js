@@ -123,10 +123,11 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
         return;
     }
 
-    if (filteredMeteoraPairs.length <= 3) {
+    if (filteredMeteoraPairs.length === 1) {
         // Если не больше 1 пары, добавляем их в список
         mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [...filteredMeteoraPairs];
     } else {
+        mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [...filteredMeteoraPairs];
         // Если больше 1 пары, получаем lookup таблицы
         const lookupTables = await updateIfNotExistsAndGet(config.main_rpc, filteredMeteoraPairs, config.private_key);
 
@@ -138,7 +139,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
         mevConfig.routing.mint_config_list[0].lookup_table_accounts = lookupTables;
 
         // Оставляем meteora_dlmm_pool_list пустым
-        mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [];
+        // mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [];
     }
 
     // Создаем директорию, если она не существует
