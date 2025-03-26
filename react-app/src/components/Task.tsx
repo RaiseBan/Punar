@@ -21,6 +21,7 @@ import {
     MenuItem,
     FormControl,
     InputLabel,
+    TableSortLabel,
 } from "@mui/material";
 
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -280,6 +281,42 @@ export default function Task({
         }
     }, [data.length, isMEVAutomaticMode]);
 
+    // Добавляем состояние для сортировки
+    const [orderBy, setOrderBy] = useState<string>('');
+    const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+
+    // Функция для обработки сортировки
+    const handleRequestSort = (property: string) => {
+        const isAsc = orderBy === property && order === 'asc';
+        setOrder(isAsc ? 'desc' : 'asc');
+        setOrderBy(property);
+    };
+
+    // Функция для сортировки данных
+    const sortData = (data: TaskDataRow[]) => {
+        if (!orderBy) return data;
+
+        return [...data].sort((a, b) => {
+            const aValue = a.cells[finalColumns.indexOf(orderBy)];
+            const bValue = b.cells[finalColumns.indexOf(orderBy)];
+
+            // Если значения числовые
+            if (!isNaN(Number(aValue)) && !isNaN(Number(bValue))) {
+                return order === 'asc' 
+                    ? Number(aValue) - Number(bValue)
+                    : Number(bValue) - Number(aValue);
+            }
+
+            // Если значения строковые
+            return order === 'asc'
+                ? aValue.localeCompare(bValue)
+                : bValue.localeCompare(aValue);
+        });
+    };
+
+    // Получаем отсортированные данные
+    const sortedData = sortData(displayedData);
+
     return (
         <>
             <Card
@@ -440,7 +477,22 @@ export default function Task({
                                                 ...(col.toLowerCase().includes('action') && { width: '120px' }),
                                             }}
                                         >
-                                            {col}
+                                            <TableSortLabel
+                                                active={orderBy === col}
+                                                direction={orderBy === col ? order : 'asc'}
+                                                onClick={() => handleRequestSort(col)}
+                                                sx={{
+                                                    color: '#ff9e44',
+                                                    '&.MuiTableSortLabel-active': {
+                                                        color: '#ff9e44',
+                                                    },
+                                                    '& .MuiTableSortLabel-icon': {
+                                                        color: '#ff9e44',
+                                                    },
+                                                }}
+                                            >
+                                                {col}
+                                            </TableSortLabel>
                                         </TableCell>
                                     ))}
                                     {isMEVManualMode && (
@@ -456,7 +508,7 @@ export default function Task({
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {displayedData.map((row, rowIndex) => (
+                                {sortedData.map((row, rowIndex) => (
                                     <TableRow 
                                         key={rowIndex}
                                         sx={{
