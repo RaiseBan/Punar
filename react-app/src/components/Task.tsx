@@ -41,6 +41,7 @@ import {fetchImageUrl} from "../utils/tensorFunctions";
 
 export interface TaskDataRow {
     cells: string[];
+    originalIndex?: number;
 }
 
 export interface TaskProps {
@@ -296,7 +297,10 @@ export default function Task({
     const sortData = (data: TaskDataRow[]) => {
         if (!orderBy) return data;
 
-        return [...data].sort((a, b) => {
+        return [...data].map((row, index) => ({
+            ...row,
+            originalIndex: index // Добавляем оригинальный индекс
+        })).sort((a, b) => {
             const aValue = a.cells[finalColumns.indexOf(orderBy)];
             const bValue = b.cells[finalColumns.indexOf(orderBy)];
 
@@ -521,7 +525,6 @@ export default function Task({
                                             <TableCell
                                                 key={cellIndex}
                                                 sx={{
-                                                    // Специальные стили для определенных столбцов
                                                     ...(finalColumns[cellIndex].toLowerCase().includes('address') && { minWidth: '300px' }),
                                                     ...(finalColumns[cellIndex].toLowerCase().includes('name') && { minWidth: '150px' }),
                                                     ...(finalColumns[cellIndex].toLowerCase().includes('volume') && { minWidth: '120px' }),
@@ -543,8 +546,10 @@ export default function Task({
                                                         variant="contained"
                                                         size="small"
                                                         onClick={() => {
-                                                            setSelectedRowIndex(rowIndex);
-                                                            setShowRunDialog(true);
+                                                            if (row.originalIndex !== undefined) {
+                                                                setSelectedRowIndex(row.originalIndex);
+                                                                setShowRunDialog(true);
+                                                            }
                                                         }}
                                                         sx={{
                                                             bgcolor: "#00c853",
@@ -560,7 +565,11 @@ export default function Task({
                                                     <Button
                                                         variant="contained"
                                                         size="small"
-                                                        onClick={() => handleDeleteMEVRow(rowIndex)}
+                                                        onClick={() => {
+                                                            if (row.originalIndex !== undefined) {
+                                                                handleDeleteMEVRow(row.originalIndex);
+                                                            }
+                                                        }}
                                                         sx={{
                                                             bgcolor: "#f44336",
                                                             "&:hover": { bgcolor: "#ff5252" },
@@ -681,8 +690,10 @@ export default function Task({
                                                         variant="contained"
                                                         size="small"
                                                         onClick={() => {
-                                                            setSelectedRowIndex(rowIndex);
-                                                            setShowRunDialog(true);
+                                                            if (row.originalIndex !== undefined) {
+                                                                setSelectedRowIndex(row.originalIndex);
+                                                                setShowRunDialog(true);
+                                                            }
                                                         }}
                                                         sx={{
                                                             bgcolor: "#00c853",
@@ -697,7 +708,11 @@ export default function Task({
                                                     <Button
                                                         variant="contained"
                                                         size="small"
-                                                        onClick={() => handleDeleteMEVRow(rowIndex)}
+                                                        onClick={() => {
+                                                            if (row.originalIndex !== undefined) {
+                                                                handleDeleteMEVRow(row.originalIndex);
+                                                            }
+                                                        }}
                                                         sx={{
                                                             bgcolor: "#f44336",
                                                             "&:hover": { bgcolor: "#ff5252" },
