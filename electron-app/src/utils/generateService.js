@@ -108,8 +108,8 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
 
     // Добавляем meteora_pairs в зависимости от их количества
     console.log(meteoraPairs.length)
-    if (meteoraPairs.length <= 3) {
-        // Если не больше 3 пар, добавляем их в список
+    if (meteoraPairs.length === 1) {
+        // Если не больше 1 пары, добавляем их в список
         mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [...meteoraPairs];
     } else {
         // Если больше 3 пар, получаем lookup таблицы
