@@ -109,7 +109,11 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     // Добавляем meteora_pairs в зависимости от их количества
     console.log(meteoraPairs.length)
 
-    const filteredMeteoraPairs = await getFilteredPairs(config.main_rpc, meteoraPairs, METEORA_OWNER);
+    const filteredMeteoraPairs = await getFilteredPairs(config.main_rpc, meteoraPairs, METEORA_OWNER, {
+        liquidity: {
+            usd: 1000
+        }
+    });
 
     if (!filteredMeteoraPairs) {
         console.log(`Meteora pairs with owner ${METEORA_OWNER} not found`);

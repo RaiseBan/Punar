@@ -354,20 +354,173 @@ async function sendTx(connection, ixs, signer){
     }
 }
 
-async function getFilteredPairs(rpcUrl, pairs, filter){
+/**
+ * @typedef {Object} DexScreenerPair
+ * @property {string} chainId - ID сети (например, "solana")
+ * @property {string} dexId - ID DEX (например, "raydium", "meteora")
+ * @property {string} pairAddress - Адрес пары
+ * @property {Object} baseToken - Базовый токен
+ * @property {Object} quoteToken - Котируемый токен
+ * @property {string} priceUsd - Цена в USD
+ * @property {Object} volume - Объемы торгов
+ * @property {Object} priceChange - Изменение цены
+ * @property {Object} liquidity - Ликвидность
+ */
+
+/**
+ * @typedef {Object} VolumeFilter
+ * @property {number} [h24] - Минимальный объем за 24 часа в USD
+ * @property {number} [h6] - Минимальный объем за 6 часов в USD
+ * @property {number} [h1] - Минимальный объем за 1 час в USD
+ * @property {number} [m5] - Минимальный объем за 5 минут в USD
+ */
+
+/**
+ * @typedef {Object} PriceChangeFilter
+ * @property {number} [h1] - Минимальное изменение цены за 1 час в процентах
+ * @property {number} [h6] - Минимальное изменение цены за 6 часов в процентах
+ * @property {number} [h24] - Минимальное изменение цены за 24 часа в процентах
+ */
+
+/**
+ * @typedef {Object} LiquidityFilter
+ * @property {number} [usd] - Минимальная ликвидность в USD
+ * @property {number} [base] - Минимальная ликвидность базового токена
+ * @property {number} [quote] - Минимальная ликвидность котируемого токена
+ */
+
+/**
+ * @typedef {Object} DexScreenerFilter
+ * @property {VolumeFilter} [volume] - Фильтры по объему
+ * @property {PriceChangeFilter} [priceChange] - Фильтры по изменению цены
+ * @property {LiquidityFilter} [liquidity] - Фильтры по ликвидности
+ */
+
+/**
+ * Фильтрует пары по владельцу и дополнительным параметрам из DexScreener
+ * @param {string} rpcUrl - URL RPC ноды Solana
+ * @param {string[]} pairs - Массив адресов пар для фильтрации
+ * @param {string} filter - Адрес владельца для фильтрации
+ * @param {DexScreenerFilter} [dexScreenerFilter] - Дополнительные фильтры из DexScreener
+ * @returns {Promise<string[]>} - Массив отфильтрованных адресов пар
+ * 
+ * @example
+ * // Базовый вызов без дополнительных фильтров
+ * await getFilteredPairs(rpcUrl, pairs, ownerAddress);
+ * 
+ * @example
+ * // Фильтрация по объему
+ * await getFilteredPairs(rpcUrl, pairs, ownerAddress, {
+ *     volume: {
+ *         h24: 10000,  // Минимум 10k объема за 24 часа
+ *         h6: 5000,    // Минимум 5k объема за 6 часов
+ *         h1: 1000     // Минимум 1k объема за 1 час
+ *     }
+ * });
+ * 
+ * @example
+ * // Фильтрация по изменению цены
+ * await getFilteredPairs(rpcUrl, pairs, ownerAddress, {
+ *     priceChange: {
+ *         h24: -5,     // Максимальное падение цены 5% за 24 часа
+ *         h6: -3,      // Максимальное падение цены 3% за 6 часов
+ *         h1: -1       // Максимальное падение цены 1% за 1 час
+ *     }
+ * });
+ * 
+ * @example
+ * // Фильтрация по ликвидности
+ * await getFilteredPairs(rpcUrl, pairs, ownerAddress, {
+ *     liquidity: {
+ *         usd: 50000,  // Минимум 50k USD ликвидности
+ *         base: 1000000, // Минимум 1M базового токена
+ *         quote: 100    // Минимум 100 котируемого токена
+ *     }
+ * });
+ * 
+ * @example
+ * // Комбинированная фильтрация
+ * await getFilteredPairs(rpcUrl, pairs, ownerAddress, {
+ *     volume: {
+ *         h24: 10000,
+ *         h6: 5000
+ *     },
+ *     priceChange: {
+ *         h24: -5,
+ *         h6: -3
+ *     },
+ *     liquidity: {
+ *         usd: 50000
+ *     }
+ * });
+ */
+async function getFilteredPairs(rpcUrl, pairs, filter, dexScreenerFilter = {}) {
     let filteredPairs = [];
     const connection = new Connection(rpcUrl);
-    for (const pair of pairs){
+    
+    // Фильтрация по владельцу
+    for (const pair of pairs) {
         const res = await connection.getAccountInfo(new PublicKey(pair));
-        // console.log(JSON.stringify(res, null, 2));
+        if (!res) continue;
+        
         const owner = res.owner;
-        console.log(owner);
-        if (owner.toString() === filter){
-            filteredPairs.push(owner.toString());
+        if (owner.toString() === filter) {
+            filteredPairs.push(pair);
         }
     }
 
-    return filteredPairs;
+    // Если нет дополнительных фильтров, возвращаем результат
+    if (!dexScreenerFilter || Object.keys(dexScreenerFilter).length === 0) {
+        return filteredPairs;
+    }
+
+    // Фильтрация по DexScreener параметрам
+    const finalFilteredPairs = [];
+    for (const pair of filteredPairs) {
+        try {
+            const response = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`);
+            const data = await response.json();
+            
+            if (!data.pair) continue;
+            
+            const pairData = data.pair;
+            let matchesFilters = true;
+
+            // Проверка фильтров по объему
+            if (dexScreenerFilter.volume) {
+                const volumeFilters = dexScreenerFilter.volume;
+                if (volumeFilters.h24 && pairData.volume.h24 < volumeFilters.h24) matchesFilters = false;
+                if (volumeFilters.h6 && pairData.volume.h6 < volumeFilters.h6) matchesFilters = false;
+                if (volumeFilters.h1 && pairData.volume.h1 < volumeFilters.h1) matchesFilters = false;
+                if (volumeFilters.m5 && pairData.volume.m5 < volumeFilters.m5) matchesFilters = false;
+            }
+
+            // Проверка фильтров по изменению цены
+            if (dexScreenerFilter.priceChange) {
+                const priceChangeFilters = dexScreenerFilter.priceChange;
+                if (priceChangeFilters.h1 && pairData.priceChange.h1 < priceChangeFilters.h1) matchesFilters = false;
+                if (priceChangeFilters.h6 && pairData.priceChange.h6 < priceChangeFilters.h6) matchesFilters = false;
+                if (priceChangeFilters.h24 && pairData.priceChange.h24 < priceChangeFilters.h24) matchesFilters = false;
+            }
+
+            // Проверка фильтров по ликвидности
+            if (dexScreenerFilter.liquidity) {
+                const liquidityFilters = dexScreenerFilter.liquidity;
+                if (liquidityFilters.usd && pairData.liquidity.usd < liquidityFilters.usd) matchesFilters = false;
+                if (liquidityFilters.base && pairData.liquidity.base < liquidityFilters.base) matchesFilters = false;
+                if (liquidityFilters.quote && pairData.liquidity.quote < liquidityFilters.quote) matchesFilters = false;
+            }
+
+            if (matchesFilters) {
+                finalFilteredPairs.push(pair);
+            }
+        } catch (error) {
+            console.error(`Error fetching data for pair ${pair}:`, error);
+            continue;
+        }
+    }
+
+    return finalFilteredPairs;
 }
 
 
