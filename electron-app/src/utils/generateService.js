@@ -123,7 +123,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
         return;
     }
 
-    if (filteredMeteoraPairs.length === 1) {
+    if (filteredMeteoraPairs.length <= 3) {
         // Если не больше 1 пары, добавляем их в список
         mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [...filteredMeteoraPairs];
     } else {
