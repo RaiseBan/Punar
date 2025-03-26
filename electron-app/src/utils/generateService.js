@@ -44,7 +44,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
             }
         ]
     }else if (config.strategy === "pumpswap"){
-        const pumpPairs = tokenConfig.pump_swap_pairs; // возможно стоит использовать только первую пару
+        const pumpPairs = tokenConfig.pump_swap_pairs[0]; // возможно стоит использовать только первую пару
         if (!pumpPairs){
             console.log(`ERROR: pumpPairs not found`);
             return;
@@ -100,6 +100,9 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
         },
         kamino_flashloan: {
             enabled: true
+        },
+        bot: {
+            compute_unit_limit: 650_000
         },
         wallet: {}
     };
