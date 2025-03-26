@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { updateIfNotExistsAndGet, getRaydiumPair} = require("./solanaUtils");
 const TOML = require('@iarna/toml');
+const {PRIMARY_IP} = require("./constants");
 
 async function generateMevConfig(targetDir, tokensDirPath, config) {
     console.log(`generateMevParams: ${targetDir} | ${tokensDirPath} | ${JSON.stringify(config, null, 2)}`);
