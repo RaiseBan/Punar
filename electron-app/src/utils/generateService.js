@@ -80,7 +80,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
             skip_preflight: true
         },
         jito: {
-            enabled: useJito,
+            enabled: config.useJito,
             block_engine_urls: [
                 "http://localhost:8082/jitoNY/api/v1",
                 "http://localhost:8082/jitoTOKIO/api/v1",
