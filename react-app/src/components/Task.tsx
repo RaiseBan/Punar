@@ -385,22 +385,70 @@ export default function Task({
                     </Box>
 
                     {/* Таблица (2 строки если tableCollapsed=true) */}
-                    <Box sx={{width: "100%", marginTop: "10px", overflowX: "auto"}}>
-                        <Table sx={{minWidth: 500}}>
+                    <Box sx={{ 
+                        width: "100%", 
+                        marginTop: "10px", 
+                        overflowX: "auto",
+                        '&::-webkit-scrollbar': {
+                            height: '8px',
+                        },
+                        '&::-webkit-scrollbar-track': {
+                            background: '#1E1E1E',
+                            borderRadius: '4px',
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                            background: '#666',
+                            borderRadius: '4px',
+                            '&:hover': {
+                                background: '#888',
+                            },
+                        },
+                    }}>
+                        <Table 
+                            sx={{
+                                minWidth: 500,
+                                tableLayout: 'fixed',
+                                '& .MuiTableCell-root': {
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    maxWidth: '200px', // Максимальная ширина для обычных ячеек
+                                },
+                                '& .MuiTableCell-head': {
+                                    backgroundColor: '#1E1E1E',
+                                    color: '#ff9e44',
+                                    fontWeight: 'bold',
+                                    borderBottom: '1px solid #2A2A2A',
+                                },
+                                '& .MuiTableCell-body': {
+                                    color: '#fff',
+                                    borderBottom: '1px solid #2A2A2A',
+                                },
+                            }}
+                        >
                             <TableHead>
                                 <TableRow>
                                     {finalColumns.map((col, i) => (
                                         <TableCell
                                             key={i}
-                                            sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
+                                            sx={{
+                                                // Специальные стили для определенных столбцов
+                                                ...(col.toLowerCase().includes('address') && { minWidth: '300px' }),
+                                                ...(col.toLowerCase().includes('name') && { minWidth: '150px' }),
+                                                ...(col.toLowerCase().includes('volume') && { minWidth: '120px' }),
+                                                ...(col.toLowerCase().includes('price') && { minWidth: '100px' }),
+                                                ...(col.toLowerCase().includes('action') && { width: '120px' }),
+                                            }}
                                         >
                                             {col}
                                         </TableCell>
                                     ))}
-                                    {/* Добавляем столбец с кнопками только для MEV Module в ручном режиме */}
                                     {isMEVManualMode && (
                                         <TableCell
-                                            sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
+                                            sx={{
+                                                width: '120px',
+                                                minWidth: '120px',
+                                            }}
                                         >
                                             Actions
                                         </TableCell>
@@ -409,18 +457,35 @@ export default function Task({
                             </TableHead>
                             <TableBody>
                                 {displayedData.map((row, rowIndex) => (
-                                    <TableRow key={rowIndex}>
+                                    <TableRow 
+                                        key={rowIndex}
+                                        sx={{
+                                            '&:hover': {
+                                                backgroundColor: '#1A1A1A',
+                                            },
+                                        }}
+                                    >
                                         {row.cells.map((cell, cellIndex) => (
                                             <TableCell
                                                 key={cellIndex}
-                                                sx={{ color: "#fff", borderBottom: "1px solid #2A2A2A" }}
+                                                sx={{
+                                                    // Специальные стили для определенных столбцов
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('address') && { minWidth: '300px' }),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('name') && { minWidth: '150px' }),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('volume') && { minWidth: '120px' }),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('price') && { minWidth: '100px' }),
+                                                }}
                                             >
                                                 {cell}
                                             </TableCell>
                                         ))}
-                                        {/* Добавляем кнопки Run и Delete только для MEV Module в ручном режиме */}
                                         {isMEVManualMode && (
-                                            <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
+                                            <TableCell 
+                                                sx={{ 
+                                                    width: '120px',
+                                                    minWidth: '120px',
+                                                }}
+                                            >
                                                 <Box sx={{ display: "flex", gap: 1 }}>
                                                     <Button
                                                         variant="contained"
@@ -434,7 +499,8 @@ export default function Task({
                                                             "&:hover": { bgcolor: "#00e676" },
                                                             color: "white",
                                                             px: 1.5,
-                                                            py: 0.5
+                                                            py: 0.5,
+                                                            minWidth: '45px',
                                                         }}
                                                     >
                                                         Run
@@ -448,10 +514,11 @@ export default function Task({
                                                             "&:hover": { bgcolor: "#ff5252" },
                                                             color: "white",
                                                             px: 1.5,
-                                                            py: 0.5
+                                                            py: 0.5,
+                                                            minWidth: '45px',
                                                         }}
                                                     >
-                                                        Delete
+                                                        Del
                                                     </Button>
                                                 </Box>
                                             </TableCell>

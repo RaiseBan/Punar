@@ -75,7 +75,7 @@ export const MODULES: ModuleItem[] = [
 export const COLS_NAMES: Map<string, string[]> = new Map([
     ["Tensor sniper (SDK)", ["NFT name", "price", "seller", "buyer"]],
     ["Tensor reprice", ["NFT name", "price", "seller", "buyer"]],
-    ["MEV Module", ["TOKEN", "CHANGES", "VOL_CH", "PS_VOL", "MET_VOL, MET_LIQ", " "]],
+    ["MEV Module", ["TOKEN", "CHANGES", "VOL_CH", "PS_VOL", "MET_VOL", "MET_LIQ", " "]],
 ]);
 
 export const JITO_REGIONS = [
