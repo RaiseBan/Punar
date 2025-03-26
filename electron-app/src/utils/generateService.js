@@ -38,7 +38,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
         mint_config_list = [
             {
                 mint: tokenConfig.token_address,
-                raydium_pool: raydiumPair,
+                raydium_pool: [raydiumPair],
                 meteora_dlmm_pool_list: [],
                 process_delay: 300
             }
@@ -53,7 +53,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
         mint_config_list = [
             {
                 mint: tokenConfig.token_address,
-                pump_pool_list: pumpPairs,
+                pump_pool_list: [pumpPairs],
                 meteora_dlmm_pool_list:[],
                 process_delay: 300
             }
