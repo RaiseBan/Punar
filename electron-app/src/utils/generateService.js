@@ -1,8 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const { updateIfNotExistsAndGet, getRaydiumPair} = require("./solanaUtils");
+const { updateIfNotExistsAndGet, getRaydiumPair, getFilteredPairs} = require("./solanaUtils");
 const TOML = require('@iarna/toml');
-const {PRIMARY_IP} = require("./constants");
+const {PRIMARY_IP, RAYDIUM_OWNER, METEORA_OWNER} = require("./constants");
 
 async function generateMevConfig(targetDir, tokensDirPath, config) {
     console.log(`generateMevParams: ${targetDir} | ${tokensDirPath} | ${JSON.stringify(config, null, 2)}`);
@@ -28,7 +28,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     // const raydiumPair = tokenConfig.raydium_pairs[0];
     let mint_config_list = [];
     if (config.strategy === "raydium"){
-        const raydiumPair = await getRaydiumPair(config.main_rpc, tokenConfig.raydium_pairs)
+        const raydiumPair = await getFilteredPairs(config.main_rpc, tokenConfig.raydium_pairs, RAYDIUM_OWNER);
 
         if (!raydiumPair){
             console.log(`correct raydium pair not found`);
@@ -108,6 +108,14 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
 
     // Добавляем meteora_pairs в зависимости от их количества
     console.log(meteoraPairs.length)
+
+    const filteredMeteoraPairs = await getFilteredPairs(config.main_rpc, meteoraPairs, METEORA_OWNER);
+
+    if (!filteredMeteoraPairs) {
+        console.log(`Meteora pairs with owner ${METEORA_OWNER} not found`);
+        return;
+    }
+
     if (meteoraPairs.length === 1) {
         // Если не больше 1 пары, добавляем их в список
         mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [...meteoraPairs];

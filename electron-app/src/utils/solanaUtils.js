@@ -354,18 +354,20 @@ async function sendTx(connection, ixs, signer){
     }
 }
 
-async function getRaydiumPair(rpcUrl, pairs){
+async function getFilteredPairs(rpcUrl, pairs, filter){
     const connection = new Connection(rpcUrl);
     for (const pair of pairs){
         const res = await connection.getAccountInfo(new PublicKey(pair));
         // console.log(JSON.stringify(res, null, 2));
         const owner = res.owner;
         console.log(owner);
-        if (owner.toString() === RAYDIUM_OWNER){
+        if (owner.toString() === filter){
             return owner.toString();
         }
     }
 }
+
+
 
 // async function getPumpPair(rpcUrl, pairs){
 //     const connection = new Connection(rpcUrl);
@@ -400,4 +402,4 @@ function sleep(ms) {
 // })()
 
 
-module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getRaydiumPair}
+module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getFilteredPairs}
