@@ -1,8 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const { updateIfNotExistsAndGet, getRaydiumPair, getFilteredPairs} = require("./solanaUtils");
+const {updateIfNotExistsAndGet, getRaydiumPair, getFilteredPairs, sortPairsByParameter} = require("./solanaUtils");
 const TOML = require('@iarna/toml');
-const {PRIMARY_IP, RAYDIUM_OWNER, METEORA_OWNER} = require("./constants");
+const {PRIMARY_IP, RAYDIUM_OWNER, METEORA_OWNER, RAYDIUM_AMM_OWNER, RAYDIUM_CPMM_OWNER} = require("./constants");
 
 async function generateMevConfig(targetDir, tokensDirPath, config) {
     console.log(`generateMevParams: ${targetDir} | ${tokensDirPath} | ${JSON.stringify(config, null, 2)}`);
@@ -23,46 +23,53 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     const meteoraPairs = tokenConfig.meteora_pairs;
     console.log(3);
 
-    
 
     // const raydiumPair = tokenConfig.raydium_pairs[0];
-    let mint_config_list = [];
-    if (config.strategy === "raydium"){
-        const raydiumPair = (await getFilteredPairs(config.main_rpc, tokenConfig.raydium_pairs, RAYDIUM_OWNER))[0];
 
-        if (!raydiumPair){
-            console.log(`correct raydium pair not found`);
-            return;
-        }
 
-        mint_config_list = [
-            {
-                mint: tokenConfig.token_address,
-                raydium_pool: [raydiumPair],
-                meteora_dlmm_pool_list: [],
-                process_delay: 300
-            }
-        ]
-    }else if (config.strategy === "pumpswap"){
-        const pumpPairs = tokenConfig.pump_swap_pairs[0]; // возможно стоит использовать только первую пару
-        if (!pumpPairs){
-            console.log(`ERROR: pumpPairs not found`);
-            return;
-        }
-
-        mint_config_list = [
-            {
-                mint: tokenConfig.token_address,
-                pump_pool_list: [pumpPairs],
-                meteora_dlmm_pool_list:[],
-                process_delay: 300
-            }
-        ]
+    const raydiumPairsAMM = await getFilteredPairs(config.main_rpc, tokenConfig.raydium_pairs, RAYDIUM_AMM_OWNER);
+    if (raydiumPairsAMM.length === 0) {
+        console.log(`[RAYDIUM AMM] no such pools with owner: ${RAYDIUM_AMM_OWNER}`);
     }
 
+    const raydiumPairsCPMM = await getFilteredPairs(config.main_rpc, tokenConfig.raydium_pairs, RAYDIUM_CPMM_OWNER);
+    if (raydiumPairsCPMM.length === 0) {
+        console.log(`[RAYDIUM CPMM] no such pools with owner: ${RAYDIUM_CPMM_OWNER}`);
+    }
 
-    
-    console.log(4);
+    const raydiumPairAMMToUse = (await sortPairsByParameter(config.main_rpc, raydiumPairsAMM, {
+        parameter: 'volume',
+        timeFrame: 'h1',
+        order: 'desc'
+    }))[0].pair;
+
+    const raydiumPairCPMMToUse = (await sortPairsByParameter(config.main_rpc, raydiumPairsCPMM, {
+        parameter: 'volume',
+        timeFrame: "h1",
+        order: 'desc'
+    }))[0].pair;
+
+    const pumpPairs = (await sortPairsByParameter(config.main_rpc, tokenConfig.pump_swap_pairs, {
+        parameter: 'volume',
+        timeFrame: "h1",
+        order: 'desc'
+    }))[0].pair;
+
+    if (!pumpPairs) {
+        console.log(`ERROR: pumpPairs not found`);
+        return;
+    }
+
+    let mint_config_list = [
+        {
+            mint: tokenConfig.token_address,
+            pump_pool_list: [pumpPairs],
+            raydium_pool_list: [raydiumPairAMMToUse],
+            raydium_cp_pool_list: [raydiumPairCPMMToUse],
+            meteora_dlmm_pool_list: [],
+            process_delay: 300
+        }
+    ]
 
     console.log(JSON.stringify(tokenConfig, null, 2));
     console.log(`format...`)
@@ -144,11 +151,11 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
 
     // Создаем директорию, если она не существует
     if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
+        fs.mkdirSync(targetDir, {recursive: true});
     }
 
     // Формируем имя файла и путь для сохранения
-    const tomlFileName = `${tokenConfig.token_address}_${value}.toml`;
+    const tomlFileName = `${tokenConfig.token_address}_${value}_${config.useJito === true ? "jito" : "default"}.toml`;
     const tomlFilePath = path.join(targetDir, tomlFileName);
 
     try {
@@ -166,4 +173,4 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     }
 }
 
-module.exports = { generateMevConfig };
+module.exports = {generateMevConfig};

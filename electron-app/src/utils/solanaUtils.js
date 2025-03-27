@@ -355,31 +355,18 @@ async function sendTx(connection, ixs, signer){
 }
 
 /**
- * @typedef {Object} DexScreenerPair
- * @property {string} chainId - ID сети (например, "solana")
- * @property {string} dexId - ID DEX (например, "raydium", "meteora")
- * @property {string} pairAddress - Адрес пары
- * @property {Object} baseToken - Базовый токен
- * @property {Object} quoteToken - Котируемый токен
- * @property {string} priceUsd - Цена в USD
- * @property {Object} volume - Объемы торгов
- * @property {Object} priceChange - Изменение цены
- * @property {Object} liquidity - Ликвидность
- */
-
-/**
  * @typedef {Object} VolumeFilter
- * @property {number} [h24] - Минимальный объем за 24 часа в USD
- * @property {number} [h6] - Минимальный объем за 6 часов в USD
- * @property {number} [h1] - Минимальный объем за 1 час в USD
- * @property {number} [m5] - Минимальный объем за 5 минут в USD
+ * @property {number} [h24] - Минимальный объем за 24 часа
+ * @property {number} [h6] - Минимальный объем за 6 часов
+ * @property {number} [h1] - Минимальный объем за 1 час
+ * @property {number} [m5] - Минимальный объем за 5 минут
  */
 
 /**
  * @typedef {Object} PriceChangeFilter
- * @property {number} [h1] - Минимальное изменение цены за 1 час в процентах
- * @property {number} [h6] - Минимальное изменение цены за 6 часов в процентах
- * @property {number} [h24] - Минимальное изменение цены за 24 часа в процентах
+ * @property {number} [h1] - Минимальное изменение цены за 1 час
+ * @property {number} [h6] - Минимальное изменение цены за 6 часов
+ * @property {number} [h24] - Минимальное изменение цены за 24 часа
  */
 
 /**
@@ -523,7 +510,97 @@ async function getFilteredPairs(rpcUrl, pairs, filter, dexScreenerFilter = {}) {
     return finalFilteredPairs;
 }
 
+/**
+ * @typedef {'asc' | 'desc'} SortOrder
+ */
 
+/**
+ * @typedef {Object} SortConfig
+ * @property {'volume' | 'priceChange' | 'liquidity'} parameter - Параметр для сортировки
+ * @property {'h24' | 'h6' | 'h1' | 'm5'} timeFrame - Временной интервал для volume и priceChange
+ * @property {'usd' | 'base' | 'quote'} liquidityType - Тип ликвидности (только для параметра liquidity)
+ * @property {SortOrder} order - Порядок сортировки (по возрастанию или убыванию)
+ */
+
+/**
+ * Сортирует массив пар по указанному параметру
+ * @param {string} rpcUrl - URL RPC ноды Solana
+ * @param {string[]} pairs - Массив адресов пар для сортировки
+ * @param {SortConfig} sortConfig - Конфигурация сортировки
+ * @returns {Promise<{pair: string, value: number}[]>} - Отсортированный массив пар с их значениями
+ * 
+ * @example
+ * // Сортировка по объему за 24 часа по убыванию
+ * await sortPairsByParameter(rpcUrl, pairs, {
+ *     parameter: 'volume',
+ *     timeFrame: 'h24',
+ *     order: 'desc'
+ * });
+ * 
+ * @example
+ * // Сортировка по изменению цены за 1 час по возрастанию
+ * await sortPairsByParameter(rpcUrl, pairs, {
+ *     parameter: 'priceChange',
+ *     timeFrame: 'h1',
+ *     order: 'asc'
+ * });
+ * 
+ * @example
+ * // Сортировка по ликвидности в USD по убыванию
+ * await sortPairsByParameter(rpcUrl, pairs, {
+ *     parameter: 'liquidity',
+ *     liquidityType: 'usd',
+ *     order: 'desc'
+ * });
+ */
+async function sortPairsByParameter(rpcUrl, pairs, sortConfig) {
+    const pairsWithValues = [];
+    
+    for (const pair of pairs) {
+        try {
+            const response = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`);
+            const data = await response.json();
+            
+            if (!data.pair) continue;
+            
+            const pairData = data.pair;
+            let value;
+
+            switch (sortConfig.parameter) {
+                case 'volume':
+                    value = pairData.volume[sortConfig.timeFrame];
+                    break;
+                case 'priceChange':
+                    value = pairData.priceChange[sortConfig.timeFrame];
+                    break;
+                case 'liquidity':
+                    value = pairData.liquidity[sortConfig.liquidityType];
+                    break;
+                default:
+                    throw new Error(`Неизвестный параметр сортировки: ${sortConfig.parameter}`);
+            }
+
+            pairsWithValues.push({
+                pair,
+                value: value || 0
+            });
+        } catch (error) {
+            console.error(`Ошибка при получении данных для пары ${pair}:`, error);
+            continue;
+        }
+    }
+
+    // Сортировка массива
+    pairsWithValues.sort((a, b) => {
+        if (sortConfig.order === 'desc') {
+            return b.value - a.value;
+        } else {
+            return a.value - b.value;
+        }
+    });
+
+    return pairsWithValues;
+}
 
 // async function getPumpPair(rpcUrl, pairs){
 //     const connection = new Connection(rpcUrl);
@@ -558,4 +635,4 @@ function sleep(ms) {
 // })()
 
 
-module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getFilteredPairs}
+module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getFilteredPairs, sortPairsByParameter}
