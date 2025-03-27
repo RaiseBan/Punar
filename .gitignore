@@ -34,7 +34,7 @@ react-app/.DS_Store
 # Lock-файлы (если используешь только pnpm, остальные можно удалить)
 yarn.lock
 pnpm-lock.yaml
-package-lock.json
+# package-lock.json
 
 # Logs & Debug
 *.log

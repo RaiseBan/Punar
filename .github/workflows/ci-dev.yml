@@ -19,19 +19,27 @@ jobs:
       with:
         node-version: 16
 
+    - name: Generate lock files
+      run: |
+        cd electron-app && npm install
+        cd ../react-app && npm install
+      # Создаем package-lock.json если его нет
+
     - name: Cache dependencies
       uses: actions/cache@v3
       with:
         path: |
           electron-app/node_modules
           react-app/node_modules
-        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-        
+          electron-app/package-lock.json
+          react-app/package-lock.json
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+
     - name: Install dependencies
       run: |
-        cd electron-app && npm ci
-        cd ../react-app && npm ci
-        
+        cd electron-app && npm ci --production=false
+        cd ../react-app && npm ci --production=false
+
     - name: Build React app
       run: |
         cd react-app && npm run build
