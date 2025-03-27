@@ -43,8 +43,11 @@ jobs:
     - name: Build React app
       run: |
         cd react-app
-        CI=false npm run build  # Отключаем трактование warnings как errors
+        CI=false npm run build
+        ls -la build/  # Проверка содержимого сборки
+        mkdir -p ../electron-app/dist
         cp -r build ../electron-app/dist/react-build
+        ls -la ../electron-app/dist/  # Проверка копирования
         
     - name: Run Electron tests
       run: |
