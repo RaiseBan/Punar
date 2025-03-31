@@ -243,7 +243,7 @@ class TelegramBotService {
 
     async sendTaskNotification(taskData) {
         const { taskId, rowIndex, token, volumeChange, volumeValue } = taskData;
-
+        console.log(`sendTaskNotification: ---start`);
         const message = `🚨 <b>Новая MEV возможность</b>\n\n` +
             `Токен: <code>${token}</code>\n` +
             `Изменение объема: ${volumeChange}\n` +
