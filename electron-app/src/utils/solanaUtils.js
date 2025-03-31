@@ -324,34 +324,56 @@ async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
     }
 }
 
-async function sendTx(connection, ixs, signer){
+async function sendTx(connection, ixs, signer, simulate = false){
     const transaction = new Transaction();
     transaction.add(...ixs);
     transaction.feePayer = signer.publicKey;
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     transaction.sign(signer);
+    
     for (let i = 0; i < 5; i++){
         try {
-            let sig = await connection.sendRawTransaction(transaction.serialize(), {
-                skipPreflight: false,
-                preflightCommitment: "confirmed",
-                maxRetries: 5
-            });
-            console.log(`Waiting for transaction confirmation...`)
-            await Promise.race([
-                connection.confirmTransaction(sig, "confirmed"),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error("Confirmation timeout")), 10000)
-                ),
-            ]);
-            return sig;
-        }catch (e){
-            console.error(`Attempt_${i}: error while sending transaction: ${e}}`);
+            if (simulate) {
+                // Режим симуляции
+                console.log(`Simulating transaction...`);
+                const result = await connection.simulateTransaction(transaction);
+                
+                if (result.value.err) {
+                    throw new Error(`Simulation error: ${result.value.err}`);
+                }
+                
+                console.log(`Simulation successful!`);
+                console.log(`Logs: ${result.value.logs}`);
+                console.log(`Units consumed: ${result.value.unitsConsumed}`);
+                
+                return {
+                    simulation: true,
+                    result: result.value
+                };
+            } else {
+                // Обычный режим отправки
+                let sig = await connection.sendRawTransaction(transaction.serialize(), {
+                    skipPreflight: false,
+                    preflightCommitment: "confirmed",
+                    maxRetries: 5
+                });
+                console.log(`Waiting for transaction confirmation...`)
+                await Promise.race([
+                    connection.confirmTransaction(sig, "confirmed"),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error("Confirmation timeout")), 10000)
+                    ),
+                ]);
+                return sig;
+            }
+        } catch (e) {
+            console.error(`Attempt_${i}: error while ${simulate ? 'simulating' : 'sending'} transaction: ${e}}`);
             if (e instanceof SendTransactionError){
                 console.log(`logs: ${await e.getLogs(connection)}`);
             }
         }
     }
+    throw new Error("Failed to send transaction after 5 attempts");
 }
 
 /**
@@ -635,4 +657,4 @@ function sleep(ms) {
 // })()
 
 
-module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getFilteredPairs, sortPairsByParameter}
+module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getFilteredPairs, sortPairsByParameter, sendTx}

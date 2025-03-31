@@ -12,7 +12,8 @@
     "build": "cross-env NODE_ENV=production npm run react-build && npm run electron-build",
     "react-build": "cd ../react-app && npm run build",
     "electron-build": "electron-builder --win",
-    "clear-cache": "rimraf %LOCALAPPDATA%\\electron-builder\\Cache"
+    "clear-cache": "rimraf %LOCALAPPDATA%\\electron-builder\\Cache",
+    "test": "jest"
   },
   "build": {
     "appId": "com.example.electronapp",
@@ -34,6 +35,7 @@
     }
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^34.2.0",
