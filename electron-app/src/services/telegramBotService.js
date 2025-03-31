@@ -13,6 +13,7 @@ class TelegramBotService {
         this.pollInterval = null;
         this.lastUpdateId = 0;
         this.messageHandlers = new Map();
+        this.isPolling = false;
         this.loadConfig();
     }
 
@@ -20,11 +21,12 @@ class TelegramBotService {
         if (this.isActive) return { success: false };
 
         try {
-            await this.setBotToken(this.botToken);
-            this.startPolling();
             this.isActive = true;
+            this.startPolling();
             return { success: true };
         } catch (err) {
+            console.error('Error starting stream:', err);
+            this.isActive = false;
             return { success: false };
         }
     }
@@ -69,19 +71,20 @@ class TelegramBotService {
     }
 
     async setBotToken(token) {
+        this.stopPolling();
+        
         this.botToken = token;
         this.saveConfig();
-        if (this.botToken) {
-            // First clear any webhooks
+        
+        if (this.botToken && this.isActive) {
             try {
                 await axios.get(`https://api.telegram.org/bot${this.botToken}/deleteWebhook`);
+                this.startPolling();
             } catch (error) {
                 console.error('Error clearing webhook:', error);
             }
-            this.startPolling();
-        } else {
-            this.stopPolling();
         }
+        
         return { success: true };
     }
 
@@ -98,44 +101,68 @@ class TelegramBotService {
     }
 
     async startPolling() {
-        if (this.pollInterval) {
-            clearInterval(this.pollInterval);
+        if (this.isPolling || this.pollInterval) {
+            console.log('Polling already in progress, skipping startPolling call');
+            return;
         }
-
-        // Устанавливаем обновленное значение для lastUpdateId
-        this.getMe().then(result => {
-            // Получаем последние обновления с небольшим лимитом, чтобы узнать последний update_id
-            axios.get(`https://api.telegram.org/bot${this.botToken}/getUpdates`, {
-                params: { limit: 1 }
-            }).then(response => {
-                const updates = response.data.result || [];
-                if (updates.length > 0) {
-                    this.lastUpdateId = updates[updates.length - 1].update_id;
-                }
-                
-                // Начинаем опрос каждые 2 секунды
-                this.pollInterval = setInterval(() => this.getUpdates(), 2000);
+        
+        this.isPolling = true;
+        
+        try {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
+            
+            const me = await this.getMe();
+            if (!me) {
+                console.error('Failed to get bot info, invalid token?');
+                this.isPolling = false;
+                return;
+            }
+            
+            const response = await axios.get(`https://api.telegram.org/bot${this.botToken}/getUpdates`, {
+                params: { limit: 1, timeout: 5 }
             });
-        }).catch(err => {
-            console.error('Ошибка при инициализации бота:', err);
-        });
+            
+            const updates = response.data.result || [];
+            if (updates.length > 0) {
+                this.lastUpdateId = updates[updates.length - 1].update_id;
+            }
+            
+            this.pollInterval = setInterval(() => {
+                this.getUpdates().catch(err => {
+                    console.error('Error in getUpdates:', err.message);
+                });
+            }, 3000);
+            
+            console.log('Polling started successfully');
+        } catch (error) {
+            console.error('Error initializing polling:', error);
+        } finally {
+            this.isPolling = false;
+        }
     }
 
     stopPolling() {
+        this.isPolling = false;
         if (this.pollInterval) {
             clearInterval(this.pollInterval);
             this.pollInterval = null;
+            console.log('Polling stopped');
         }
     }
 
     async getUpdates() {
-        if (!this.botToken || !this.isActive) return;
-
+        if (!this.botToken || !this.isActive || this.isPolling) return;
+        
+        this.isPolling = true;
+        
         try {
             const response = await axios.get(`https://api.telegram.org/bot${this.botToken}/getUpdates`, {
                 params: {
                     offset: this.lastUpdateId + 1,
-                    timeout: 30
+                    timeout: 25
                 }
             });
 
@@ -147,15 +174,12 @@ class TelegramBotService {
                     if (update.message) {
                         const chatId = update.message.chat.id;
 
-                        // Автоматически добавляем чаты из сообщений
                         this.addChatId(chatId.toString());
 
-                        // Обрабатываем команды и сообщения
                         if (update.message.text) {
                             this.handleIncomingMessage(chatId, update.message);
                         }
                     } else if (update.callback_query) {
-                        // Обрабатываем нажатия на кнопки
                         const chatId = update.callback_query.message.chat.id;
                         const callbackData = update.callback_query.data;
 
@@ -166,23 +190,23 @@ class TelegramBotService {
         } catch (error) {
             if (error.response) {
                 console.error(`Telegram API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-
-                // If we get a conflict error, stop and restart polling after a delay
+                
                 if (error.response.status === 409) {
                     console.log('Conflict detected, restarting polling...');
                     this.stopPolling();
-                    setTimeout(() => this.startPolling(), 5000);
+                    
+                    setTimeout(() => {
+                        if (this.isActive) {
+                            console.log('Attempting to restart polling after conflict');
+                            this.startPolling();
+                        }
+                    }, 10000);
                 }
             } else {
                 console.error('Error getting updates:', error.message);
-                // При других ошибках тоже восстанавливаем соединение через некоторое время
-                this.stopPolling();
-                setTimeout(() => {
-                    if (this.isActive) {
-                        this.startPolling();
-                    }
-                }, 10000);
             }
+        } finally {
+            this.isPolling = false;
         }
     }
 
@@ -238,14 +262,12 @@ class TelegramBotService {
             ]
         };
 
-        // Отправляем всем зарегистрированным чатам
         for (const chatId of this.chatIds) {
             await this.sendMessage(chatId, message, { replyMarkup });
         }
     }
 
     handleIncomingMessage(chatId, message) {
-        // Обрабатываем команды
         if (message.text.startsWith('/')) {
             const command = message.text.split(' ')[0].substring(1);
             switch (command) {
@@ -264,7 +286,6 @@ class TelegramBotService {
         if (callbackData.startsWith('run_')) {
             const [_, taskId, rowIndex, strategy] = callbackData.split('_');
 
-            // Обновляем клавиатуру, чтобы показать, что задача запущена
             const newReplyMarkup = {
                 inline_keyboard: [
                     [
@@ -275,7 +296,6 @@ class TelegramBotService {
 
             this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
 
-            // Уведомляем основной процесс о запуске задачи
             if (this.messageHandlers.has('runTask')) {
                 this.messageHandlers.get('runTask')({
                     taskId: parseInt(taskId),
@@ -288,7 +308,6 @@ class TelegramBotService {
         } else if (callbackData.startsWith('delete_')) {
             const [_, taskId, rowIndex] = callbackData.split('_');
 
-            // Обновляем клавиатуру, чтобы показать, что задача удалена
             const newReplyMarkup = {
                 inline_keyboard: [
                     [
@@ -299,7 +318,6 @@ class TelegramBotService {
 
             this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
 
-            // Уведомляем основной процесс об удалении задачи
             if (this.messageHandlers.has('deleteTask')) {
                 this.messageHandlers.get('deleteTask')({
                     taskId: parseInt(taskId),
@@ -338,7 +356,6 @@ class TelegramBotService {
 
 const telegramBotService = new TelegramBotService();
 
-// Настраиваем обработчики IPC
 ipcMain.handle('telegram-bot:set-token', (event, token) => {
     console.log(`telegramBotService.set-token`);
     return telegramBotService.setBotToken(token);
