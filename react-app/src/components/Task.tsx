@@ -267,6 +267,8 @@ export default function Task({
     const isMEVModule = moduleName === "MEV Module";
 
     const isMEVTelegramMode = isMEVModule && config?.mode === "by_telegram_bot";
+    console.log(`isMEVTelegramMode: ${isMEVTelegramMode}`);
+    console.log(`config: ${config}`);
 
     const isMEVManualMode = isMEVModule && (!config?.mode || config?.mode === "manual");
     const isMEVAutomaticMode = isMEVModule && config?.mode === "automatic";

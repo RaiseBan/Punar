@@ -113,7 +113,7 @@ export default function StepConfigureMevModule({
                 >
                     <MenuItem value="manual">Manual</MenuItem>
                     <MenuItem value="automatic">Automatic</MenuItem>
-                    <MenuItem value="by_telegram_bot">Automatic</MenuItem>
+                    <MenuItem value="by_telegram_bot">Telegram</MenuItem>
                 </Select>
             </FormControl>
             {/* Добавлен новый Select для режима работы */}
@@ -124,7 +124,7 @@ export default function StepConfigureMevModule({
                     onChange={(e) => handleParamChange("globalStrategy", e.target.value as "jito_only" | "...")}
                     label="Operation Mode"
                 >
-                    <MenuItem value="jito_only">Manual</MenuItem>
+                    <MenuItem value="jito_only">jito_only</MenuItem>
                     <MenuItem value="automatic">Automatic</MenuItem>
                 </Select>
             </FormControl>
