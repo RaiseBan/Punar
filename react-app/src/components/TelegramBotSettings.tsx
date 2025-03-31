@@ -45,6 +45,7 @@ export default function TelegramSettingsPage() {
                 setIsActive(status.isActive);
             }
         } catch (err) {
+            console.log(err);
             setError("Failed to load settings");
         } finally {
             setLoading(false);
