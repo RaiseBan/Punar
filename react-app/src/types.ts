@@ -67,7 +67,7 @@ export interface MevParams {
     threadWorkers: number;
     walletSource: "existing" | "manual";
     privateKey: string;
-    mode: "manual" | "automatic";
+    mode: "manual" | "automatic" | "by_telegram_bot";
     default_bound: number;
     globalStrategy: string
 }
