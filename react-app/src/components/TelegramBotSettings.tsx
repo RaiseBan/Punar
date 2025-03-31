@@ -35,6 +35,8 @@ export default function TelegramSettingsPage() {
             const config = await window.electronAPI?.getTelegramBotConfig();
             const status = await window.electronAPI?.getTelegramBotStatus();
 
+            console.log(JSON.stringify(config, null, 2), status);
+
             if (config) {
                 setBotToken(config.botToken || "");
                 setChatIds(config.chatIds || []);

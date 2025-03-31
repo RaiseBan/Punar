@@ -340,10 +340,12 @@ const telegramBotService = new TelegramBotService();
 
 // Настраиваем обработчики IPC
 ipcMain.handle('telegram-bot:set-token', (event, token) => {
+    console.log(`telegramBotService.set-token`);
     return telegramBotService.setBotToken(token);
 });
 
 ipcMain.handle('telegram-bot:get-config', (event) => {
+    console.log(`telegramBotService.get-config`);
     return {
         botToken: telegramBotService.botToken,
         chatIds: telegramBotService.chatIds
@@ -351,6 +353,7 @@ ipcMain.handle('telegram-bot:get-config', (event) => {
 });
 
 ipcMain.handle('telegram-bot:send-task', (event, taskData) => {
+    console.log(`telegramBotService.send-task`);
     return telegramBotService.sendTaskNotification(taskData);
 });
 
