@@ -338,7 +338,9 @@ export default function CreateTaskWizard({
                 max_attempts: mevParams.maxAttempts,
                 thread_workers: mevParams.threadWorkers,
                 private_key: mevParams.privateKey,
-                main_rpc: settings?.mainRpc || ""
+                main_rpc: settings?.mainRpc || "",
+                mode: mevParams.mode,
+                globalStrategy: mevParams.globalStrategy
             };
             onCreateTask(cfg);
         }
