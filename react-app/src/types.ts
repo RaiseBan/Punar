@@ -69,6 +69,7 @@ export interface MevParams {
     privateKey: string;
     mode: "manual" | "automatic";
     default_bound: number;
+    globalStrategy: string
 }
 export interface MeteoraParams {
     accounts: string[];

@@ -88,6 +88,9 @@ export default function Task({
 
     const chipColor = statusColorMap[status] || "#ff9e44";
 
+
+
+
     // =======================
     //  ИЗОБРАЖЕНИЕ ДЛЯ TENSOR SDK
     // =======================
@@ -184,58 +187,54 @@ export default function Task({
 
     // Функция для создания новой задачи с тем же конфигом
     const handleRunMEVTask = async (rowIndex: number, strategy: string) => {
-        const taskId1 = Date.now();
-        const taskId2 = Date.now() + 1;
+
         const token = data[rowIndex]?.cells[0] || "";
         const volume_change = data[rowIndex]?.cells[1] || "";
         const volume_value = parseFloat(data[rowIndex]?.cells[2] || "0");
 
-        // Добавляем стратегию в имя задачи
-        const newTaskName1 = `${token}_${volume_change}_${strategy}_jito_subTask_${name}`;
-        const newTaskName2 = `${token}_${volume_change}_${strategy}_no_jito_subTask_${name}`;
+        if (config.globalStrategy === "jito_only") {
+            const settings = await window.electronAPI?.getSettings();
+            const taskCount = 5;
 
-        const settings = await window.electronAPI?.getSettings();
-        
-        // Конфиг для первого процесса (всегда запускается)
-        const newConfig1 = {
-            ...config,
-            module_name: "mev_subtask",
-            task_name: newTaskName1,
-            strategy,
-            rowData: data[rowIndex]?.cells,
-            sourceTaskId: id,
-            additionalRpc: settings?.additionalRpc,
-            useJito: true,
-        };
+            // Структура с параметрами для каждой подзадачи
+            const jitoRanges = [
+                { lower: 10_000, upper: 100_000 },
+                { lower: 100_000, upper: 200_000 },
+                { lower: 200_000, upper: 350_000 },
+                { lower: 350_000, upper: 550_000 },
+                { lower: 550_000, upper: 750_000 } // Изменил последний диапазон, так как он дублировался с предыдущим
+            ];
 
-        // Конфиг для второго процесса (запускается при условии)
-        const newConfig2 = {
-            ...config,
-            module_name: "mev_subtask",
-            task_name: newTaskName2,
-            strategy,
-            rowData: data[rowIndex]?.cells,
-            sourceTaskId: id,
-            additionalRpc: settings?.additionalRpc,
-            useJito: false,
-        };
+            // Создаем и запускаем задачи в цикле
+            for (let i = 0; i < taskCount; i++) {
+                const taskId = Date.now() + i;
+                const taskName = `${token}_${volume_change}_${strategy}_jito_subTask_${name}_${i}`;
 
-        // Запускаем первый процесс всегда
-        dispatch(addOrUpdateTask({
-            taskId: taskId1,
-            config: newConfig1
-        }));
-        window.electronAPI?.startProcess(taskId1, newConfig1);
+                const taskConfig = {
+                    ...config,
+                    module_name: "mev_subtask",
+                    task_name: taskName,
+                    strategy,
+                    rowData: data[rowIndex]?.cells,
+                    sourceTaskId: taskId,
+                    additionalRpc: settings?.additionalRpc,
+                    useJito: true,
+                    jito_lower_bound: jitoRanges[i].lower,
+                    jito_upper_bound: jitoRanges[i].upper
+                };
 
-        // Запускаем второй процесс только если volume_value >= default_bound
-        console.log(`${volume_value} >= ${config.default_bound}`)
-        if (volume_value >= (config?.default_bound || 100_000)) {
-            dispatch(addOrUpdateTask({
-                taskId: taskId2,
-                config: newConfig2
-            }));
-            window.electronAPI?.startProcess(taskId2, newConfig2);
+                dispatch(addOrUpdateTask({
+                    taskId,
+                    config: taskConfig
+                }));
+
+                window.electronAPI?.startProcess(taskId, taskConfig);
+            }
+        }else{
+            console.log("APPROVED")
         }
+
+
     };
 
     // Функция для удаления строки из данных задачи
@@ -266,8 +265,105 @@ export default function Task({
 
     // Проверяем, является ли модуль "MEV Module" и его режим
     const isMEVModule = moduleName === "MEV Module";
+
+    const isMEVTelegramMode = isMEVModule && config?.mode === "by_telegram_bot";
+
     const isMEVManualMode = isMEVModule && (!config?.mode || config?.mode === "manual");
     const isMEVAutomaticMode = isMEVModule && config?.mode === "automatic";
+    const processedRows = useSelector((state: RootState) =>
+        state.tasks.tasks.find(t => t.id === id)?.processedTelegramRows || []
+    );
+
+    useEffect(() => {
+        // Only for MEV module in Telegram bot mode
+        if (isMEVTelegramMode && data.length > 0 && status === "Running") {
+            // Check for new rows to process
+            data.forEach((row, rowIndex) => {
+                // Если строка еще не была обработана
+                if (!processedRows.includes(rowIndex.toString())) {
+                    const token = row.cells[0] || "";
+                    const volumeChange = row.cells[1] || "";
+                    const volumeValue = parseFloat(row.cells[2] || "0");
+
+                    // Отправляем в Telegram бот через Electron IPC
+                    window.electronAPI?.sendTelegramTask({
+                        taskId: id,
+                        rowIndex: rowIndex,
+                        token,
+                        volumeChange,
+                        volumeValue
+                    }).then(() => {
+                        console.log(`Task ${id}, row ${rowIndex} sent to Telegram`);
+
+                        // Помечаем как обработанную
+                        dispatch(
+                            updateTask({
+                                id,
+                                processedTelegramRows: [...processedRows, rowIndex.toString()],
+                                logs: [...logs, `Row ${rowIndex} sent to Telegram: ${token}`]
+                            })
+                        );
+                    }).catch(err => {
+                        console.error("Error sending task to Telegram:", err);
+                        dispatch(
+                            updateTask({
+                                id,
+                                logs: [...logs, `ERROR: Failed to send row ${rowIndex} to Telegram: ${err.message}`]
+                            })
+                        );
+                    });
+                }
+            });
+        }
+    }, [data, isMEVTelegramMode, processedRows, status]);
+
+    useEffect(() => {
+        if (isMEVTelegramMode && status === "Running") {
+            // Check if we have a bot token configured
+            window.electronAPI?.getTelegramBotConfig().then(config => {
+                if (!config || !config.botToken) {
+                    // No bot token configured, show a message or open settings
+                    console.warn("Telegram bot is not configured. Please set up the bot token.");
+                    dispatch(
+                        updateTask({
+                            id,
+                            logs: [...logs, "WARNING: Telegram bot is not configured. Please set up the bot token."]
+                        })
+                    );
+                }
+            }).catch(err => {
+                console.error("Error checking Telegram bot config:", err);
+            });
+        }
+    }, [isMEVTelegramMode, status]);
+
+    
+    // Добавьте этот useEffect для обработки команд от Telegram бота
+    useEffect(() => {
+        if (!window.electronAPI) return;
+
+        const runTaskHandler = (event: any, { taskId: telegramTaskId, rowIndex, strategy }: {taskId: number, rowIndex: number, strategy: string}) => {
+            if (telegramTaskId === id && rowIndex !== undefined) {
+                handleRunMEVTask(rowIndex, strategy);
+            }
+        };
+
+        const deleteTaskHandler = (event: any, { taskId: telegramTaskId, rowIndex }: {taskId: number, rowIndex: number}) => {
+            if (telegramTaskId === id && rowIndex !== undefined) {
+                handleDeleteMEVRow(rowIndex);
+            }
+        };
+
+        // Регистрируем слушателей событий
+        window.electronAPI.onTelegramRunTask(runTaskHandler);
+        window.electronAPI.onTelegramDeleteTask(deleteTaskHandler);
+
+        return () => {
+            // Добавляем проверку на undefined
+            window.electronAPI?.removeListener('telegram-bot:run-task', runTaskHandler);
+            window.electronAPI?.removeListener('telegram-bot:delete-task', deleteTaskHandler);
+        };
+    }, [id]);
 
     // Автоматически запускать задачи в автоматическом режиме
     useEffect(() => {
@@ -276,7 +372,7 @@ export default function Task({
             // Можно добавить дополнительную логику здесь для отслеживания новых строк
             const lastRowIndex = data.length - 1;
             const strategy = "pumpswap"; // Используем pumpswap по умолчанию для автоматического режима
-            
+
             // Запускаем задачу для последней строки
             handleRunMEVTask(lastRowIndex, strategy);
         }
@@ -306,7 +402,7 @@ export default function Task({
 
             // Если значения числовые
             if (!isNaN(Number(aValue)) && !isNaN(Number(bValue))) {
-                return order === 'asc' 
+                return order === 'asc'
                     ? Number(aValue) - Number(bValue)
                     : Number(bValue) - Number(aValue);
             }
@@ -384,6 +480,16 @@ export default function Task({
                                     fontWeight: "bold",
                                 }}
                             />
+                            {isMEVTelegramMode && (
+                                <Chip
+                                    label="Telegram Bot"
+                                    sx={{
+                                        backgroundColor: "#2196f3",
+                                        color: "#fff",
+                                        fontWeight: "bold",
+                                    }}
+                                />
+                            )}
                             {/* Иконки действий */}
                             <Box sx={{display: "flex", gap: 1}}>
                                 <IconButton sx={{color: "#fff"}} onClick={toggleTable}>
@@ -426,9 +532,9 @@ export default function Task({
                     </Box>
 
                     {/* Таблица (2 строки если tableCollapsed=true) */}
-                    <Box sx={{ 
-                        width: "100%", 
-                        marginTop: "10px", 
+                    <Box sx={{
+                        width: "100%",
+                        marginTop: "10px",
                         overflowX: "auto",
                         '&::-webkit-scrollbar': {
                             height: '8px',
@@ -445,7 +551,7 @@ export default function Task({
                             },
                         },
                     }}>
-                        <Table 
+                        <Table
                             sx={{
                                 minWidth: 500,
                                 tableLayout: 'fixed',
@@ -474,11 +580,11 @@ export default function Task({
                                             key={i}
                                             sx={{
                                                 // Специальные стили для определенных столбцов
-                                                ...(col.toLowerCase().includes('address') && { minWidth: '300px' }),
-                                                ...(col.toLowerCase().includes('name') && { minWidth: '150px' }),
-                                                ...(col.toLowerCase().includes('volume') && { minWidth: '120px' }),
-                                                ...(col.toLowerCase().includes('price') && { minWidth: '100px' }),
-                                                ...(col.toLowerCase().includes('action') && { width: '120px' }),
+                                                ...(col.toLowerCase().includes('address') && {minWidth: '300px'}),
+                                                ...(col.toLowerCase().includes('name') && {minWidth: '150px'}),
+                                                ...(col.toLowerCase().includes('volume') && {minWidth: '120px'}),
+                                                ...(col.toLowerCase().includes('price') && {minWidth: '100px'}),
+                                                ...(col.toLowerCase().includes('action') && {width: '120px'}),
                                             }}
                                         >
                                             <TableSortLabel
@@ -513,7 +619,7 @@ export default function Task({
                             </TableHead>
                             <TableBody>
                                 {sortedData.map((row, rowIndex) => (
-                                    <TableRow 
+                                    <TableRow
                                         key={rowIndex}
                                         sx={{
                                             '&:hover': {
@@ -525,35 +631,33 @@ export default function Task({
                                             <TableCell
                                                 key={cellIndex}
                                                 sx={{
-                                                    ...(finalColumns[cellIndex].toLowerCase().includes('address') && { minWidth: '300px' }),
-                                                    ...(finalColumns[cellIndex].toLowerCase().includes('name') && { minWidth: '150px' }),
-                                                    ...(finalColumns[cellIndex].toLowerCase().includes('volume') && { minWidth: '120px' }),
-                                                    ...(finalColumns[cellIndex].toLowerCase().includes('price') && { minWidth: '100px' }),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('address') && {minWidth: '300px'}),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('name') && {minWidth: '150px'}),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('volume') && {minWidth: '120px'}),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('price') && {minWidth: '100px'}),
                                                 }}
                                             >
                                                 {cell}
                                             </TableCell>
                                         ))}
                                         {isMEVManualMode && (
-                                            <TableCell 
-                                                sx={{ 
+                                            <TableCell
+                                                sx={{
                                                     width: '120px',
                                                     minWidth: '120px',
                                                 }}
                                             >
-                                                <Box sx={{ display: "flex", gap: 1 }}>
+                                                <Box sx={{display: "flex", gap: 1}}>
                                                     <Button
                                                         variant="contained"
                                                         size="small"
                                                         onClick={() => {
-                                                            if (row.originalIndex !== undefined) {
-                                                                setSelectedRowIndex(row.originalIndex);
-                                                                setShowRunDialog(true);
-                                                            }
+                                                            setSelectedRowIndex(rowIndex);
+                                                            setShowRunDialog(true);
                                                         }}
                                                         sx={{
                                                             bgcolor: "#00c853",
-                                                            "&:hover": { bgcolor: "#00e676" },
+                                                            "&:hover": {bgcolor: "#00e676"},
                                                             color: "white",
                                                             px: 1.5,
                                                             py: 0.5,
@@ -565,14 +669,10 @@ export default function Task({
                                                     <Button
                                                         variant="contained"
                                                         size="small"
-                                                        onClick={() => {
-                                                            if (row.originalIndex !== undefined) {
-                                                                handleDeleteMEVRow(row.originalIndex);
-                                                            }
-                                                        }}
+                                                        onClick={() => handleDeleteMEVRow(rowIndex)}
                                                         sx={{
                                                             bgcolor: "#f44336",
-                                                            "&:hover": { bgcolor: "#ff5252" },
+                                                            "&:hover": {bgcolor: "#ff5252"},
                                                             color: "white",
                                                             px: 1.5,
                                                             py: 0.5,
@@ -582,6 +682,20 @@ export default function Task({
                                                         Del
                                                     </Button>
                                                 </Box>
+                                            </TableCell>
+                                        )}
+
+
+                                        {isMEVTelegramMode && (
+                                            <TableCell
+                                                sx={{
+                                                    width: '120px',
+                                                    minWidth: '120px',
+                                                }}
+                                            >
+                                                <Typography variant="caption" sx={{ color: "#2196f3" }}>
+                                                    В Telegram
+                                                </Typography>
                                             </TableCell>
                                         )}
                                     </TableRow>
@@ -677,15 +791,15 @@ export default function Task({
                                         {row.cells.map((cell, cellIndex) => (
                                             <TableCell
                                                 key={cellIndex}
-                                                sx={{ color: "#fff", borderBottom: "1px solid #2A2A2A" }}
+                                                sx={{color: "#fff", borderBottom: "1px solid #2A2A2A"}}
                                             >
                                                 {cell}
                                             </TableCell>
                                         ))}
                                         {/* Добавляем кнопки Run и Delete только для MEV Module в ручном режиме */}
                                         {isMEVManualMode && (
-                                            <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
-                                                <Box sx={{ display: "flex", gap: 1 }}>
+                                            <TableCell sx={{borderBottom: "1px solid #2A2A2A"}}>
+                                                <Box sx={{display: "flex", gap: 1}}>
                                                     <Button
                                                         variant="contained"
                                                         size="small"
@@ -697,7 +811,7 @@ export default function Task({
                                                         }}
                                                         sx={{
                                                             bgcolor: "#00c853",
-                                                            "&:hover": { bgcolor: "#00e676" },
+                                                            "&:hover": {bgcolor: "#00e676"},
                                                             color: "white",
                                                             px: 1.5,
                                                             py: 0.5
@@ -715,7 +829,7 @@ export default function Task({
                                                         }}
                                                         sx={{
                                                             bgcolor: "#f44336",
-                                                            "&:hover": { bgcolor: "#ff5252" },
+                                                            "&:hover": {bgcolor: "#ff5252"},
                                                             color: "white",
                                                             px: 1.5,
                                                             py: 0.5
@@ -765,14 +879,14 @@ export default function Task({
                 fullWidth
             >
                 <DialogTitle>Select Strategy</DialogTitle>
-                <DialogContent sx={{ pt: 3 }}>
+                <DialogContent sx={{pt: 3}}>
                     <FormControl fullWidth>
                         <InputLabel>Strategy</InputLabel>
                         <Select
                             value={selectedOption}
                             onChange={(e) => setSelectedOption(e.target.value)}
                             label="Strategy"
-                            sx={{ mb: 2 }}
+                            sx={{mb: 2}}
                         >
                             <MenuItem value="raydium">raydium</MenuItem>
                             <MenuItem value="pumpswap">pumpswap</MenuItem>

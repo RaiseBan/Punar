@@ -12,6 +12,7 @@ import Tools from "./components/Tools";
 import ConfigManager from "./components/ConfigManager";
 import Statistic from "./components/Statistic";
 import TxHistorySearch from "./components/TransactionHistory";
+import TelegramBotSettings from "./components/TelegramBotSettings";
 
 const darkTheme = createTheme({
     palette: {
@@ -68,6 +69,7 @@ function Layout() {
                             <Route path="/wallets" element={<Wallets />} />
                             <Route path="/scriptConfigs" element={<ConfigManager />} />
                             <Route path="/settings" element={<Settings />} />
+                            <Route path="/telegram" element={<TelegramBotSettings />} />
                             <Route path="/tools" element={<Tools />} />
                             <Route path="/statistic" element={<Statistic />} />
                             <Route path="/lag" element={<TxHistorySearch />} />

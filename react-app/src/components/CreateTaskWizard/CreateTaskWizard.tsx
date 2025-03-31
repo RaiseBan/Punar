@@ -75,6 +75,7 @@ export default function CreateTaskWizard({
         privateKey: "",
         mode: "manual",
         default_bound: 500,
+        globalStrategy: "jito_only"
     });
 
 

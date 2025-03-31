@@ -26,6 +26,7 @@ const menuItems = [
     { text: "Config", path: "/scriptConfigs", icon: <SettingsInputAntennaIcon /> },
     { text: "Tools", path: "/tools", icon: <BuildIcon /> },
     { text: "Settings", path: "/settings", icon: <SettingsIcon /> },
+    { text: "Settings-telegram", path: "/telegram", icon: <SettingsIcon /> },
     { text: "Statistic", path: "/statistic", icon: <TrendingUpIcon /> },
     { text: "TxHistory", path: "/lag", icon: <ManageHistoryIcon /> },
 ];

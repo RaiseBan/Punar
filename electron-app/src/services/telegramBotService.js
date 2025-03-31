@@ -1,0 +1,357 @@
+// electron/services/telegramBotService.js
+const axios = require('axios');
+const { app, ipcMain } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const {getGlobalConfigDirectory} = require("../utils/wallet");
+
+class TelegramBotService {
+    constructor() {
+        this.isActive = false;
+        this.botToken = '';
+        this.chatIds = [];
+        this.pollInterval = null;
+        this.lastUpdateId = 0;
+        this.messageHandlers = new Map();
+        this.loadConfig();
+    }
+
+    async startStream() {
+        if (this.isActive) return { success: false };
+
+        try {
+            await this.setBotToken(this.botToken);
+            this.startPolling();
+            this.isActive = true;
+            return { success: true };
+        } catch (err) {
+            return { success: false };
+        }
+    }
+
+    async stopStream() {
+        this.stopPolling();
+        this.isActive = false;
+        return { success: true };
+    }
+
+    getStatus() {
+        return {
+            isActive: this.isActive,
+            lastActivity: new Date().toISOString()
+        };
+    }
+
+
+    loadConfig() {
+        try {
+            const configPath = path.join(getGlobalConfigDirectory(), 'telegram-bot-config.json');
+            if (fs.existsSync(configPath)) {
+                const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                this.botToken = config.botToken || '';
+                this.chatIds = config.chatIds || [];
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки конфигурации Telegram бота:', error);
+        }
+    }
+
+    saveConfig() {
+        try {
+            const configPath = path.join(getGlobalConfigDirectory(), 'telegram-bot-config.json');
+            fs.writeFileSync(configPath, JSON.stringify({
+                botToken: this.botToken,
+                chatIds: this.chatIds
+            }));
+        } catch (error) {
+            console.error('Ошибка сохранения конфигурации Telegram бота:', error);
+        }
+    }
+
+    async setBotToken(token) {
+        this.botToken = token;
+        this.saveConfig();
+        if (this.botToken) {
+            // First clear any webhooks
+            try {
+                await axios.get(`https://api.telegram.org/bot${this.botToken}/deleteWebhook`);
+            } catch (error) {
+                console.error('Error clearing webhook:', error);
+            }
+            this.startPolling();
+        } else {
+            this.stopPolling();
+        }
+        return { success: true };
+    }
+
+    addChatId(chatId) {
+        if (!this.chatIds.includes(chatId)) {
+            this.chatIds.push(chatId);
+            this.saveConfig();
+        }
+    }
+
+    removeChatId(chatId) {
+        this.chatIds = this.chatIds.filter(id => id !== chatId);
+        this.saveConfig();
+    }
+
+    async startPolling() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+        }
+
+        // Устанавливаем обновленное значение для lastUpdateId
+        this.getMe().then(result => {
+            // Получаем последние обновления с небольшим лимитом, чтобы узнать последний update_id
+            axios.get(`https://api.telegram.org/bot${this.botToken}/getUpdates`, {
+                params: { limit: 1 }
+            }).then(response => {
+                const updates = response.data.result || [];
+                if (updates.length > 0) {
+                    this.lastUpdateId = updates[updates.length - 1].update_id;
+                }
+                
+                // Начинаем опрос каждые 2 секунды
+                this.pollInterval = setInterval(() => this.getUpdates(), 2000);
+            });
+        }).catch(err => {
+            console.error('Ошибка при инициализации бота:', err);
+        });
+    }
+
+    stopPolling() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
+    }
+
+    async getUpdates() {
+        if (!this.botToken || !this.isActive) return;
+
+        try {
+            const response = await axios.get(`https://api.telegram.org/bot${this.botToken}/getUpdates`, {
+                params: {
+                    offset: this.lastUpdateId + 1,
+                    timeout: 30
+                }
+            });
+
+            const updates = response.data.result || [];
+            if (updates.length > 0) {
+                this.lastUpdateId = updates[updates.length - 1].update_id;
+
+                updates.forEach(update => {
+                    if (update.message) {
+                        const chatId = update.message.chat.id;
+
+                        // Автоматически добавляем чаты из сообщений
+                        this.addChatId(chatId.toString());
+
+                        // Обрабатываем команды и сообщения
+                        if (update.message.text) {
+                            this.handleIncomingMessage(chatId, update.message);
+                        }
+                    } else if (update.callback_query) {
+                        // Обрабатываем нажатия на кнопки
+                        const chatId = update.callback_query.message.chat.id;
+                        const callbackData = update.callback_query.data;
+
+                        this.handleCallbackQuery(chatId, callbackData, update.callback_query.message.message_id);
+                    }
+                });
+            }
+        } catch (error) {
+            if (error.response) {
+                console.error(`Telegram API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+
+                // If we get a conflict error, stop and restart polling after a delay
+                if (error.response.status === 409) {
+                    console.log('Conflict detected, restarting polling...');
+                    this.stopPolling();
+                    setTimeout(() => this.startPolling(), 5000);
+                }
+            } else {
+                console.error('Error getting updates:', error.message);
+                // При других ошибках тоже восстанавливаем соединение через некоторое время
+                this.stopPolling();
+                setTimeout(() => {
+                    if (this.isActive) {
+                        this.startPolling();
+                    }
+                }, 10000);
+            }
+        }
+    }
+
+    async sendMessage(chatId, text, options = {}) {
+        if (!this.botToken) return;
+
+        try {
+            const response = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
+                chat_id: chatId,
+                text,
+                parse_mode: options.parseMode || 'HTML',
+                reply_markup: options.replyMarkup
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Ошибка отправки сообщения Telegram:', error.message);
+        }
+    }
+
+    async editMessageReplyMarkup(chatId, messageId, replyMarkup) {
+        if (!this.botToken) return;
+
+        try {
+            const response = await axios.post(`https://api.telegram.org/bot${this.botToken}/editMessageReplyMarkup`, {
+                chat_id: chatId,
+                message_id: messageId,
+                reply_markup: replyMarkup
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Ошибка обновления клавиатуры сообщения:', error.message);
+        }
+    }
+
+    async sendTaskNotification(taskData) {
+        const { taskId, rowIndex, token, volumeChange, volumeValue } = taskData;
+
+        const message = `🚨 <b>Новая MEV возможность</b>\n\n` +
+            `Токен: <code>${token}</code>\n` +
+            `Изменение объема: ${volumeChange}\n` +
+            `Значение объема: ${volumeValue}\n\n` +
+            `Что хотите сделать?`;
+
+        const replyMarkup = {
+            inline_keyboard: [
+                [
+                    { text: "Запустить - Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium` },
+                    { text: "Запустить - PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap` }
+                ],
+                [
+                    { text: "Игнорировать/Удалить", callback_data: `delete_${taskId}_${rowIndex}` }
+                ]
+            ]
+        };
+
+        // Отправляем всем зарегистрированным чатам
+        for (const chatId of this.chatIds) {
+            await this.sendMessage(chatId, message, { replyMarkup });
+        }
+    }
+
+    handleIncomingMessage(chatId, message) {
+        // Обрабатываем команды
+        if (message.text.startsWith('/')) {
+            const command = message.text.split(' ')[0].substring(1);
+            switch (command) {
+                case 'start':
+                    this.sendMessage(chatId, 'Добро пожаловать в MEV бот! Вы будете получать уведомления о новых MEV возможностях.');
+                    break;
+                case 'help':
+                    this.sendMessage(chatId, 'Команды:\n/start - Запустить бота\n/help - Показать это сообщение');
+                    break;
+            }
+            return;
+        }
+    }
+
+    handleCallbackQuery(chatId, callbackData, messageId) {
+        if (callbackData.startsWith('run_')) {
+            const [_, taskId, rowIndex, strategy] = callbackData.split('_');
+
+            // Обновляем клавиатуру, чтобы показать, что задача запущена
+            const newReplyMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: "✅ Задача запущена", callback_data: "noop" }
+                    ]
+                ]
+            };
+
+            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
+
+            // Уведомляем основной процесс о запуске задачи
+            if (this.messageHandlers.has('runTask')) {
+                this.messageHandlers.get('runTask')({
+                    taskId: parseInt(taskId),
+                    rowIndex: parseInt(rowIndex),
+                    strategy
+                });
+            }
+
+            this.sendMessage(chatId, `Задача ${taskId} запущена со стратегией ${strategy}.`);
+        } else if (callbackData.startsWith('delete_')) {
+            const [_, taskId, rowIndex] = callbackData.split('_');
+
+            // Обновляем клавиатуру, чтобы показать, что задача удалена
+            const newReplyMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: "❌ Удалено", callback_data: "noop" }
+                    ]
+                ]
+            };
+
+            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
+
+            // Уведомляем основной процесс об удалении задачи
+            if (this.messageHandlers.has('deleteTask')) {
+                this.messageHandlers.get('deleteTask')({
+                    taskId: parseInt(taskId),
+                    rowIndex: parseInt(rowIndex)
+                });
+            }
+
+            this.sendMessage(chatId, `Строка удалена из задачи ${taskId}.`);
+        }
+    }
+
+    registerHandler(event, handler) {
+        this.messageHandlers.set(event, handler);
+    }
+
+    onTaskRun(handler) {
+        this.registerHandler('runTask', handler);
+    }
+
+    onTaskDelete(handler) {
+        this.registerHandler('deleteTask', handler);
+    }
+
+    async getMe() {
+        if (!this.botToken) return null;
+        
+        try {
+            const response = await axios.get(`https://api.telegram.org/bot${this.botToken}/getMe`);
+            return response.data.result;
+        } catch (error) {
+            console.error('Ошибка при получении информации о боте:', error);
+            return null;
+        }
+    }
+}
+
+const telegramBotService = new TelegramBotService();
+
+// Настраиваем обработчики IPC
+ipcMain.handle('telegram-bot:set-token', (event, token) => {
+    return telegramBotService.setBotToken(token);
+});
+
+ipcMain.handle('telegram-bot:get-config', (event) => {
+    return {
+        botToken: telegramBotService.botToken,
+        chatIds: telegramBotService.chatIds
+    };
+});
+
+ipcMain.handle('telegram-bot:send-task', (event, taskData) => {
+    return telegramBotService.sendTaskNotification(taskData);
+});
+
+module.exports = telegramBotService;

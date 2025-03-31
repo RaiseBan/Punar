@@ -6,6 +6,8 @@ const { initializeConfigHandlers } = require("./ipcHandlers/configHandler");
 const { initializeWindowHandlers } = require("./ipcHandlers/windowHandler");
 const {initializeApiHandlers} = require("./ipcHandlers/tensorApiHandler");
 
+const telegramBotService = require('./services/telegramBotService');
+
 let mainWindow;
 
 function createWindow() {
@@ -45,6 +47,15 @@ app.whenReady().then(() => {
   initializeConfigHandlers(ipcMain);
   initializeWindowHandlers(ipcMain, mainWindow);
   initializeApiHandlers(ipcMain);
+
+  telegramBotService.onTaskRun(({ taskId, strategy }) => {
+    // Find the corresponding window and send a message to the renderer
+    mainWindow.webContents.send('telegram-bot:run-task', { taskId, strategy });
+  });
+
+  telegramBotService.onTaskDelete(({ taskId }) => {
+    mainWindow.webContents.send('telegram-bot:delete-task', { taskId });
+  });
 });
 
 app.commandLine.appendSwitch("ignore-certificate-errors");

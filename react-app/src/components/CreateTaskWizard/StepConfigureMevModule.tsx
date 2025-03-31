@@ -21,20 +21,22 @@ interface StepConfigureMevModuleProps {
         checkInterval: number;
         maxAttempts: number;
         threadWorkers: number;
-        mode: "manual" | "automatic"; // Добавлено новое поле
+        mode: "manual" | "automatic" | "by_telegram_bot"; // Добавлено новое поле
         walletSource: "existing" | "manual";
         privateKey: string;
         default_bound: number;
+        globalStrategy: string;
     };
     setMevParams: React.Dispatch<React.SetStateAction<{
         volumeThreshold: number;
         checkInterval: number;
         maxAttempts: number;
         threadWorkers: number;
-        mode: "manual" | "automatic"; // Добавлено новое поле
+        mode: "manual" | "automatic" | "by_telegram_bot"; // Добавлено новое поле
         walletSource: "existing" | "manual";
         privateKey: string;
         default_bound: number;
+        globalStrategy: string;
     }>>;
     wallets?: Wallet[];
 }
@@ -113,6 +115,19 @@ export default function StepConfigureMevModule({
                     <MenuItem value="automatic">Automatic</MenuItem>
                 </Select>
             </FormControl>
+            {/* Добавлен новый Select для режима работы */}
+            <FormControl fullWidth>
+                <InputLabel>Global strategy</InputLabel>
+                <Select
+                    value={mevParams.globalStrategy}
+                    onChange={(e) => handleParamChange("globalStrategy", e.target.value as "jito_only" | "...")}
+                    label="Operation Mode"
+                >
+                    <MenuItem value="manual">Manual</MenuItem>
+                    <MenuItem value="automatic">Automatic</MenuItem>
+                </Select>
+            </FormControl>
+
 
             <Typography variant="subtitle1">Wallet Configuration</Typography>
 

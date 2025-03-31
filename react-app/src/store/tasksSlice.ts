@@ -9,8 +9,9 @@ interface TaskState {
     status: string;
     columns: string[];
     data: TaskDataRow[];
-    logs: string[]; // Добавляем логи в состояние Redux
+    logs: string[];
     config?: any;
+    processedTelegramRows?: string[]; // Add support for processed Telegram rows
 }
 
 interface TasksState {
@@ -35,8 +36,9 @@ export const tasksSlice = createSlice({
                 status,
                 columns,
                 data,
-                logs: [],  // Инициализируем логи как пустой массив
+                logs: [],
                 config,
+                processedTelegramRows: [], // Initialize as empty array
             });
         },
         removeTask: (state, action: PayloadAction<number>) => {
@@ -45,7 +47,7 @@ export const tasksSlice = createSlice({
         },
         updateTask: (state, action) => {
             console.log(`UPDATE TASK CALLED`, action.payload);
-            const { id, name, moduleName, status, columns, config, data } = action.payload;
+            const { id, name, moduleName, status, columns, config, data, processedTelegramRows } = action.payload;
             const task = state.tasks.find((t) => t.id === id);
             if (task) {
                 if (name !== undefined) task.name = name;
@@ -53,14 +55,22 @@ export const tasksSlice = createSlice({
                 if (status !== undefined) task.status = status;
                 if (columns !== undefined) task.columns = columns;
                 if (config !== undefined) task.config = config;
-                if (data !== undefined) task.data = data; // Add support for updating data
+                if (data !== undefined) task.data = data;
+
+                // Handle processedTelegramRows specially - merge with existing array if provided
+                if (processedTelegramRows) {
+                    task.processedTelegramRows = Array.from(new Set([
+                        ...(task.processedTelegramRows || []),
+                        ...processedTelegramRows
+                    ]));
+                }
             }
         },
         addTaskLog: (state, action: PayloadAction<{ taskId: number; log: string }>) => {
             console.log(`🟠 Redux addTaskLog called for Task ${action.payload.taskId}:`, action.payload.log);
             const task = state.tasks.find((t) => t.id === action.payload.taskId);
             if (task) {
-                task.logs.push(action.payload.log); // Добавляем лог в массив
+                task.logs.push(action.payload.log);
             }
         },
 
@@ -90,8 +100,9 @@ export const tasksSlice = createSlice({
                     status: "Running",
                     columns: [],
                     data: [],
-                    logs: [], // Инициализируем массив логов
+                    logs: [],
                     config,
+                    processedTelegramRows: [], // Initialize as empty array for new tasks
                 });
             }
         },

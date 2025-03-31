@@ -90,5 +90,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
             ipcRenderer.invoke("get-nftsForCollection", collId, limit, onlyListings),
         getTxHistory: (params) => ipcRenderer.invoke("get-txHistory", params)
 
-    }
+    },
+
+
+    setTelegramBotToken: (token) => ipcRenderer.invoke('telegram-bot:set-token', token),
+    getTelegramBotConfig: () => ipcRenderer.invoke('telegram-bot:get-config'),
+    sendTelegramTask: (taskData) => ipcRenderer.invoke('telegram-bot:send-task', taskData),
+
+    // Event listeners
+    onTelegramRunTask: (callback) => ipcRenderer.on('telegram-bot:run-task', callback),
+    onTelegramDeleteTask: (callback) => ipcRenderer.on('telegram-bot:delete-task', callback),
+
+
 });

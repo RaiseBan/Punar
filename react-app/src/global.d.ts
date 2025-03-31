@@ -111,6 +111,35 @@ declare global {
                     cursor?: string;
                 }) => Promise<any>;
             };
+
+            getTelegramBotStatus: () => Promise<TelegramBotStatus>;
+            startTelegramBotStream: () => Promise<{ success: boolean }>;
+            stopTelegramBotStream: () => Promise<{ success: boolean }>;
+
+            setTelegramBotToken: (token: string) => Promise<{ success: boolean }>;
+            getTelegramBotConfig: () => Promise<{ botToken: string, chatIds: string[] }>;
+            sendTelegramTask: (taskData: {
+                taskId: number,
+                rowIndex: number,
+                token: string,
+                volumeChange: string,
+                volumeValue: number
+            }) => Promise<any>;
+
+            // События для обработки команд от Telegram бота
+            onTelegramRunTask: (
+                callback: (
+                    event: any,
+                    data: { taskId: number, rowIndex: number, strategy: string }
+                ) => void
+            ) => void;
+
+            onTelegramDeleteTask: (
+                callback: (
+                    event: any,
+                    data: { taskId: number, rowIndex: number }
+                ) => void
+            ) => void;
         };
     }
 }
