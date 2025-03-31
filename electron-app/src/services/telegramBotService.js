@@ -357,4 +357,16 @@ ipcMain.handle('telegram-bot:send-task', (event, taskData) => {
     return telegramBotService.sendTaskNotification(taskData);
 });
 
+ipcMain.handle('telegram-bot:get-status', (event) => {
+    return telegramBotService.getStatus();
+});
+
+ipcMain.handle('telegram-bot:start-stream', (event) => {
+    return telegramBotService.startStream();
+});
+
+ipcMain.handle('telegram-bot:stop-stream', (event) => {
+    return telegramBotService.stopStream();
+});
+
 module.exports = telegramBotService;

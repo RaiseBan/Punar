@@ -101,5 +101,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     onTelegramRunTask: (callback) => ipcRenderer.on('telegram-bot:run-task', callback),
     onTelegramDeleteTask: (callback) => ipcRenderer.on('telegram-bot:delete-task', callback),
 
+    getTelegramBotStatus: () => ipcRenderer.invoke('telegram-bot:get-status'),
+    startTelegramBotStream: () => ipcRenderer.invoke('telegram-bot:start-stream'),
+    stopTelegramBotStream: () => ipcRenderer.invoke('telegram-bot:stop-stream'),
 
 });
