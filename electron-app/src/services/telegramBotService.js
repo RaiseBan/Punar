@@ -335,25 +335,25 @@ class TelegramBotService {
                 return;
             }
 
-            const newReplyMarkup = {
-                inline_keyboard: [
-                    [
-                        { text: "❌ Удалено", callback_data: "noop" }
-                    ]
-                ]
-            };
-
-            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
-
             if (this.messageHandlers.has('deleteTask')) {
                 console.log(`Calling deleteTask handler with taskId=${parsedTaskId}, rowIndex=${parsedRowIndex}`);
+
                 this.messageHandlers.get('deleteTask')({
                     taskId: parsedTaskId,
                     rowIndex: parsedRowIndex
                 });
-            }
 
-            this.sendMessage(chatId, `Строка ${rowIndex} удалена из задачи ${taskId}.`);
+                const newReplyMarkup = {
+                    inline_keyboard: [
+                        [
+                            { text: "❌ Удалено", callback_data: "noop" }
+                        ]
+                    ]
+                };
+
+                this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
+                this.sendMessage(chatId, `Строка ${rowIndex} удалена из задачи ${taskId}.`);
+            }
         }
     }
 
