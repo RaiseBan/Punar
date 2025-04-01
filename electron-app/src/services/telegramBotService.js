@@ -3,7 +3,7 @@ const axios = require('axios');
 const { app, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const {getGlobalConfigDirectory} = require("../utils/wallet");
+const { getGlobalConfigDirectory } = require("../utils/wallet");
 
 class TelegramBotService {
     constructor() {
@@ -72,10 +72,10 @@ class TelegramBotService {
 
     async setBotToken(token) {
         this.stopPolling();
-        
+
         this.botToken = token;
         this.saveConfig();
-        
+
         if (this.botToken && this.isActive) {
             try {
                 await axios.get(`https://api.telegram.org/bot${this.botToken}/deleteWebhook`);
@@ -84,7 +84,7 @@ class TelegramBotService {
                 console.error('Error clearing webhook:', error);
             }
         }
-        
+
         return { success: true };
     }
 
@@ -105,37 +105,37 @@ class TelegramBotService {
             console.log('Polling already in progress, skipping startPolling call');
             return;
         }
-        
+
         this.isPolling = true;
-        
+
         try {
             if (this.pollInterval) {
                 clearInterval(this.pollInterval);
                 this.pollInterval = null;
             }
-            
+
             const me = await this.getMe();
             if (!me) {
                 console.error('Failed to get bot info, invalid token?');
                 this.isPolling = false;
                 return;
             }
-            
+
             const response = await axios.get(`https://api.telegram.org/bot${this.botToken}/getUpdates`, {
                 params: { limit: 1, timeout: 5 }
             });
-            
+
             const updates = response.data.result || [];
             if (updates.length > 0) {
                 this.lastUpdateId = updates[updates.length - 1].update_id;
             }
-            
+
             this.pollInterval = setInterval(() => {
                 this.getUpdates().catch(err => {
                     console.error('Error in getUpdates:', err.message);
                 });
             }, 3000);
-            
+
             console.log('Polling started successfully');
         } catch (error) {
             console.error('Error initializing polling:', error);
@@ -155,9 +155,9 @@ class TelegramBotService {
 
     async getUpdates() {
         if (!this.botToken || !this.isActive || this.isPolling) return;
-        
+
         this.isPolling = true;
-        
+
         try {
             const response = await axios.get(`https://api.telegram.org/bot${this.botToken}/getUpdates`, {
                 params: {
@@ -190,11 +190,11 @@ class TelegramBotService {
         } catch (error) {
             if (error.response) {
                 console.error(`Telegram API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-                
+
                 if (error.response.status === 409) {
                     console.log('Conflict detected, restarting polling...');
                     this.stopPolling();
-                    
+
                     setTimeout(() => {
                         if (this.isActive) {
                             console.log('Attempting to restart polling after conflict');
@@ -343,7 +343,7 @@ class TelegramBotService {
 
     async getMe() {
         if (!this.botToken) return null;
-        
+
         try {
             const response = await axios.get(`https://api.telegram.org/bot${this.botToken}/getMe`);
             return response.data.result;

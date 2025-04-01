@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, { useEffect, useState } from "react";
 import {
     Card,
     CardContent,
@@ -33,11 +33,11 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 
-import {useDispatch, useSelector} from "react-redux";
-import {removeTask, updateTask, addOrUpdateTask} from "../store/tasksSlice";
-import {RootState} from "../store/store";
-import {COLS_NAMES} from "../constants";
-import {fetchImageUrl} from "../utils/tensorFunctions";
+import { useDispatch, useSelector } from "react-redux";
+import { removeTask, updateTask, addOrUpdateTask } from "../store/tasksSlice";
+import { RootState } from "../store/store";
+import { COLS_NAMES } from "../constants";
+import { fetchImageUrl } from "../utils/tensorFunctions";
 
 export interface TaskDataRow {
     cells: string[];
@@ -60,14 +60,14 @@ const statusColorMap: Record<string, string> = {
 };
 
 export default function Task({
-                                 id,
-                                 name,
-                                 moduleName,
-                                 status,
-                                 columns,
-                                 data,
-                                 config,
-                             }: TaskProps) {
+    id,
+    name,
+    moduleName,
+    status,
+    columns,
+    data,
+    config,
+}: TaskProps) {
     const dispatch = useDispatch();
 
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -169,13 +169,13 @@ export default function Task({
 
     const handleStop = () => {
         window.electronAPI?.stopProcess(id);
-        dispatch(updateTask({id, status: "Stopped"}));
+        dispatch(updateTask({ id, status: "Stopped" }));
     };
 
     const handleResume = () => {
         // При возобновлении берём обновлённый config
         window.electronAPI?.resumeProcess(id, editConfig || {});
-        dispatch(updateTask({id, status: "Running"}));
+        dispatch(updateTask({ id, status: "Running" }));
     };
 
     const handleDelete = () => {
@@ -230,7 +230,7 @@ export default function Task({
 
                 window.electronAPI?.startProcess(taskId, taskConfig);
             }
-        }else{
+        } else {
             console.log("APPROVED")
         }
 
@@ -279,45 +279,71 @@ export default function Task({
     useEffect(() => {
         // Only for MEV module in Telegram bot mode
         if (isMEVTelegramMode && data.length > 0 && status === "Running") {
-            // Check for new rows to process
-            data.forEach((row, rowIndex) => {
-                // Если строка еще не была обработана
-                if (!processedRows.includes(rowIndex.toString())) {
-                    const token = row.cells[0] || "";
-                    const volumeChange = row.cells[1] || "";
-                    const volumeValue = parseFloat(row.cells[2] || "0");
+            // Используем useRef для отслеживания отправки
+            const processingRowRef = React.useRef(false);
 
-                    // Отправляем в Telegram бот через Electron IPC
-                    window.electronAPI?.sendTelegramTask({
-                        taskId: id,
-                        rowIndex: rowIndex,
-                        token,
-                        volumeChange,
-                        volumeValue
-                    }).then(() => {
-                        console.log(`Task ${id}, row ${rowIndex} sent to Telegram`);
+            // Асинхронная функция для отправки сообщений
+            const sendMessages = async () => {
+                // Проверяем, что не выполняется другая отправка
+                if (processingRowRef.current) return;
+                processingRowRef.current = true;
 
-                        // Помечаем как обработанную
-                        dispatch(
-                            updateTask({
-                                id,
-                                processedTelegramRows: [...processedRows, rowIndex.toString()],
-                                logs: [...logs, `Row ${rowIndex} sent to Telegram: ${token}`]
-                            })
-                        );
-                    }).catch(err => {
-                        console.error("Error sending task to Telegram:", err);
-                        dispatch(
-                            updateTask({
-                                id,
-                                logs: [...logs, `ERROR: Failed to send row ${rowIndex} to Telegram: ${err.message}`]
-                            })
-                        );
-                    });
+                try {
+                    // Обрабатываем только новые строки
+                    for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
+                        // Проверяем, была ли строка уже обработана
+                        if (!processedRows.includes(rowIndex.toString())) {
+                            const row = data[rowIndex];
+                            const token = row.cells[0] || "";
+                            const volumeChange = row.cells[1] || "";
+                            const volumeValue = parseFloat(row.cells[2] || "0");
+
+                            console.log(`Sending row ${rowIndex} to Telegram, token: ${token}`);
+
+                            // Добавляем в processedRows перед отправкой
+                            const newProcessedRows = [...processedRows, rowIndex.toString()];
+                            dispatch(
+                                updateTask({
+                                    id,
+                                    processedTelegramRows: newProcessedRows,
+                                })
+                            );
+
+                            // Отправляем в Telegram после обновления processedRows
+                            await window.electronAPI?.sendTelegramTask({
+                                taskId: id,
+                                rowIndex: rowIndex,
+                                token,
+                                volumeChange,
+                                volumeValue
+                            });
+
+                            // Логируем после успешной отправки
+                            dispatch(
+                                updateTask({
+                                    id,
+                                    logs: [...logs, `Row ${rowIndex} sent to Telegram: ${token}`]
+                                })
+                            );
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error sending task to Telegram:", err);
+                    dispatch(
+                        updateTask({
+                            id,
+                            logs: [...logs, `ERROR: Failed to send to Telegram: ${err}`]
+                        })
+                    );
+                } finally {
+                    processingRowRef.current = false;
                 }
-            });
+            };
+
+            // Запускаем отправку
+            sendMessages();
         }
-    }, [data, isMEVTelegramMode, processedRows, status]);
+    }, [data, isMEVTelegramMode, status, processedRows.length]);
 
     useEffect(() => {
         if (isMEVTelegramMode && status === "Running") {
@@ -339,18 +365,18 @@ export default function Task({
         }
     }, [isMEVTelegramMode, status]);
 
-    
+
     // Добавьте этот useEffect для обработки команд от Telegram бота
     useEffect(() => {
         if (!window.electronAPI) return;
 
-        const runTaskHandler = (event: any, { taskId: telegramTaskId, rowIndex, strategy }: {taskId: number, rowIndex: number, strategy: string}) => {
+        const runTaskHandler = (event: any, { taskId: telegramTaskId, rowIndex, strategy }: { taskId: number, rowIndex: number, strategy: string }) => {
             if (telegramTaskId === id && rowIndex !== undefined) {
                 handleRunMEVTask(rowIndex, strategy);
             }
         };
 
-        const deleteTaskHandler = (event: any, { taskId: telegramTaskId, rowIndex }: {taskId: number, rowIndex: number}) => {
+        const deleteTaskHandler = (event: any, { taskId: telegramTaskId, rowIndex }: { taskId: number, rowIndex: number }) => {
             if (telegramTaskId === id && rowIndex !== undefined) {
                 handleDeleteMEVRow(rowIndex);
             }
@@ -431,7 +457,7 @@ export default function Task({
                     padding: "10px",
                 }}
             >
-                <CardContent sx={{padding: "10px"}}>
+                <CardContent sx={{ padding: "10px" }}>
                     <Box
                         sx={{
                             display: "flex",
@@ -442,17 +468,17 @@ export default function Task({
                         }}
                     >
                         {/* Левая часть: Название, Модуль, Статус */}
-                        <Box sx={{display: "flex", flexDirection: "column", gap: 0.5}}>
-                            <Typography variant="subtitle1" sx={{fontWeight: "bold"}}>
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
                                 {name}
                             </Typography>
-                            <Typography variant="caption" sx={{color: "#999"}}>
+                            <Typography variant="caption" sx={{ color: "#999" }}>
                                 Module: {moduleName}
                             </Typography>
 
                             {/* Если это Tensor sniper (SDK), покажем картинку и label коллекции */}
                             {moduleName === "Tensor sniper (SDK)" && config?.collection_id && (
-                                <Box sx={{display: "flex", alignItems: "center", gap: 1, mt: 0.5}}>
+                                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
                                     {imageUrl && (
                                         <img
                                             src={imageUrl}
@@ -466,14 +492,14 @@ export default function Task({
                                             }}
                                         />
                                     )}
-                                    <Typography variant="caption" sx={{fontWeight: "bold", color: "#ccc"}}>
+                                    <Typography variant="caption" sx={{ fontWeight: "bold", color: "#ccc" }}>
                                         {collectionLabel}
                                     </Typography>
                                 </Box>
                             )}
                         </Box>
 
-                        <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                             <Chip
                                 label={status}
                                 sx={{
@@ -493,41 +519,41 @@ export default function Task({
                                 />
                             )}
                             {/* Иконки действий */}
-                            <Box sx={{display: "flex", gap: 1}}>
-                                <IconButton sx={{color: "#fff"}} onClick={toggleTable}>
-                                    {tableCollapsed ? <ExpandMoreIcon/> : <ExpandLessIcon/>}
+                            <Box sx={{ display: "flex", gap: 1 }}>
+                                <IconButton sx={{ color: "#fff" }} onClick={toggleTable}>
+                                    {tableCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
                                 </IconButton>
 
-                                <IconButton sx={{color: "#fff"}} onClick={handleOpenFullView}>
-                                    <OpenInFullIcon/>
+                                <IconButton sx={{ color: "#fff" }} onClick={handleOpenFullView}>
+                                    <OpenInFullIcon />
                                 </IconButton>
 
-                                <IconButton sx={{color: "#ff9e44"}} onClick={handleOpenSettings}>
-                                    <SettingsIcon/>
+                                <IconButton sx={{ color: "#ff9e44" }} onClick={handleOpenSettings}>
+                                    <SettingsIcon />
                                 </IconButton>
 
-                                <IconButton sx={{color: "#ccc"}} onClick={handleOpenLogs}>
-                                    <VisibilityIcon/>
+                                <IconButton sx={{ color: "#ccc" }} onClick={handleOpenLogs}>
+                                    <VisibilityIcon />
                                 </IconButton>
 
                                 <IconButton
-                                    sx={{color: "#f44336"}}
+                                    sx={{ color: "#f44336" }}
                                     onClick={handleStop}
                                     disabled={status !== "Running"}
                                 >
-                                    <StopIcon/>
+                                    <StopIcon />
                                 </IconButton>
 
                                 <IconButton
-                                    sx={{color: "#00c853"}}
+                                    sx={{ color: "#00c853" }}
                                     onClick={handleResume}
                                     disabled={status !== "Stopped"}
                                 >
-                                    <PlayArrowIcon/>
+                                    <PlayArrowIcon />
                                 </IconButton>
 
-                                <IconButton onClick={handleDelete} sx={{color: "red"}}>
-                                    <DeleteIcon/>
+                                <IconButton onClick={handleDelete} sx={{ color: "red" }}>
+                                    <DeleteIcon />
                                 </IconButton>
                             </Box>
                         </Box>
@@ -582,11 +608,11 @@ export default function Task({
                                             key={i}
                                             sx={{
                                                 // Специальные стили для определенных столбцов
-                                                ...(col.toLowerCase().includes('address') && {minWidth: '300px'}),
-                                                ...(col.toLowerCase().includes('name') && {minWidth: '150px'}),
-                                                ...(col.toLowerCase().includes('volume') && {minWidth: '120px'}),
-                                                ...(col.toLowerCase().includes('price') && {minWidth: '100px'}),
-                                                ...(col.toLowerCase().includes('action') && {width: '120px'}),
+                                                ...(col.toLowerCase().includes('address') && { minWidth: '300px' }),
+                                                ...(col.toLowerCase().includes('name') && { minWidth: '150px' }),
+                                                ...(col.toLowerCase().includes('volume') && { minWidth: '120px' }),
+                                                ...(col.toLowerCase().includes('price') && { minWidth: '100px' }),
+                                                ...(col.toLowerCase().includes('action') && { width: '120px' }),
                                             }}
                                         >
                                             <TableSortLabel
@@ -633,10 +659,10 @@ export default function Task({
                                             <TableCell
                                                 key={cellIndex}
                                                 sx={{
-                                                    ...(finalColumns[cellIndex].toLowerCase().includes('address') && {minWidth: '300px'}),
-                                                    ...(finalColumns[cellIndex].toLowerCase().includes('name') && {minWidth: '150px'}),
-                                                    ...(finalColumns[cellIndex].toLowerCase().includes('volume') && {minWidth: '120px'}),
-                                                    ...(finalColumns[cellIndex].toLowerCase().includes('price') && {minWidth: '100px'}),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('address') && { minWidth: '300px' }),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('name') && { minWidth: '150px' }),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('volume') && { minWidth: '120px' }),
+                                                    ...(finalColumns[cellIndex].toLowerCase().includes('price') && { minWidth: '100px' }),
                                                 }}
                                             >
                                                 {cell}
@@ -649,7 +675,7 @@ export default function Task({
                                                     minWidth: '120px',
                                                 }}
                                             >
-                                                <Box sx={{display: "flex", gap: 1}}>
+                                                <Box sx={{ display: "flex", gap: 1 }}>
                                                     <Button
                                                         variant="contained"
                                                         size="small"
@@ -659,7 +685,7 @@ export default function Task({
                                                         }}
                                                         sx={{
                                                             bgcolor: "#00c853",
-                                                            "&:hover": {bgcolor: "#00e676"},
+                                                            "&:hover": { bgcolor: "#00e676" },
                                                             color: "white",
                                                             px: 1.5,
                                                             py: 0.5,
@@ -674,7 +700,7 @@ export default function Task({
                                                         onClick={() => handleDeleteMEVRow(rowIndex)}
                                                         sx={{
                                                             bgcolor: "#f44336",
-                                                            "&:hover": {bgcolor: "#ff5252"},
+                                                            "&:hover": { bgcolor: "#ff5252" },
                                                             color: "white",
                                                             px: 1.5,
                                                             py: 0.5,
@@ -711,7 +737,7 @@ export default function Task({
             {/* Диалог Settings */}
             <Dialog open={settingsOpen} onClose={handleCloseSettings} maxWidth="sm" fullWidth>
                 <DialogTitle>Task Settings</DialogTitle>
-                <DialogContent sx={{display: "flex", flexDirection: "column", gap: 2, mt: 1}}>
+                <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
                     <TextField
                         label="Task Name"
                         variant="outlined"
@@ -765,14 +791,14 @@ export default function Task({
             <Dialog open={fullViewOpen} onClose={handleCloseFullView} fullWidth maxWidth="lg">
                 <DialogTitle>Full View: {name}</DialogTitle>
                 <DialogContent>
-                    <Box sx={{overflowX: "auto"}}>
-                        <Table sx={{minWidth: 800}}>
+                    <Box sx={{ overflowX: "auto" }}>
+                        <Table sx={{ minWidth: 800 }}>
                             <TableHead>
-                                <TableRow sx={{backgroundColor: "#1E1E1E"}}>
+                                <TableRow sx={{ backgroundColor: "#1E1E1E" }}>
                                     {columns.map((col, i) => (
                                         <TableCell
                                             key={i}
-                                            sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
+                                            sx={{ color: "#ff9e44", borderBottom: "1px solid #2A2A2A" }}
                                         >
                                             {col}
                                         </TableCell>
@@ -780,7 +806,7 @@ export default function Task({
                                     {/* Добавляем столбец с кнопками только для MEV Module в ручном режиме */}
                                     {isMEVManualMode && (
                                         <TableCell
-                                            sx={{color: "#ff9e44", borderBottom: "1px solid #2A2A2A"}}
+                                            sx={{ color: "#ff9e44", borderBottom: "1px solid #2A2A2A" }}
                                         >
                                             Actions
                                         </TableCell>
@@ -793,15 +819,15 @@ export default function Task({
                                         {row.cells.map((cell, cellIndex) => (
                                             <TableCell
                                                 key={cellIndex}
-                                                sx={{color: "#fff", borderBottom: "1px solid #2A2A2A"}}
+                                                sx={{ color: "#fff", borderBottom: "1px solid #2A2A2A" }}
                                             >
                                                 {cell}
                                             </TableCell>
                                         ))}
                                         {/* Добавляем кнопки Run и Delete только для MEV Module в ручном режиме */}
                                         {isMEVManualMode && (
-                                            <TableCell sx={{borderBottom: "1px solid #2A2A2A"}}>
-                                                <Box sx={{display: "flex", gap: 1}}>
+                                            <TableCell sx={{ borderBottom: "1px solid #2A2A2A" }}>
+                                                <Box sx={{ display: "flex", gap: 1 }}>
                                                     <Button
                                                         variant="contained"
                                                         size="small"
@@ -813,7 +839,7 @@ export default function Task({
                                                         }}
                                                         sx={{
                                                             bgcolor: "#00c853",
-                                                            "&:hover": {bgcolor: "#00e676"},
+                                                            "&:hover": { bgcolor: "#00e676" },
                                                             color: "white",
                                                             px: 1.5,
                                                             py: 0.5
@@ -831,7 +857,7 @@ export default function Task({
                                                         }}
                                                         sx={{
                                                             bgcolor: "#f44336",
-                                                            "&:hover": {bgcolor: "#ff5252"},
+                                                            "&:hover": { bgcolor: "#ff5252" },
                                                             color: "white",
                                                             px: 1.5,
                                                             py: 0.5
@@ -859,9 +885,9 @@ export default function Task({
             <Dialog open={logsOpen} onClose={handleCloseLogs} fullWidth maxWidth="md">
                 <DialogTitle>Logs for {name}</DialogTitle>
                 <DialogContent dividers>
-                    <Box sx={{maxHeight: 400, overflowY: "auto"}}>
+                    <Box sx={{ maxHeight: 400, overflowY: "auto" }}>
                         {logs.map((log, index) => (
-                            <Typography key={index} variant="body2" sx={{color: "#fff"}}>
+                            <Typography key={index} variant="body2" sx={{ color: "#fff" }}>
                                 {log}
                             </Typography>
                         ))}
@@ -881,14 +907,14 @@ export default function Task({
                 fullWidth
             >
                 <DialogTitle>Select Strategy</DialogTitle>
-                <DialogContent sx={{pt: 3}}>
+                <DialogContent sx={{ pt: 3 }}>
                     <FormControl fullWidth>
                         <InputLabel>Strategy</InputLabel>
                         <Select
                             value={selectedOption}
                             onChange={(e) => setSelectedOption(e.target.value)}
                             label="Strategy"
-                            sx={{mb: 2}}
+                            sx={{ mb: 2 }}
                         >
                             <MenuItem value="raydium">raydium</MenuItem>
                             <MenuItem value="pumpswap">pumpswap</MenuItem>
