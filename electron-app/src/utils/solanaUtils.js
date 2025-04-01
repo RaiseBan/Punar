@@ -655,10 +655,10 @@ function sleep(ms) {
     //  "7wXu1a3WDJ8fCM69YzQzW4hnaoU6HCTA1WCHMUCmu4D4Qcksvc6jPDu8VWzkomN9GwpSQ26Nuy2GRXfR42Bb9iN");
     // console.log(res);
 
-    let connection = new Connection(clusterApiUrl("mainnet-beta"));
+    // let connection = new Connection(clusterApiUrl("mainnet-beta"));
 
-    let res = await connection.getAccountInfo(new PublicKey("HKuJrP5tYQLbEUdjKwjgnHs2957QKjR2iWhJKTtMa1xs"));
-    console.log(res);
+    // let res = await connection.getAccountInfo(new PublicKey("HKuJrP5tYQLbEUdjKwjgnHs2957QKjR2iWhJKTtMa1xs"));
+    // console.log(res);
 
 })()
 
