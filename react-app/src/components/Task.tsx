@@ -59,6 +59,16 @@ const statusColorMap: Record<string, string> = {
     Stopped: "#f44336",
 };
 
+// Создадим интерфейс для данных задачи Telegram
+interface TelegramTaskData {
+    taskId: number;
+    rowIndex: number;
+    token: string;
+    volumeChange: string;
+    volumeValue: number;
+    allCells?: string[]; // Добавляем опциональное поле для всех ячеек
+}
+
 export default function Task({
     id,
     name,
@@ -241,9 +251,22 @@ export default function Task({
     const handleDeleteMEVRow = (rowIndex: number) => {
         console.log(`Attempting to delete row ${rowIndex} from task ${id}`);
 
+        if (rowIndex === undefined || rowIndex === null) {
+            console.error(`Invalid rowIndex: ${rowIndex}, cannot delete row`);
+            return;
+        }
+
+        if (rowIndex < 0 || rowIndex >= data.length) {
+            console.error(`rowIndex out of bounds: ${rowIndex}, data length: ${data.length}`);
+            return;
+        }
+
+        console.log(`Data before deletion: ${JSON.stringify(data.map(d => d.cells[0]))}`);
+
         // Create a copy of the data without the row to be deleted
         const newData = data.filter((_, idx) => idx !== rowIndex);
 
+        console.log(`Data after deletion: ${JSON.stringify(newData.map(d => d.cells[0]))}`);
         console.log(`Original data length: ${data.length}, New data length: ${newData.length}`);
 
         // Dispatch the updateTask action with the data property
@@ -308,13 +331,15 @@ export default function Task({
                             );
 
                             // Отправляем в Telegram после обновления processedRows
+                            // Передаем все ячейки для полного отображения
                             await window.electronAPI?.sendTelegramTask({
                                 taskId: id,
                                 rowIndex: rowIndex,
                                 token,
                                 volumeChange,
-                                volumeValue
-                            });
+                                volumeValue,
+                                allCells: row.cells // Передаем все ячейки
+                            } as TelegramTaskData); // Используем приведение типов
 
                             // Логируем после успешной отправки
                             dispatch(

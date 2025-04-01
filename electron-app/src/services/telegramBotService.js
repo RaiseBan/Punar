@@ -242,13 +242,31 @@ class TelegramBotService {
     }
 
     async sendTaskNotification(taskData) {
-        const { taskId, rowIndex, token, volumeChange, volumeValue } = taskData;
-        console.log(`sendTaskNotification: ---start`);
-        const message = `🚨 <b>Новая MEV возможность</b>\n\n` +
-            `Токен: <code>${token}</code>\n` +
-            `Изменение объема: ${volumeChange}\n` +
-            `Значение объема: ${volumeValue}\n\n` +
-            `Что хотите сделать?`;
+        const { taskId, rowIndex, token, volumeChange, volumeValue, allCells = [] } = taskData;
+
+        const tokenAddress = token.toLowerCase();
+
+        const dexScreenerUrl = `https://dexscreener.com/solana/${tokenAddress}`;
+
+        let message = `🚨 <b>Новая MEV возможность</b>\n\n`;
+
+        message += `Токен: <code>${token}</code>\n`;
+        message += `Изменение объема: ${volumeChange}\n`;
+        message += `Значение объема: ${volumeValue}\n\n`;
+
+        if (allCells.length > 0) {
+            message += "<b>Все данные:</b>\n";
+            allCells.forEach((cell, index) => {
+                if (cell && cell.trim()) {
+                    message += `${index + 1}. <code>${cell}</code>\n`;
+                }
+            });
+            message += "\n";
+        }
+
+        message += `<a href="${dexScreenerUrl}">Открыть в DexScreener</a>\n\n`;
+
+        message += `Что хотите сделать?`;
 
         const replyMarkup = {
             inline_keyboard: [
@@ -307,6 +325,15 @@ class TelegramBotService {
             this.sendMessage(chatId, `Задача ${taskId} запущена со стратегией ${strategy}.`);
         } else if (callbackData.startsWith('delete_')) {
             const [_, taskId, rowIndex] = callbackData.split('_');
+            console.log(`Telegram callback: delete_${taskId}_${rowIndex}`);
+
+            const parsedTaskId = parseInt(taskId);
+            const parsedRowIndex = parseInt(rowIndex);
+
+            if (isNaN(parsedTaskId) || isNaN(parsedRowIndex)) {
+                console.error(`Invalid taskId or rowIndex: ${taskId}, ${rowIndex}`);
+                return;
+            }
 
             const newReplyMarkup = {
                 inline_keyboard: [
@@ -319,13 +346,14 @@ class TelegramBotService {
             this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
 
             if (this.messageHandlers.has('deleteTask')) {
+                console.log(`Calling deleteTask handler with taskId=${parsedTaskId}, rowIndex=${parsedRowIndex}`);
                 this.messageHandlers.get('deleteTask')({
-                    taskId: parseInt(taskId),
-                    rowIndex: parseInt(rowIndex)
+                    taskId: parsedTaskId,
+                    rowIndex: parsedRowIndex
                 });
             }
 
-            this.sendMessage(chatId, `Строка удалена из задачи ${taskId}.`);
+            this.sendMessage(chatId, `Строка ${rowIndex} удалена из задачи ${taskId}.`);
         }
     }
 

@@ -55,7 +55,11 @@ app.whenReady().then(() => {
 
   telegramBotService.onTaskDelete(({ taskId, rowIndex }) => {
     console.log(`Sending delete task to renderer: taskId=${taskId}, rowIndex=${rowIndex}`);
-    mainWindow.webContents.send('telegram-bot:delete-task', { taskId, rowIndex });
+    if (rowIndex !== undefined) {
+      mainWindow.webContents.send('telegram-bot:delete-task', { taskId, rowIndex });
+    } else {
+      console.error('rowIndex is undefined, not sending delete task event');
+    }
   });
 });
 
