@@ -487,13 +487,30 @@ export default function Task({
 
         console.log(`Setting up Telegram handlers for task ${id}`);
 
-        const runTaskHandler = (event: any, data: { taskId: number, rowIndex: number, strategy: string }) => {
-            const { taskId: telegramTaskId, rowIndex, strategy } = data;
-            console.log(`Received run task event: taskId=${telegramTaskId}, rowIndex=${rowIndex}, strategy=${strategy}`);
+        const runTaskHandler = (event: any, data: { taskId: number, rowIndex: number, strategy: string, rowId?: string }) => {
+            const { taskId: telegramTaskId, rowIndex, strategy, rowId } = data;
+            console.log(`Received run task event: taskId=${telegramTaskId}, rowIndex=${rowIndex}, strategy=${strategy}, rowId=${rowId || 'undefined'}`);
 
             if (parseInt(String(telegramTaskId)) === id) {
-                console.log(`Running task ${id}, row ${rowIndex} with strategy ${strategy}`);
-                handleRunMEVTask(parseInt(String(rowIndex)), strategy);
+                // Если есть rowId, найдем индекс строки по нему
+                if (rowId) {
+                    const currentData = dataRef.current;
+                    const foundIndex = currentData.findIndex(row => row.rowId === rowId);
+
+                    if (foundIndex !== -1) {
+                        console.log(`Running task ${id}, row ${foundIndex} (ID: ${rowId}) with strategy ${strategy}`);
+                        handleRunMEVTask(foundIndex, strategy);
+                        return;
+                    }
+                }
+
+                // Если rowId не указан или строка не найдена, используем индекс
+                if (rowIndex >= 0 && rowIndex < dataRef.current.length) {
+                    console.log(`Running task ${id}, row ${rowIndex} with strategy ${strategy}`);
+                    handleRunMEVTask(rowIndex, strategy);
+                } else {
+                    console.error(`Invalid row index: ${rowIndex}`);
+                }
             }
         };
 

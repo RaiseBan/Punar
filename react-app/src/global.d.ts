@@ -130,7 +130,7 @@ declare global {
             onTelegramRunTask: (
                 callback: (
                     event: any,
-                    data: { taskId: number, rowIndex: number, strategy: string }
+                    data: { taskId: number, rowIndex: number, strategy: string, rowId?: string }
                 ) => void
             ) => void;
 

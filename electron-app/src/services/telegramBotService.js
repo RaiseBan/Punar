@@ -249,33 +249,37 @@ class TelegramBotService {
 
         let message = `🚨 <b>Новая MEV возможность</b>\n\n`;
 
-        // Определим названия полей
+        // Обновляем названия полей согласно реальным заголовкам
         const fieldNames = [
-            "Токен",
-            "Изменение объема",
-            "Объем (USD)",
-            "Ликвидность",
-            "Цена (USD)",
-            "Market Cap"
+            "Token",
+            "Changes",
+            "Volume change",
+            "PumpSwap volume",
+            "Meteora volume",
+            "Meteora liquidity"
         ];
 
-        // Добавляем данные с понятными названиями полей
+        // Добавляем данные с правильными названиями полей
         for (let i = 0; i < allCells.length; i++) {
-            const fieldName = i < fieldNames.length ? fieldNames[i] : `Поле ${i + 1}`;
-            message += `<b>${fieldName}:</b> <code>${allCells[i]}</code>\n`;
+            if (i < fieldNames.length) {
+                message += `<b>${fieldNames[i]}:</b> <code>${allCells[i]}</code>\n`;
+            }
         }
 
-        message += `\n<a href="${dexScreenerUrl}">🔍 Открыть в DexScreener</a>\n\n`;
-        message += `<b>Что вы хотите сделать с этой возможностью?</b>`;
+        // Добавляем ссылку на DexScreener с более понятным форматированием
+        message += `\n<a href="${dexScreenerUrl}">🔍 Посмотреть токен на DexScreener</a>\n\n`;
+
+        // Добавляем призыв к действию
+        message += `<b>Choose option:</b>`;
 
         const replyMarkup = {
             inline_keyboard: [
                 [
-                    { text: "🚀 Запустить Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium_${rowId || ''}` },
-                    { text: "🚀 Запустить PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap_${rowId || ''}` }
+                    { text: "🚀 run Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium_${rowId || ''}` },
+                    { text: "🚀 run PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap_${rowId || ''}` }
                 ],
                 [
-                    { text: "❌ Удалить", callback_data: `delete_${taskId}_${rowIndex}_${rowId || ''}` }
+                    { text: "❌ ignoore", callback_data: `delete_${taskId}_${rowIndex}_${rowId || ''}` }
                 ]
             ]
         };
@@ -304,13 +308,18 @@ class TelegramBotService {
         if (callbackData === "noop") return;
 
         if (callbackData.startsWith('run_')) {
-            const [_, taskId, rowIndex, strategy] = callbackData.split('_');
-            console.log(`Telegram callback: run_${taskId}_${rowIndex}_${strategy}`);
+            const parts = callbackData.split('_');
+            const taskId = parts[1];
+            const rowIndex = parts[2];
+            const strategy = parts[3];
+            const rowId = parts[4] || undefined;
+
+            console.log(`Telegram callback: run_${taskId}_${rowIndex}_${strategy}_${rowId || 'undefined'}`);
 
             const newReplyMarkup = {
                 inline_keyboard: [
                     [
-                        { text: "✅ Задача запущена", callback_data: "noop" }
+                        { text: "✅ Task started", callback_data: "noop" }
                     ]
                 ]
             };
@@ -324,14 +333,15 @@ class TelegramBotService {
                         this.messageHandlers.get('runTask')({
                             taskId: parsedTaskId,
                             rowIndex: parsedRowIndex,
-                            strategy
+                            strategy,
+                            rowId: rowId
                         });
                     }
 
-                    this.sendMessage(chatId, `Задача ${taskId} запущена со стратегией ${strategy}.`);
+                    this.sendMessage(chatId, `Task ${taskId} started with strategy ${strategy}.`);
                 })
                 .catch(err => {
-                    console.error('Ошибка при обновлении клавиатуры:', err);
+                    console.error('Error updating keyboard:', err);
                 });
         }
         else if (callbackData.startsWith('delete_')) {
@@ -363,10 +373,10 @@ class TelegramBotService {
                         });
                     }
 
-                    this.sendMessage(chatId, `Строка ${rowIndex} удалена из задачи ${taskId}.`);
+                    this.sendMessage(chatId, `Row ${rowIndex} deleted from task ${taskId}.`);
                 })
                 .catch(err => {
-                    console.error('Ошибка при обновлении клавиатуры:', err);
+                    console.error('Error updating keyboard:', err);
                 });
         }
     }

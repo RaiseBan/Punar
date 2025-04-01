@@ -48,9 +48,9 @@ app.whenReady().then(() => {
   initializeWindowHandlers(ipcMain, mainWindow);
   initializeApiHandlers(ipcMain);
 
-  telegramBotService.onTaskRun(({ taskId, rowIndex, strategy }) => {
-    console.log(`Sending run task to renderer: taskId=${taskId}, rowIndex=${rowIndex}, strategy=${strategy}`);
-    mainWindow.webContents.send('telegram-bot:run-task', { taskId, rowIndex, strategy });
+  telegramBotService.onTaskRun(({ taskId, rowIndex, strategy, rowId }) => {
+    console.log(`Sending run task to renderer: taskId=${taskId}, rowIndex=${rowIndex}, strategy=${strategy}, rowId=${rowId || 'undefined'}`);
+    mainWindow.webContents.send('telegram-bot:run-task', { taskId, rowIndex, strategy, rowId });
   });
 
   telegramBotService.onTaskDelete(({ taskId, rowIndex, rowId }) => {
