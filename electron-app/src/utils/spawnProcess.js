@@ -206,7 +206,7 @@ async function spawnProcess(taskConfig, userSettings) {
         const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
         // const wslCommand = `${fileToExecute} ${configFilePath}`;
         console.log(`full command: wsl ${program} ${configFilePathWSL}`);
-        child = spawn('wsl', [program, configFilePathWSL], {
+        child = spawn('wsl', [program, "run",configFilePathWSL], {
             stdio: 'pipe', // или 'inherit', если нужно выводить логи в терминал
             shell: true, // Используем shell для корректного выполнения
             detached: false,
@@ -268,7 +268,7 @@ async function spawnProcess(taskConfig, userSettings) {
                         // Запускаем процесс с новым конфигом
                         const newConfigFilePathWSL = convertWindowsPathToWSL(newConfigFilePath);
 
-                        const newChild = spawn('wsl', [program, newConfigFilePathWSL], {
+                        const newChild = spawn('wsl', [program, "run", newConfigFilePathWSL], {
                             stdio: 'pipe',
                             shell: true,
                             detached: false,
