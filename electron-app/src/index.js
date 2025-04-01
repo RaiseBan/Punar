@@ -61,6 +61,17 @@ app.whenReady().then(() => {
       console.error('rowIndex and rowId are undefined, not sending delete task event');
     }
   });
+
+  telegramBotService.onTaskStop(({ taskId }) => {
+    console.log(`Sending stop task to renderer: taskId=${taskId}`);
+    mainWindow.webContents.send('telegram-bot:stop-task', { taskId });
+  });
 });
 
 app.commandLine.appendSwitch("ignore-certificate-errors");
+
+// Добавляем обработчик получения списка задач
+ipcMain.handle('get-active-tasks', (event) => {
+  // Получаем активные задачи из рендерера
+  return mainWindow.webContents.executeJavaScript('window.store.getState().tasks.tasks');
+});

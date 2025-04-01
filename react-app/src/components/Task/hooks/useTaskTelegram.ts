@@ -205,9 +205,24 @@ export function useTaskTelegram(
       }
     };
 
+    // Добавляем обработчик остановки задачи
+    const stopTaskHandler = (event: any, data: { taskId: number }) => {
+      const { taskId: telegramTaskId } = data;
+      console.log(`Received stop task event: taskId=${telegramTaskId}`);
+
+      if (parseInt(String(telegramTaskId)) === id) {
+        console.log(`Stopping task ${id} via Telegram command`);
+        if (status === "Running") {
+          window.electronAPI?.stopProcess(id);
+          dispatch(updateTask({ id, status: "Stopped" }));
+        }
+      }
+    };
+
     if (window.electronAPI) {
       window.electronAPI.onTelegramRunTask(runTaskHandler);
       window.electronAPI.onTelegramDeleteTask(deleteTaskHandler);
+      window.electronAPI.onTelegramStopTask(stopTaskHandler);
     }
 
     return () => {
@@ -215,6 +230,7 @@ export function useTaskTelegram(
       if (window.electronAPI) {
         window.electronAPI.removeListener('telegram-bot:run-task', runTaskHandler);
         window.electronAPI.removeListener('telegram-bot:delete-task', deleteTaskHandler);
+        window.electronAPI.removeListener('telegram-bot:stop-task', stopTaskHandler);
       }
     };
   }, [id]);

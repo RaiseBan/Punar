@@ -140,6 +140,14 @@ declare global {
                     data: { taskId: number, rowIndex: number, rowId?: string }
                 ) => void
             ) => void;
+
+            // Добавляем в интерфейс Window.electronAPI
+            onTelegramStopTask: (
+                callback: (
+                    event: any,
+                    data: { taskId: number }
+                ) => void
+            ) => void;
         };
     }
 }

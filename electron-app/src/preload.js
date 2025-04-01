@@ -105,4 +105,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     startTelegramBotStream: () => ipcRenderer.invoke('telegram-bot:start-stream'),
     stopTelegramBotStream: () => ipcRenderer.invoke('telegram-bot:stop-stream'),
 
+    // Добавляем в объект electronAPI
+    onTelegramStopTask: (callback) => ipcRenderer.on('telegram-bot:stop-task', callback),
+
 });
