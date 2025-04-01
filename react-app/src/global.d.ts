@@ -148,6 +148,14 @@ declare global {
                     data: { taskId: number }
                 ) => void
             ) => void;
+
+            // Новый метод для полного удаления задачи (остановка + удаление из списка)
+            onTelegramRemoveTask: (
+                callback: (
+                    event: any,
+                    data: { taskId: number }
+                ) => void
+            ) => void;
         };
     }
 }

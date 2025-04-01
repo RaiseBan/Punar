@@ -219,10 +219,29 @@ export function useTaskTelegram(
       }
     };
 
+    // Добавляем обработчик полного удаления задачи
+    const removeTaskHandler = (event: any, data: { taskId: number }) => {
+      const { taskId: telegramTaskId } = data;
+      console.log(`Received remove task event: taskId=${telegramTaskId}`);
+
+      if (parseInt(String(telegramTaskId)) === id) {
+        console.log(`Removing task ${id} via Telegram command`);
+
+        // Сначала останавливаем задачу, если она запущена
+        if (status === "Running") {
+          window.electronAPI?.stopProcess(id);
+        }
+
+        // Затем удаляем задачу из Redux store
+        dispatch({ type: 'tasks/removeTask', payload: id });
+      }
+    };
+
     if (window.electronAPI) {
       window.electronAPI.onTelegramRunTask(runTaskHandler);
       window.electronAPI.onTelegramDeleteTask(deleteTaskHandler);
       window.electronAPI.onTelegramStopTask(stopTaskHandler);
+      window.electronAPI.onTelegramRemoveTask(removeTaskHandler);
     }
 
     return () => {
@@ -231,6 +250,7 @@ export function useTaskTelegram(
         window.electronAPI.removeListener('telegram-bot:run-task', runTaskHandler);
         window.electronAPI.removeListener('telegram-bot:delete-task', deleteTaskHandler);
         window.electronAPI.removeListener('telegram-bot:stop-task', stopTaskHandler);
+        window.electronAPI.removeListener('telegram-bot:remove-task', removeTaskHandler);
       }
     };
   }, [id]);

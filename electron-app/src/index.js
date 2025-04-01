@@ -67,6 +67,15 @@ app.whenReady().then(() => {
     mainWindow.webContents.send('telegram-bot:stop-task', { taskId });
   });
 
+  // Добавляем обработчик для полного удаления задачи (остановка + удаление)
+  telegramBotService.onTaskRemove(({ taskId }) => {
+    console.log(`Sending remove task to renderer: taskId=${taskId}`);
+    // Сначала останавливаем задачу
+    mainWindow.webContents.send('telegram-bot:stop-task', { taskId });
+    // Затем отправляем сигнал на удаление задачи из списка
+    mainWindow.webContents.send('telegram-bot:remove-task', { taskId });
+  });
+
   // Добавить обработчик для задач Telegram
   ipcMain.handle('telegram-tasks-response', (event, tasks) => {
     return tasks;
