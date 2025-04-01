@@ -111,6 +111,8 @@ export function useTaskActions(
           sourceTaskId: taskId,
           additionalRpc: settings?.additionalRpc,
           useJito: true,
+          enablePoolMonitoring: true,
+          poolCheckInterval: 10000,
           jito_lower_bound: jitoRanges[i].lower,
           jito_upper_bound: jitoRanges[i].upper
         };
