@@ -372,27 +372,43 @@ class TelegramBotService {
                 const mainWindow = BrowserWindow.getAllWindows()[0];
 
                 if (!mainWindow) {
+                    console.error('[TG Bot Service] Main window not found for getTasks.');
                     return resolve([]);
                 }
 
-                // Устанавливаем одноразовый слушатель для ответа
+                console.log('[TG Bot Service] Setting up listener for tasks-from-redux...'); // Log: Setting up listener
+
+                let timeoutId = null;
+
                 const responseListener = (event, tasks) => {
-                    resolve(tasks);
+                    clearTimeout(timeoutId);
+                    // Log: Received response - log the raw value received
+                    console.log(`[TG Bot Service] Received tasks-from-redux response. Tasks type: ${typeof tasks}, Is Array: ${Array.isArray(tasks)}, Length: ${Array.isArray(tasks) ? tasks.length : 'N/A'}`);
+                    // Log: Display first few tasks if available for inspection
+                    if (Array.isArray(tasks) && tasks.length > 0) {
+                        console.log('[TG Bot Service] First task received:', JSON.stringify(tasks[0], null, 2));
+                    } else if (!Array.isArray(tasks)) {
+                        console.warn('[TG Bot Service] Received non-array data for tasks:', tasks);
+                    }
+                    resolve(tasks || []); // Ensure we resolve with an array
                 };
 
-                // Регистрируем временный обработчик
                 ipcMain.once('tasks-from-redux', responseListener);
 
-                // Устанавливаем таймаут на случай, если ответ не придет
-                const timeout = setTimeout(() => {
+                timeoutId = setTimeout(() => {
                     ipcMain.removeListener('tasks-from-redux', responseListener);
+                    // Log: Timeout occurred
+                    console.error('[TG Bot Service] Timeout waiting for tasks-from-redux response.');
                     reject(new Error('Таймаут при получении задач'));
-                }, 3000);
+                }, 5000); // 5 second timeout
 
-                // Отправляем запрос в renderer process
+                // Log: Sending request
+                console.log('[TG Bot Service] Sending get-tasks-from-redux to renderer...');
                 mainWindow.webContents.send('get-tasks-from-redux');
+
             } catch (error) {
-                console.error('Ошибка при запросе задач:', error);
+                // Log: Error during setup
+                console.error('[TG Bot Service] Error setting up IPC for getTasks:', error);
                 reject(error);
             }
         });

@@ -129,15 +129,36 @@ ipcRenderer.on('telegram-get-tasks', () => {
 
 // Добавляем новый обработчик для запроса задач
 ipcRenderer.on('get-tasks-from-redux', (event) => {
+    // Log: Request received
+    console.log('[Preload] Received get-tasks-from-redux request from main.');
     try {
-        // Получаем состояние Redux через глобальную функцию
+        // Log: Before getting state
+        console.log('[Preload] Attempting to get Redux state via window.getReduxState...');
         const state = window.getReduxState();
+
+        // Log: After getting state - show the structure if possible
+        if (state && state.tasks) {
+            console.log(`[Preload] Got state.tasks. Keys: ${Object.keys(state.tasks)}`);
+        } else {
+            console.warn('[Preload] Redux state or state.tasks is missing.');
+        }
+
         const tasks = state?.tasks?.tasks || [];
 
-        // Отправляем задачи обратно в main process
+        // Log: Extracted tasks
+        console.log(`[Preload] Extracted tasks. Is Array: ${Array.isArray(tasks)}, Length: ${tasks.length}`);
+        if (tasks.length > 0) {
+            console.log('[Preload] First task being sent:', JSON.stringify(tasks[0], null, 2));
+        }
+
+        // Log: Before sending response
+        console.log('[Preload] Sending tasks-from-redux response back to main.');
         ipcRenderer.send('tasks-from-redux', tasks);
     } catch (error) {
-        console.error('Ошибка при получении задач из Redux:', error);
+        // Log: Error during processing
+        console.error('[Preload] Error getting/sending tasks from Redux:', error);
+        // Send empty array in case of error to avoid main process hanging
+        console.log('[Preload] Sending empty array due to error.');
         ipcRenderer.send('tasks-from-redux', []);
     }
 });
