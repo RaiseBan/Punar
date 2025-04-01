@@ -79,7 +79,7 @@ export default function Task({
     config,
 }: TaskProps) {
     const dispatch = useDispatch();
-
+    console.log(`data-TASK: ${data}`);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [fullViewOpen, setFullViewOpen] = useState(false);
     const [logsOpen, setLogsOpen] = useState(false);
