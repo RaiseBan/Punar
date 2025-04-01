@@ -148,6 +148,13 @@ export default function Task({
     // Добавьте это на верхний уровень компонента
     const processingRowRef = React.useRef(false);
 
+    // В начале компонента Task сохраняем референс на актуальные данные
+    const dataRef = React.useRef(data);
+    // Обновляем референс при изменении данных
+    useEffect(() => {
+        dataRef.current = data;
+    }, [data]);
+
     // -----------------------
     // Кнопки
     // -----------------------
@@ -247,41 +254,47 @@ export default function Task({
 
     };
 
-    // Функция для удаления строки из данных задачи
+    // И обновляем функцию удаления
     const handleDeleteMEVRow = (rowIndex: number) => {
         console.log(`Attempting to delete row ${rowIndex} from task ${id}`);
+
+        // Используем актуальные данные из референса
+        const currentData = dataRef.current;
+        console.log(`Current data from ref: ${JSON.stringify(currentData, null, 2)}`);
 
         if (rowIndex === undefined || rowIndex === null) {
             console.error(`Invalid rowIndex: ${rowIndex}, cannot delete row`);
             return;
         }
 
-        // Проверяем, есть ли данные вообще
-        console.log(`data-TASK-ATFTER SIGNAL: ${JSON.stringify(data, null, 2)}`);
-        if (!data || data.length === 0) {
+        if (!currentData || currentData.length === 0) {
             console.error(`No data to delete from: data is empty`);
             return;
         }
 
-        if (rowIndex < 0 || rowIndex >= data.length) {
-            console.error(`rowIndex out of bounds: ${rowIndex}, data length: ${data.length}`);
+        if (rowIndex < 0 || rowIndex >= currentData.length) {
+            console.error(`rowIndex out of bounds: ${rowIndex}, data length: ${currentData.length}`);
             return;
         }
 
-        // Создаем полностью новый массив данных без удаляемой строки
-        const newData = [...data.slice(0, rowIndex), ...data.slice(rowIndex + 1)];
+        // Создаем новый массив без удаляемой строки
+        const newData = [...currentData.slice(0, rowIndex), ...currentData.slice(rowIndex + 1)];
 
-        console.log(`Original data length: ${data.length}, New data length: ${newData.length}`);
+        console.log(`Original data length: ${currentData.length}, New data length: ${newData.length}`);
 
-        // Сохраняем все обработанные строки кроме той, которую удаляем
-        const newProcessedRows = processedRows
+        // Обновляем processedRows
+        const currentProcessedRows = useSelector((state: RootState) =>
+            state.tasks.tasks.find(t => t.id === id)?.processedTelegramRows || []
+        );
+
+        const newProcessedRows = currentProcessedRows
             .filter(idx => parseInt(idx) !== rowIndex)
             .map(idx => {
                 const i = parseInt(idx);
                 return i > rowIndex ? (i - 1).toString() : idx;
             });
 
-        // Dispatch the updateTask action with the data property and updated processedRows
+        // Отправляем обновление в Redux
         dispatch(
             updateTask({
                 id: id,
