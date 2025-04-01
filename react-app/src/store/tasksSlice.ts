@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import {TaskDataRow, TaskProps} from "../components/Task";
+import {TaskDataRow, TaskProps} from "../components/Task/types";
 
 
 interface TaskState {

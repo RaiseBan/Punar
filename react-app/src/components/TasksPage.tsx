@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import AddTaskIcon from "@mui/icons-material/AddTask";
-import Task from "./Task";
+import Task from "./Task/Task";
 import { useDispatch, useSelector } from "react-redux";
 import { addOrUpdateTask } from "../store/tasksSlice";
 import { RootState } from "../store/store";
