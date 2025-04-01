@@ -643,18 +643,24 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// (async() => {
-//     const res = await updateIfNotExistsAndGet(
-//         clusterApiUrl("mainnet-beta"),
-//     [
-//         "85vNnKPMM4aHCJ9a6ebMFjqgzNL9jFXF7zW22vjeXziT",
-//         "6qDWicht82dYXj7ModFfdti9f8pfWFDTKt9itvnvCoDH",
-//         "3yLApRRweajdW5U1xtzoRvJrqC5mWCcBkFHccSATgMLG",
-//         "7qt1qBnQ5CNNpMH1no6jYAzuyazP5QWXsUZB7dot5kga"
-//     ],
-//      "7wXu1a3WDJ8fCM69YzQzW4hnaoU6HCTA1WCHMUCmu4D4Qcksvc6jPDu8VWzkomN9GwpSQ26Nuy2GRXfR42Bb9iN");
-//     console.log(res);
-// })()
+(async() => {
+    // const res = await updateIfNotExistsAndGet(
+    //     clusterApiUrl("mainnet-beta"),
+    // [
+    //     "85vNnKPMM4aHCJ9a6ebMFjqgzNL9jFXF7zW22vjeXziT",
+    //     "6qDWicht82dYXj7ModFfdti9f8pfWFDTKt9itvnvCoDH",
+    //     "3yLApRRweajdW5U1xtzoRvJrqC5mWCcBkFHccSATgMLG",
+    //     "7qt1qBnQ5CNNpMH1no6jYAzuyazP5QWXsUZB7dot5kga"
+    // ],
+    //  "7wXu1a3WDJ8fCM69YzQzW4hnaoU6HCTA1WCHMUCmu4D4Qcksvc6jPDu8VWzkomN9GwpSQ26Nuy2GRXfR42Bb9iN");
+    // console.log(res);
+
+    let connection = new Connection("http://rpc-lax-a.thornode.io/e711fbc80050bff888e8584d9e2521ca");
+    
+    let res = await connection.getAccountInfo(new PublicKey("HKuJrP5tYQLbEUdjKwjgnHs2957QKjR2iWhJKTtMa1xs"));
+    console.log(res);
+
+})()
 
 
 module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getFilteredPairs, sortPairsByParameter, sendTx}
