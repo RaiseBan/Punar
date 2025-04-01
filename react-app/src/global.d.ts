@@ -1,5 +1,5 @@
 // global.d.ts
-import {Wallet} from "./types";
+import { Wallet } from "./types";
 
 declare module "*.module.css" {
     const classes: { [key: string]: string };
@@ -20,7 +20,7 @@ export interface AppSettings {
     thor_streamer_token?: string;
 }
 
-export {};
+export { };
 
 declare global {
     interface Window {
@@ -137,7 +137,7 @@ declare global {
             onTelegramDeleteTask: (
                 callback: (
                     event: any,
-                    data: { taskId: number, rowIndex: number }
+                    data: { taskId: number, rowIndex: number, rowId?: string }
                 ) => void
             ) => void;
         };

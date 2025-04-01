@@ -242,7 +242,7 @@ class TelegramBotService {
     }
 
     async sendTaskNotification(taskData) {
-        const { taskId, rowIndex, token, volumeChange, volumeValue, allCells = [] } = taskData;
+        const { taskId, rowIndex, rowId, token, volumeChange, volumeValue, allCells = [] } = taskData;
 
         const tokenAddress = token.toLowerCase();
         const dexScreenerUrl = `https://dexscreener.com/solana/${tokenAddress}`;
@@ -271,11 +271,11 @@ class TelegramBotService {
         const replyMarkup = {
             inline_keyboard: [
                 [
-                    { text: "🚀 Запустить Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium` },
-                    { text: "🚀 Запустить PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap` }
+                    { text: "🚀 Запустить Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium_${rowId || ''}` },
+                    { text: "🚀 Запустить PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap_${rowId || ''}` }
                 ],
                 [
-                    { text: "❌ Удалить", callback_data: `delete_${taskId}_${rowIndex}` }
+                    { text: "❌ Удалить", callback_data: `delete_${taskId}_${rowIndex}_${rowId || ''}` }
                 ]
             ]
         };
@@ -335,8 +335,12 @@ class TelegramBotService {
                 });
         }
         else if (callbackData.startsWith('delete_')) {
-            const [_, taskId, rowIndex] = callbackData.split('_');
-            console.log(`Telegram callback: delete_${taskId}_${rowIndex}`);
+            const parts = callbackData.split('_');
+            const taskId = parts[1];
+            const rowIndex = parts[2];
+            const rowId = parts[3] || undefined;
+
+            console.log(`Telegram callback: delete_${taskId}_${rowIndex}_${rowId || 'undefined'}`);
 
             const newReplyMarkup = {
                 inline_keyboard: [
@@ -354,7 +358,8 @@ class TelegramBotService {
 
                         this.messageHandlers.get('deleteTask')({
                             taskId: parsedTaskId,
-                            rowIndex: parsedRowIndex
+                            rowIndex: parsedRowIndex,
+                            rowId: rowId
                         });
                     }
 

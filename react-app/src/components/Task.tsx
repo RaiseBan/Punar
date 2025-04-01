@@ -173,18 +173,28 @@ export default function Task({
     // В начале компонента добавим ID для строк если их нет
     useEffect(() => {
         // Добавляем уникальный ID к каждой строке, если его еще нет
-        if (data && data.length > 0 && !data[0].rowId) {
-            const dataWithIds = data.map((row, index) => ({
-                ...row,
-                rowId: `row-${id}-${Date.now()}-${index}` // Создаем уникальный ID
-            }));
+        if (data && data.length > 0) {
+            const dataWithIds = data.map((row, index) => {
+                if (!row.rowId) {
+                    return {
+                        ...row,
+                        rowId: `row-${id}-${Date.now()}-${index}` // Создаем уникальный ID
+                    };
+                }
+                return row;
+            });
 
-            dispatch(updateTask({
-                id: id,
-                data: dataWithIds
-            }));
+            // Проверяем, есть ли строки без ID
+            const needsUpdate = dataWithIds.some((row, index) => !data[index].rowId);
+
+            if (needsUpdate) {
+                dispatch(updateTask({
+                    id: id,
+                    data: dataWithIds
+                }));
+            }
         }
-    }, [data]);
+    }, [data, id, dispatch]);
 
     // -----------------------
     // Кнопки

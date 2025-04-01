@@ -53,12 +53,12 @@ app.whenReady().then(() => {
     mainWindow.webContents.send('telegram-bot:run-task', { taskId, rowIndex, strategy });
   });
 
-  telegramBotService.onTaskDelete(({ taskId, rowIndex }) => {
-    console.log(`Sending delete task to renderer: taskId=${taskId}, rowIndex=${rowIndex}`);
-    if (rowIndex !== undefined) {
-      mainWindow.webContents.send('telegram-bot:delete-task', { taskId, rowIndex });
+  telegramBotService.onTaskDelete(({ taskId, rowIndex, rowId }) => {
+    console.log(`Sending delete task to renderer: taskId=${taskId}, rowIndex=${rowIndex}, rowId=${rowId || 'undefined'}`);
+    if (rowIndex !== undefined || rowId) {
+      mainWindow.webContents.send('telegram-bot:delete-task', { taskId, rowIndex, rowId });
     } else {
-      console.error('rowIndex is undefined, not sending delete task event');
+      console.error('rowIndex and rowId are undefined, not sending delete task event');
     }
   });
 });
