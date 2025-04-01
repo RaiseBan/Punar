@@ -245,10 +245,20 @@ export default function Task({
 
     // Функция для создания новой задачи с тем же конфигом
     const handleRunMEVTask = async (rowIndex: number, strategy: string) => {
+        // Используем актуальные данные из ref вместо прямого доступа к data
+        const currentData = dataRef.current;
 
-        const token = data[rowIndex]?.cells[0] || "";
-        const volume_change = data[rowIndex]?.cells[1] || "";
-        const volume_value = parseFloat(data[rowIndex]?.cells[2] || "0");
+        // Проверка валидности индекса
+        if (!currentData || rowIndex < 0 || rowIndex >= currentData.length) {
+            console.error(`Invalid row index: ${rowIndex}, data length: ${currentData?.length || 0}`);
+            return;
+        }
+
+        const token = currentData[rowIndex]?.cells[0] || "";
+        const volume_change = currentData[rowIndex]?.cells[1] || "";
+        const volume_value = parseFloat(currentData[rowIndex]?.cells[2] || "0");
+
+        console.log(`Running MEV task for row ${rowIndex}, token: ${token}, strategy: ${strategy}`);
 
         if (config.globalStrategy === "jito_only") {
             const settings = await window.electronAPI?.getSettings();
@@ -260,7 +270,7 @@ export default function Task({
                 { lower: 100_000, upper: 200_000 },
                 { lower: 200_000, upper: 350_000 },
                 { lower: 350_000, upper: 550_000 },
-                { lower: 550_000, upper: 750_000 } // Изменил последний диапазон, так как он дублировался с предыдущим
+                { lower: 550_000, upper: 750_000 }
             ];
 
             // Создаем и запускаем задачи в цикле
@@ -273,7 +283,7 @@ export default function Task({
                     module_name: "mev_subtask",
                     task_name: taskName,
                     strategy,
-                    rowData: data[rowIndex]?.cells,
+                    rowData: currentData[rowIndex]?.cells, // Используем currentData
                     sourceTaskId: taskId,
                     additionalRpc: settings?.additionalRpc,
                     useJito: true,
@@ -289,10 +299,8 @@ export default function Task({
                 window.electronAPI?.startProcess(taskId, taskConfig);
             }
         } else {
-            console.log("APPROVED")
+            console.log("APPROVED");
         }
-
-
     };
 
     // Исправьте функцию handleDeleteMEVRow
@@ -492,24 +500,30 @@ export default function Task({
             console.log(`Received run task event: taskId=${telegramTaskId}, rowIndex=${rowIndex}, strategy=${strategy}, rowId=${rowId || 'undefined'}`);
 
             if (parseInt(String(telegramTaskId)) === id) {
-                // Если есть rowId, найдем индекс строки по нему
-                if (rowId) {
-                    const currentData = dataRef.current;
-                    const foundIndex = currentData.findIndex(row => row.rowId === rowId);
+                // Получаем актуальные данные
+                const currentData = dataRef.current;
 
+                if (!currentData || currentData.length === 0) {
+                    console.error(`No data to run task: data is empty`);
+                    return;
+                }
+
+                // Если есть rowId, сначала пробуем найти строку по нему
+                if (rowId) {
+                    const foundIndex = currentData.findIndex(row => row.rowId === rowId);
                     if (foundIndex !== -1) {
-                        console.log(`Running task ${id}, row ${foundIndex} (ID: ${rowId}) with strategy ${strategy}`);
+                        console.log(`Running task ${id} for row with ID ${rowId} (index ${foundIndex})`);
                         handleRunMEVTask(foundIndex, strategy);
                         return;
                     }
                 }
 
                 // Если rowId не указан или строка не найдена, используем индекс
-                if (rowIndex >= 0 && rowIndex < dataRef.current.length) {
-                    console.log(`Running task ${id}, row ${rowIndex} with strategy ${strategy}`);
+                if (rowIndex >= 0 && rowIndex < currentData.length) {
+                    console.log(`Running task ${id} for row with index ${rowIndex}`);
                     handleRunMEVTask(rowIndex, strategy);
                 } else {
-                    console.error(`Invalid row index: ${rowIndex}`);
+                    console.error(`Row index out of bounds: ${rowIndex}, data length: ${currentData.length}`);
                 }
             }
         };
