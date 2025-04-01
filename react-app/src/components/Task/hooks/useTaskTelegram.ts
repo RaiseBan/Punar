@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { updateTask } from '../../../store/tasksSlice';
 import { RootState } from '../../../store/store';
 import { TaskDataRow, TelegramTaskData } from '../types';
+import { store } from '../../../store/store';
 
 export function useTaskTelegram(
   id: number,
@@ -243,36 +244,52 @@ export function useTaskTelegram(
       console.log(`Received resume task event: taskId=${telegramTaskId}`);
 
       if (parseInt(String(telegramTaskId)) === id) {
-        console.log(`[ResumeTask] Task ${id} match found for resuming. Current status=${status}`);
+        // Получаем актуальное состояние задачи напрямую из Redux
+        const taskState = store.getState().tasks.tasks.find(task => task.id === id);
+        const currentStatus = taskState?.status || status;
+
+        console.log(`[ResumeTask] Task ${id} match found for resuming. Current status from Redux=${currentStatus}`);
 
         // Возобновляем задачу, только если она остановлена
-        if (status === "Stopped" && config) {
-          console.log(`[ResumeTask] Resuming stopped task ${id}, config exists:`,
-            JSON.stringify({
-              moduleType: config.module_name,
-              configKeys: Object.keys(config)
-            }));
+        if (currentStatus === "Stopped" && config) {
+          console.log(`[ResumeTask] Resuming stopped task ${id}, config:`, JSON.stringify({
+            moduleType: config.module_name,
+            configKeys: Object.keys(config)
+          }));
 
           try {
+            // Сначала обновляем статус в Redux, чтобы предотвратить повторные вызовы
+            dispatch(updateTask({ id, status: "Starting" }));
+            console.log(`[ResumeTask] Updated task status to Starting in Redux`);
+
+            // Затем запускаем процесс
             console.log(`[ResumeTask] Calling window.electronAPI?.resumeProcess for task ${id}`);
-            // Проверяем наличие метода resumeProcess в electronAPI
             if (typeof window.electronAPI?.resumeProcess === 'function') {
               window.electronAPI.resumeProcess(id, config);
               console.log(`[ResumeTask] Successfully called resumeProcess for task ${id}`);
 
-              // Обновляем статус в Redux
-              console.log(`[ResumeTask] Dispatching status update to Redux for task ${id}`);
-              dispatch(updateTask({ id, status: "Running" }));
-              console.log(`[ResumeTask] Status update dispatched for task ${id}`);
+              // Статус "Running" будет установлен через middleware при получении события process-started
             } else {
               console.error(`[ResumeTask] ERROR: window.electronAPI?.resumeProcess is not a function:`,
                 typeof window.electronAPI?.resumeProcess);
+
+              // Откатываем статус, если метод не найден
+              dispatch(updateTask({ id, status: "Stopped" }));
             }
           } catch (error) {
             console.error(`[ResumeTask] ERROR resuming task ${id}:`, error);
+            // Откатываем статус в случае ошибки
+            dispatch(updateTask({ id, status: "Stopped" }));
+
+            // Добавляем ошибку в логи
+            const currentLogs = store.getState().tasks.tasks.find(task => task.id === id)?.logs || [];
+            dispatch(updateTask({
+              id,
+              logs: [...currentLogs, `[ERROR] Failed to resume task: ${error}`]
+            }));
           }
         } else {
-          console.log(`[ResumeTask] Task ${id} not resumed: status=${status}, config=${config ? 'exists' : 'missing'}`);
+          console.log(`[ResumeTask] Task ${id} not resumed: status=${currentStatus}, config=${config ? 'exists' : 'missing'}`);
         }
       } else {
         console.log(`[ResumeTask] Task ID mismatch: received=${telegramTaskId}, current=${id}`);

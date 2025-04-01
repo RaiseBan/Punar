@@ -31,19 +31,19 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
     // Возобновление процесса
     ipcMain.on("resume-process", async (event, { taskId, config }) => {
         console.log(`Resume-process: Task ${taskId}, config:`, config);
-
-        // Отправляем оба события, как при обычном запуске
-        event.reply(`process-started-${taskId}`); // Специфичное для задачи событие
-        event.reply("process-started", { taskId, config }); // Общее событие
-        mainWindow?.webContents.send("process-started", { taskId, config }); // Отправляем в главное окно
-
         const scriptPath = getSettings();
         console.log(`Resume-process: Spawning process for Task ${taskId}, script path:`, scriptPath);
 
         try {
+            // СНАЧАЛА запускаем процесс
             const child = await spawnProcess(config, scriptPath);
             processes[taskId] = child;
             console.log(`Resume-process: Process spawned for Task ${taskId}, PID:`, child.pid);
+
+            // ЗАТЕМ отправляем события после успешного запуска процесса
+            event.reply(`process-started-${taskId}`); // Специфичное для задачи событие
+            event.reply("process-started", { taskId, config }); // Общее событие
+            mainWindow?.webContents.send("process-started", { taskId, config }); // Отправляем в главное окно
 
             child.stdout.on("data", (data) => {
                 console.log(`STDOUT [Task ${taskId}]:`, data.toString());
@@ -63,6 +63,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         } catch (error) {
             console.error(`Resume-process: Error spawning process for Task ${taskId}:`, error);
             // Отправляем ошибку как вывод, чтобы пользователь был уведомлен
+            mainWindow?.webContents.send("process-output", { taskId, log: `[ERROR] Failed to resume task: ${error.toString()}` });
             mainWindow?.webContents.send("process-error", { taskId, error: error.toString() });
         }
     });
