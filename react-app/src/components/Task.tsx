@@ -88,9 +88,6 @@ export default function Task({
 
     const chipColor = statusColorMap[status] || "#ff9e44";
 
-
-
-
     // =======================
     //  ИЗОБРАЖЕНИЕ ДЛЯ TENSOR SDK
     // =======================
@@ -137,6 +134,9 @@ export default function Task({
     useEffect(() => {
         console.log("Logs updated for Task", id, logs);
     }, [logs]);
+
+    // Добавьте это на верхний уровень компонента
+    const processingRowRef = React.useRef(false);
 
     // -----------------------
     // Кнопки
@@ -276,12 +276,10 @@ export default function Task({
         state.tasks.tasks.find(t => t.id === id)?.processedTelegramRows || []
     );
 
+    // Модифицированный useEffect
     useEffect(() => {
         // Only for MEV module in Telegram bot mode
         if (isMEVTelegramMode && data.length > 0 && status === "Running") {
-            // Используем useRef для отслеживания отправки
-            const processingRowRef = React.useRef(false);
-
             // Асинхронная функция для отправки сообщений
             const sendMessages = async () => {
                 // Проверяем, что не выполняется другая отправка
