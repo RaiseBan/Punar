@@ -284,8 +284,26 @@ async function spawnProcess(taskConfig, userSettings) {
                     if (betterPairAddress) {
                         console.log(`МОНИТОРИНГ: Найден лучший пул Meteora для задачи ${taskId}, перегенерируем конфиг и перезапускаем процесс`);
 
-                        // Останавливаем текущий процесс
-                        child.kill();
+                        // Останавливаем текущий процесс - используем более надежный способ для WSL процессов
+                        try {
+                            // Пробуем сначала мягкое завершение
+                            child.kill();
+                            console.log(`МОНИТОРИНГ: Отправлен сигнал завершения процессу ${taskId}`);
+
+                            // Для WSL процессов может потребоваться дополнительное принудительное завершение
+                            const { exec } = require('child_process');
+                            // Ищем и убиваем все WSL процессы, связанные с smb-onchain
+                            exec('taskkill /F /FI "IMAGENAME eq wsl.exe" /FI "WINDOWTITLE eq *smb-onchain*"', (err) => {
+                                if (err) {
+                                    console.log(`МОНИТОРИНГ: WSL процессы не найдены или уже завершены: ${err.message}`);
+                                } else {
+                                    console.log(`МОНИТОРИНГ: WSL процессы принудительно завершены`);
+                                }
+                            });
+                        } catch (killError) {
+                            console.error(`МОНИТОРИНГ: Ошибка при попытке остановить процесс ${taskId}:`, killError);
+                        }
+
                         console.log(`МОНИТОРИНГ: Текущий процесс ${taskId} остановлен`);
 
                         // Отправляем уведомление о смене пула через Telegram

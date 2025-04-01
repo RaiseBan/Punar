@@ -182,37 +182,22 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
             console.log(`ПРОЦЕСС: Остановка процесса ${taskId} с PID ${pid}, возраст: ${Math.floor((Date.now() - processInfo.startTime) / 1000)}с`);
 
             try {
-                // Сначала пробуем остановить процесс мягко
-                child.kill('SIGTERM');
-
-                // Устанавливаем таймаут для принудительного завершения
-                setTimeout(() => {
-                    if (processInfo.isActive) {
-                        console.log(`ПРОЦЕСС: Процесс ${taskId} не завершился мягко, применяем tree-kill`);
-
-                        treeKill(pid, "SIGKILL", (err) => {
-                            if (err) {
-                                // Проверяем, не связана ли ошибка с тем, что процесс уже завершен
-                                if (err.message && (
-                                    err.message.includes("no running instance") ||
-                                    err.message.includes("process not found") ||
-                                    err.message.includes("process doesn't exist")
-                                )) {
-                                    console.log(`ПРОЦЕСС: Процесс ${taskId} уже завершен при попытке tree-kill`);
-                                } else {
-                                    console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, err);
-                                }
-                            } else {
-                                console.log(`ПРОЦЕСС: Процесс ${taskId} и все его дочерние процессы убиты через tree-kill`);
-                            }
-
-                            // В любом случае отмечаем процесс как неактивный
-                            processInfo.isActive = false;
-                            processInfo.exitTime = Date.now();
-                            processInfo.exitReason = 'stopped';
-                        });
+                // Убедимся, что убиваем процесс принудительно сразу через treeKill
+                console.log(`ПРОЦЕСС: Принудительное завершение процесса ${taskId} через tree-kill`);
+                treeKill(pid, "SIGKILL", (err) => {
+                    if (err) {
+                        console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, err);
+                    } else {
+                        console.log(`ПРОЦЕСС: Процесс ${taskId} и все его дочерние процессы убиты через tree-kill`);
                     }
-                }, 500); // Даем 500мс на мягкое завершение
+
+                    // В любом случае отмечаем процесс как неактивный
+                    if (processes[taskId]) {
+                        processes[taskId].isActive = false;
+                        processes[taskId].exitTime = Date.now();
+                        processes[taskId].exitReason = 'killed';
+                    }
+                });
             } catch (error) {
                 console.error(`ПРОЦЕСС: Ошибка при остановке процесса ${taskId}:`, error);
                 // Отмечаем процесс как неактивный в любом случае
