@@ -435,8 +435,8 @@ class TelegramBotService {
                 let groupKey = '';
 
                 if (task.name.includes('->')) {
-                    // Если есть стрелка, вероятно это MEV задача
-                    groupKey = task.name;
+                    // Если есть стрелка, берем ТОЛЬКО часть ДО "->" как ключ группы
+                    groupKey = task.name.split('->')[0].trim();
                 } else {
                     // Иначе используем moduleName в качестве ключа группы
                     groupKey = task.moduleName || 'Другие задачи';
