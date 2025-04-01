@@ -256,24 +256,36 @@ export default function Task({
             return;
         }
 
+        // Проверяем, есть ли данные вообще
+        if (!data || data.length === 0) {
+            console.error(`No data to delete from: data is empty`);
+            return;
+        }
+
         if (rowIndex < 0 || rowIndex >= data.length) {
             console.error(`rowIndex out of bounds: ${rowIndex}, data length: ${data.length}`);
             return;
         }
 
-        console.log(`Data before deletion: ${JSON.stringify(data.map(d => d.cells[0]))}`);
+        // Создаем полностью новый массив данных без удаляемой строки
+        const newData = [...data.slice(0, rowIndex), ...data.slice(rowIndex + 1)];
 
-        // Create a copy of the data without the row to be deleted
-        const newData = data.filter((_, idx) => idx !== rowIndex);
-
-        console.log(`Data after deletion: ${JSON.stringify(newData.map(d => d.cells[0]))}`);
         console.log(`Original data length: ${data.length}, New data length: ${newData.length}`);
 
-        // Dispatch the updateTask action with the data property
+        // Сохраняем все обработанные строки кроме той, которую удаляем
+        const newProcessedRows = processedRows
+            .filter(idx => parseInt(idx) !== rowIndex)
+            .map(idx => {
+                const i = parseInt(idx);
+                return i > rowIndex ? (i - 1).toString() : idx;
+            });
+
+        // Dispatch the updateTask action with the data property and updated processedRows
         dispatch(
             updateTask({
                 id: id,
-                data: newData
+                data: newData,
+                processedTelegramRows: newProcessedRows
             })
         );
 

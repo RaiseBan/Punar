@@ -245,37 +245,37 @@ class TelegramBotService {
         const { taskId, rowIndex, token, volumeChange, volumeValue, allCells = [] } = taskData;
 
         const tokenAddress = token.toLowerCase();
-
         const dexScreenerUrl = `https://dexscreener.com/solana/${tokenAddress}`;
 
         let message = `🚨 <b>Новая MEV возможность</b>\n\n`;
 
-        message += `Токен: <code>${token}</code>\n`;
-        message += `Изменение объема: ${volumeChange}\n`;
-        message += `Значение объема: ${volumeValue}\n\n`;
+        // Определим названия полей
+        const fieldNames = [
+            "Токен",
+            "Изменение объема",
+            "Объем (USD)",
+            "Ликвидность",
+            "Цена (USD)",
+            "Market Cap"
+        ];
 
-        if (allCells.length > 0) {
-            message += "<b>Все данные:</b>\n";
-            allCells.forEach((cell, index) => {
-                if (cell && cell.trim()) {
-                    message += `${index + 1}. <code>${cell}</code>\n`;
-                }
-            });
-            message += "\n";
+        // Добавляем данные с понятными названиями полей
+        for (let i = 0; i < allCells.length; i++) {
+            const fieldName = i < fieldNames.length ? fieldNames[i] : `Поле ${i + 1}`;
+            message += `<b>${fieldName}:</b> <code>${allCells[i]}</code>\n`;
         }
 
-        message += `<a href="${dexScreenerUrl}">Открыть в DexScreener</a>\n\n`;
-
-        message += `Что хотите сделать?`;
+        message += `\n<a href="${dexScreenerUrl}">🔍 Открыть в DexScreener</a>\n\n`;
+        message += `<b>Что вы хотите сделать с этой возможностью?</b>`;
 
         const replyMarkup = {
             inline_keyboard: [
                 [
-                    { text: "Запустить - Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium` },
-                    { text: "Запустить - PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap` }
+                    { text: "🚀 Запустить Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium` },
+                    { text: "🚀 Запустить PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap` }
                 ],
                 [
-                    { text: "Игнорировать/Удалить", callback_data: `delete_${taskId}_${rowIndex}` }
+                    { text: "❌ Удалить", callback_data: `delete_${taskId}_${rowIndex}` }
                 ]
             ]
         };
@@ -301,8 +301,11 @@ class TelegramBotService {
     }
 
     handleCallbackQuery(chatId, callbackData, messageId) {
+        if (callbackData === "noop") return;
+
         if (callbackData.startsWith('run_')) {
             const [_, taskId, rowIndex, strategy] = callbackData.split('_');
+            console.log(`Telegram callback: run_${taskId}_${rowIndex}_${strategy}`);
 
             const newReplyMarkup = {
                 inline_keyboard: [
@@ -312,48 +315,54 @@ class TelegramBotService {
                 ]
             };
 
-            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
+            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup)
+                .then(() => {
+                    if (this.messageHandlers.has('runTask')) {
+                        const parsedTaskId = parseInt(taskId);
+                        const parsedRowIndex = parseInt(rowIndex);
 
-            if (this.messageHandlers.has('runTask')) {
-                this.messageHandlers.get('runTask')({
-                    taskId: parseInt(taskId),
-                    rowIndex: parseInt(rowIndex),
-                    strategy
+                        this.messageHandlers.get('runTask')({
+                            taskId: parsedTaskId,
+                            rowIndex: parsedRowIndex,
+                            strategy
+                        });
+                    }
+
+                    this.sendMessage(chatId, `Задача ${taskId} запущена со стратегией ${strategy}.`);
+                })
+                .catch(err => {
+                    console.error('Ошибка при обновлении клавиатуры:', err);
                 });
-            }
-
-            this.sendMessage(chatId, `Задача ${taskId} запущена со стратегией ${strategy}.`);
-        } else if (callbackData.startsWith('delete_')) {
+        }
+        else if (callbackData.startsWith('delete_')) {
             const [_, taskId, rowIndex] = callbackData.split('_');
             console.log(`Telegram callback: delete_${taskId}_${rowIndex}`);
 
-            const parsedTaskId = parseInt(taskId);
-            const parsedRowIndex = parseInt(rowIndex);
-
-            if (isNaN(parsedTaskId) || isNaN(parsedRowIndex)) {
-                console.error(`Invalid taskId or rowIndex: ${taskId}, ${rowIndex}`);
-                return;
-            }
-
-            if (this.messageHandlers.has('deleteTask')) {
-                console.log(`Calling deleteTask handler with taskId=${parsedTaskId}, rowIndex=${parsedRowIndex}`);
-
-                this.messageHandlers.get('deleteTask')({
-                    taskId: parsedTaskId,
-                    rowIndex: parsedRowIndex
-                });
-
-                const newReplyMarkup = {
-                    inline_keyboard: [
-                        [
-                            { text: "❌ Удалено", callback_data: "noop" }
-                        ]
+            const newReplyMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: "❌ Удалено", callback_data: "noop" }
                     ]
-                };
+                ]
+            };
 
-                this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
-                this.sendMessage(chatId, `Строка ${rowIndex} удалена из задачи ${taskId}.`);
-            }
+            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup)
+                .then(() => {
+                    if (this.messageHandlers.has('deleteTask')) {
+                        const parsedTaskId = parseInt(taskId);
+                        const parsedRowIndex = parseInt(rowIndex);
+
+                        this.messageHandlers.get('deleteTask')({
+                            taskId: parsedTaskId,
+                            rowIndex: parsedRowIndex
+                        });
+                    }
+
+                    this.sendMessage(chatId, `Строка ${rowIndex} удалена из задачи ${taskId}.`);
+                })
+                .catch(err => {
+                    console.error('Ошибка при обновлении клавиатуры:', err);
+                });
         }
     }
 
