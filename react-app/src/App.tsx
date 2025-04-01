@@ -1,11 +1,11 @@
-import {HashRouter, Routes, Route, Navigate, useLocation} from "react-router-dom";
-import {CssBaseline, ThemeProvider, createTheme, Box} from "@mui/material";
+import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { CssBaseline, ThemeProvider, createTheme, Box } from "@mui/material";
 import Sidebar from "./components/Sidebar";
 import TasksPage from "./components/TasksPage";
 import Wallets from "./components/Wallets";
 import Settings from "./components/Settings";
-import {Provider} from "react-redux";
-import {store} from "./store/store";
+import { Provider, useSelector } from "react-redux";
+import { store, RootState } from "./store/store";
 import './styles/global.css'
 import Header from "./components/Header";
 import Tools from "./components/Tools";
@@ -13,17 +13,42 @@ import ConfigManager from "./components/ConfigManager";
 import Statistic from "./components/Statistic";
 import TxHistorySearch from "./components/TransactionHistory";
 import TelegramBotSettings from "./components/TelegramBotSettings";
+import { useEffect } from "react";
 
 const darkTheme = createTheme({
     palette: {
         mode: "dark",
-        background: {default: "#0e0e0e"},
-        text: {primary: "#fff"},
+        background: { default: "#0e0e0e" },
+        text: { primary: "#fff" },
     },
     typography: {
         fontFamily: "'Tensor', sans-serif", // Добавь сюда шрифт
     },
 });
+
+// Новый компонент для IPC-связи
+function IpcHandler() {
+    const tasks = useSelector((state: RootState) => state.tasks.tasks);
+
+    useEffect(() => {
+        // Слушатель для запроса задач из main процесса
+        const handleGetTasks = () => {
+            console.log('[IpcHandler] Received get-tasks-request, sending tasks:', tasks.length);
+            // @ts-ignore - игнорируем ошибку TS о том, что electronAPI может не существовать
+            window.electronAPI?.sendToMain('telegram-tasks-response', tasks);
+        };
+
+        // @ts-ignore - регистрируем слушатель
+        window.electronAPI?.listenForTasks?.(handleGetTasks);
+
+        return () => {
+            // @ts-ignore - удаляем слушатель при размонтировании компонента
+            window.electronAPI?.removeTasksListener?.();
+        };
+    }, [tasks]); // Перерегистрируем слушатель при изменении задач
+
+    return null; // Компонент не рендерит UI
+}
 
 function Layout() {
     const location = useLocation();
@@ -77,6 +102,9 @@ function Layout() {
                     </Box>
                 </Box>
             </Box>
+
+            {/* Компонент для IPC-связи */}
+            <IpcHandler />
         </ThemeProvider>
     );
 }
@@ -85,9 +113,8 @@ export default function App() {
     return (
         <Provider store={store}>
             <HashRouter>
-                <Layout/>
+                <Layout />
             </HashRouter>
         </Provider>
-
     );
 }

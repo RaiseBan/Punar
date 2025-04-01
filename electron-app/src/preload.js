@@ -108,6 +108,34 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Добавляем в объект electronAPI
     onTelegramStopTask: (callback) => ipcRenderer.on('telegram-bot:stop-task', callback),
 
+    // Новые методы для работы с задачами через IPC
+    listenForTasks: (callback) => {
+        const wrappedCallback = (event) => {
+            console.log('[Preload] Received get-tasks-from-redux request from main, forwarding to renderer');
+            callback();
+        };
+
+        // Сохраняем обертку, чтобы потом можно было удалить слушатель
+        ipcRenderer._tasksListener = wrappedCallback;
+
+        // Регистрируем слушатель
+        ipcRenderer.on('get-tasks-from-redux', wrappedCallback);
+    },
+
+    removeTasksListener: () => {
+        if (ipcRenderer._tasksListener) {
+            ipcRenderer.removeListener('get-tasks-from-redux', ipcRenderer._tasksListener);
+            ipcRenderer._tasksListener = null;
+        }
+    },
+
+    // Метод для отправки задач в main process
+    sendToMain: (channel, data) => {
+        if (channel === 'telegram-tasks-response') {
+            console.log(`[Preload] Sending ${data.length} tasks to main process`);
+            ipcRenderer.send(channel, data);
+        }
+    },
 });
 
 ipcRenderer.on('telegram-get-tasks', () => {
@@ -132,28 +160,36 @@ ipcRenderer.on('get-tasks-from-redux', (event) => {
     // Log: Request received
     console.log('[Preload] Received get-tasks-from-redux request from main.');
     try {
-        // Log: Before getting state
-        console.log('[Preload] Attempting to get Redux state via window.getReduxState...');
-        const state = window.getReduxState();
+        // === Проверка перед вызовом ===
+        if (typeof window.getReduxState === 'function') {
+            // Log: Before getting state
+            console.log('[Preload] window.getReduxState function found. Attempting to get Redux state...');
+            const state = window.getReduxState();
 
-        // Log: After getting state - show the structure if possible
-        if (state && state.tasks) {
-            console.log(`[Preload] Got state.tasks. Keys: ${Object.keys(state.tasks)}`);
+            // Log: After getting state - show the structure if possible
+            if (state && state.tasks) {
+                console.log(`[Preload] Got state.tasks. Keys: ${Object.keys(state.tasks)}`);
+            } else {
+                console.warn('[Preload] Redux state or state.tasks is missing after calling getReduxState.');
+            }
+
+            const tasks = state?.tasks?.tasks || [];
+
+            // Log: Extracted tasks
+            console.log(`[Preload] Extracted tasks. Is Array: ${Array.isArray(tasks)}, Length: ${tasks.length}`);
+            if (tasks.length > 0) {
+                console.log('[Preload] First task being sent:', JSON.stringify(tasks[0], null, 2));
+            }
+
+            // Log: Before sending response
+            console.log('[Preload] Sending tasks-from-redux response back to main.');
+            ipcRenderer.send('tasks-from-redux', tasks);
         } else {
-            console.warn('[Preload] Redux state or state.tasks is missing.');
+            // === Функция еще не готова ===
+            console.warn('[Preload] window.getReduxState is not available or not a function yet. Renderer might still be initializing.');
+            console.log('[Preload] Sending empty array back to main process.');
+            ipcRenderer.send('tasks-from-redux', []); // Отправляем пустой массив
         }
-
-        const tasks = state?.tasks?.tasks || [];
-
-        // Log: Extracted tasks
-        console.log(`[Preload] Extracted tasks. Is Array: ${Array.isArray(tasks)}, Length: ${tasks.length}`);
-        if (tasks.length > 0) {
-            console.log('[Preload] First task being sent:', JSON.stringify(tasks[0], null, 2));
-        }
-
-        // Log: Before sending response
-        console.log('[Preload] Sending tasks-from-redux response back to main.');
-        ipcRenderer.send('tasks-from-redux', tasks);
     } catch (error) {
         // Log: Error during processing
         console.error('[Preload] Error getting/sending tasks from Redux:', error);
