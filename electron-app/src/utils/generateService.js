@@ -4,8 +4,18 @@ const { updateIfNotExistsAndGet, getRaydiumPair, getFilteredPairs, sortPairsByPa
 const TOML = require('@iarna/toml');
 const { PRIMARY_IP, RAYDIUM_OWNER, METEORA_OWNER, RAYDIUM_AMM_OWNER, RAYDIUM_CPMM_OWNER } = require("./constants");
 
-async function generateMevConfig(targetDir, tokensDirPath, config) {
+/**
+ * Генерирует конфигурацию для MEV процесса
+ * @param {string} targetDir - Директория для сохранения конфига
+ * @param {string} tokensDirPath - Путь к папке с токенами
+ * @param {Object} config - Конфигурация задачи
+ * @param {string|null} specificMeteoraPool - Опциональный параметр: конкретный пул Meteora для использования
+ * @returns {Promise<string|undefined>} - Путь к сгенерированному файлу или undefined в случае ошибки
+ */
+async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteoraPool = null) {
     console.log(`generateMevParams: ${targetDir} | ${tokensDirPath} | ${JSON.stringify(config, null, 2)}`);
+    console.log(`Using specific Meteora pool: ${specificMeteoraPool || 'Not specified'}`);
+
     const value = config.rowData[1].split("->")[1].trim().substring(1);
     const fileName = `${config.rowData[0]}_${value}.json`;
     const fullPath = path.join(tokensDirPath, fileName);
@@ -117,22 +127,28 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     console.log(`end format`)
     console.log(`mevConfig: ${mevConfig}`);
 
-    // Добавляем meteora_pairs в зависимости от их количества
-    console.log(meteoraPairs.length)
+    // Если предоставлен конкретный пул Meteora, используем его
+    if (specificMeteoraPool) {
+        console.log(`Using provided Meteora pool: ${specificMeteoraPool}`);
+        mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [specificMeteoraPool];
+    } else {
+        // Иначе используем стандартную логику выбора пула
+        console.log(meteoraPairs.length);
 
-    const filteredMeteoraPairs = await getFilteredPairs(config.main_rpc, meteoraPairs, METEORA_OWNER);
-    const targetMeteoraPair = (await sortPairsByParameter(config.main_rpc, filteredMeteoraPairs, {
-        parameter: 'volume',
-        timeFrame: 'm5',
-        order: 'desc'
-    }))[0].pair;
+        const filteredMeteoraPairs = await getFilteredPairs(config.main_rpc, meteoraPairs, METEORA_OWNER);
+        const targetMeteoraPair = (await sortPairsByParameter(config.main_rpc, filteredMeteoraPairs, {
+            parameter: 'volume',
+            timeFrame: 'm5',
+            order: 'desc'
+        }))[0].pair;
 
-    if (!targetMeteoraPair) { // было filteredMeteoraPairs
-        console.log(`Meteora pairs with owner ${METEORA_OWNER} not found`);
-        return;
+        if (!targetMeteoraPair) { // было filteredMeteoraPairs
+            console.log(`Meteora pairs with owner ${METEORA_OWNER} not found`);
+            return;
+        }
+
+        mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [targetMeteoraPair];
     }
-
-    mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [targetMeteoraPair];
 
     // if (filteredMeteoraPairs.length === 1) {
     //     // Если не больше 1 пары, добавляем их в список
@@ -159,7 +175,9 @@ async function generateMevConfig(targetDir, tokensDirPath, config) {
     }
 
     // Формируем имя файла и путь для сохранения
-    const tomlFileName = `${tokenConfig.token_address}_${value}_${config.useJito === true ? "jito" : "default"}.toml`;
+    // Добавляем к имени файла информацию о пуле, если это повторная генерация
+    const poolSuffix = specificMeteoraPool ? `_updated_${Date.now()}` : '';
+    const tomlFileName = `${tokenConfig.token_address}_${value}_${config.useJito === true ? "jito" : "default"}${poolSuffix}.toml`;
     const tomlFilePath = path.join(targetDir, tomlFileName);
 
     try {

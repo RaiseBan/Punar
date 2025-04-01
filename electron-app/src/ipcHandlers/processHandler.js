@@ -1,7 +1,7 @@
 const { spawn } = require("child_process");
 const treeKill = require("tree-kill");
 const { getSettings } = require("../utils/fsHelper");
-const { spawnProcess } = require("../utils/spawnProcess");
+const { spawnProcess, stopMevProcess } = require("../utils/spawnProcess");
 
 const processes = {};
 
@@ -72,7 +72,11 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
     ipcMain.on("stop-process", (event, taskId) => {
         const child = processes[taskId];
 
+        // Сначала останавливаем мониторинг пулов для mev_subtask процессов
+        stopMevProcess(taskId);
+
         if (child && !child.killed) {
+            console.log(`Stopping process ${taskId} with PID ${child.pid}`);
             treeKill(child.pid, "SIGKILL", (err) => {
                 if (err) console.error(`Ошибка при завершении процесса ${taskId}:`, err);
                 else console.log(`Процесс ${taskId} и все его дочерние процессы убиты`);

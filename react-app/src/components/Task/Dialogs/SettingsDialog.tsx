@@ -5,7 +5,14 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  TextField
+  TextField,
+  FormControl,
+  FormLabel,
+  FormControlLabel,
+  Switch,
+  Box,
+  Typography,
+  Divider
 } from '@mui/material';
 
 interface SettingsDialogProps {
@@ -52,6 +59,41 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
           onChange={(e) => onModuleNameChange(e.target.value)}
           disabled={!canEditConfig}
         />
+
+        {/* Настройки для MEV Subtask */}
+        {editConfig?.module_name === "mev_subtask" && (
+          <Box sx={{ mt: 2 }}>
+            <Divider sx={{ mb: 2 }} />
+            <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1 }}>
+              Pool Monitoring Settings
+            </Typography>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={editConfig.enablePoolMonitoring === true}
+                  onChange={(e) => onConfigChange('enablePoolMonitoring', e.target.checked)}
+                  disabled={!canEditConfig}
+                />
+              }
+              label="Enable Meteora Pool Monitoring"
+            />
+
+            {editConfig.enablePoolMonitoring && (
+              <TextField
+                fullWidth
+                label="Check Interval (ms)"
+                type="number"
+                value={editConfig.poolCheckInterval || 300000}
+                onChange={(e) => onConfigChange('poolCheckInterval', parseInt(e.target.value))}
+                disabled={!canEditConfig}
+                helperText="Interval in milliseconds (default: 300000 = 5 minutes)"
+                sx={{ mt: 2 }}
+                inputProps={{ min: 10000 }}
+              />
+            )}
+          </Box>
+        )}
 
         {/* Если модуль "Tensor sniper (SDK)", показываем threshold_price */}
         {editConfig?.module_name === "Tensor sniper (SDK)" && (
