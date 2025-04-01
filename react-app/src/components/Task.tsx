@@ -42,6 +42,7 @@ import { fetchImageUrl } from "../utils/tensorFunctions";
 export interface TaskDataRow {
     cells: string[];
     originalIndex?: number;
+    rowId?: string;
 }
 
 export interface TaskProps {
@@ -63,6 +64,7 @@ const statusColorMap: Record<string, string> = {
 interface TelegramTaskData {
     taskId: number;
     rowIndex: number;
+    rowId?: string;
     token: string;
     volumeChange: string;
     volumeValue: number;
@@ -168,6 +170,22 @@ export default function Task({
         processedRowsRef.current = processedRows;
     }, [processedRows]);
 
+    // В начале компонента добавим ID для строк если их нет
+    useEffect(() => {
+        // Добавляем уникальный ID к каждой строке, если его еще нет
+        if (data && data.length > 0 && !data[0].rowId) {
+            const dataWithIds = data.map((row, index) => ({
+                ...row,
+                rowId: `row-${id}-${Date.now()}-${index}` // Создаем уникальный ID
+            }));
+
+            dispatch(updateTask({
+                id: id,
+                data: dataWithIds
+            }));
+        }
+    }, [data]);
+
     // -----------------------
     // Кнопки
     // -----------------------
@@ -268,42 +286,69 @@ export default function Task({
     };
 
     // Исправьте функцию handleDeleteMEVRow
-    const handleDeleteMEVRow = (rowIndex: number) => {
-        console.log(`Attempting to delete row ${rowIndex} from task ${id}`);
+    const handleDeleteMEVRow = (rowIndexOrId: number | string) => {
+        console.log(`Attempting to delete row ${rowIndexOrId} from task ${id}`);
 
-        // Используем актуальные данные из референса
+        // Получаем актуальные данные
         const currentData = dataRef.current;
-        console.log(`Current data from ref: ${JSON.stringify(currentData, null, 2)}`);
-
-        if (rowIndex === undefined || rowIndex === null) {
-            console.error(`Invalid rowIndex: ${rowIndex}, cannot delete row`);
-            return;
-        }
 
         if (!currentData || currentData.length === 0) {
             console.error(`No data to delete from: data is empty`);
             return;
         }
 
+        let rowIndex: number;
+
+        if (typeof rowIndexOrId === 'string') {
+            // Если передан ID, находим индекс по нему
+            const foundIndex = currentData.findIndex(row => row.rowId === rowIndexOrId);
+            if (foundIndex === -1) {
+                console.error(`Row with ID ${rowIndexOrId} not found`);
+                return;
+            }
+            rowIndex = foundIndex;
+        } else {
+            // Если таблица отсортирована, нужно найти правильный индекс
+            if (orderBy) {
+                // Получаем строку из отсортированных данных
+                const sortedRow = sortedData[rowIndexOrId];
+                if (!sortedRow || sortedRow.originalIndex === undefined) {
+                    console.error(`Invalid row index in sorted data: ${rowIndexOrId}`);
+                    return;
+                }
+                // Используем оригинальный индекс из отсортированных данных
+                rowIndex = sortedRow.originalIndex;
+            } else {
+                // Если таблица не отсортирована, используем переданный индекс
+                rowIndex = rowIndexOrId;
+            }
+        }
+
+        // Проверяем валидность индекса
         if (rowIndex < 0 || rowIndex >= currentData.length) {
-            console.error(`rowIndex out of bounds: ${rowIndex}, data length: ${currentData.length}`);
+            console.error(`Row index out of bounds: ${rowIndex}, data length: ${currentData.length}`);
             return;
         }
 
         // Создаем новый массив без удаляемой строки
         const newData = [...currentData.slice(0, rowIndex), ...currentData.slice(rowIndex + 1)];
-
         console.log(`Original data length: ${currentData.length}, New data length: ${newData.length}`);
 
-        // Используем processedRowsRef вместо useSelector
+        // Обновляем processedRows, учитывая уникальные ID
         const currentProcessedRows = processedRowsRef.current;
 
-        const newProcessedRows = currentProcessedRows
-            .filter(idx => parseInt(idx) !== rowIndex)
-            .map(idx => {
-                const i = parseInt(idx);
-                return i > rowIndex ? (i - 1).toString() : idx;
-            });
+        // Используем ID строк для отслеживания обработанных строк вместо индексов
+        const rowToDelete = currentData[rowIndex];
+        // Исправляем проблему с типизацией - rowIdToDelete может быть undefined
+        const rowIdToDelete = rowToDelete.rowId || ''; // Пустая строка как fallback
+
+        const newProcessedRows = currentProcessedRows.filter(item => {
+            // Исправляем проверку строк с учетом undefined
+            if (!item) return true; // Пропускаем пустые значения
+            // Если processedRows содержит индексы, конвертируем их в строковый формат
+            // Если содержит ID, проверяем, не совпадает ли с удаляемым ID
+            return item !== rowIndex.toString() && (rowIdToDelete ? item !== rowIdToDelete : true);
+        });
 
         // Отправляем обновление в Redux
         dispatch(
@@ -337,26 +382,27 @@ export default function Task({
     useEffect(() => {
         // Only for MEV module in Telegram bot mode
         if (isMEVTelegramMode && data.length > 0 && status === "Running") {
-            // Асинхронная функция для отправки сообщений
             const sendMessages = async () => {
-                // Проверяем, что не выполняется другая отправка
                 if (processingRowRef.current) return;
                 processingRowRef.current = true;
 
                 try {
-                    // Обрабатываем только новые строки
                     for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
-                        // Проверяем, была ли строка уже обработана
-                        if (!processedRows.includes(rowIndex.toString())) {
-                            const row = data[rowIndex];
+                        const row = data[rowIndex];
+                        // Проверяем наличие rowId и добавляем проверку на null/undefined
+                        const rowId = row.rowId || rowIndex.toString();
+
+                        if (!processedRows.includes(rowIndex.toString()) &&
+                            !processedRows.includes(rowId)) {
+
                             const token = row.cells[0] || "";
                             const volumeChange = row.cells[1] || "";
                             const volumeValue = parseFloat(row.cells[2] || "0");
 
                             console.log(`Sending row ${rowIndex} to Telegram, token: ${token}`);
 
-                            // Добавляем в processedRows перед отправкой
-                            const newProcessedRows = [...processedRows, rowIndex.toString()];
+                            // Исправленное добавление в processedRows
+                            const newProcessedRows = [...processedRows, rowId];
                             dispatch(
                                 updateTask({
                                     id,
@@ -364,18 +410,17 @@ export default function Task({
                                 })
                             );
 
-                            // Отправляем в Telegram после обновления processedRows
-                            // Передаем все ячейки для полного отображения
+                            // Исправленная передача параметров
                             await window.electronAPI?.sendTelegramTask({
                                 taskId: id,
                                 rowIndex: rowIndex,
+                                rowId: rowId, // Гарантированно не undefined
                                 token,
                                 volumeChange,
                                 volumeValue,
-                                allCells: row.cells // Передаем все ячейки
-                            } as TelegramTaskData); // Используем приведение типов
+                                allCells: row.cells
+                            } as TelegramTaskData);
 
-                            // Логируем после успешной отправки
                             dispatch(
                                 updateTask({
                                     id,
@@ -397,7 +442,6 @@ export default function Task({
                 }
             };
 
-            // Запускаем отправку
             sendMessages();
         }
     }, [data, isMEVTelegramMode, status, processedRows.length]);
@@ -439,13 +483,15 @@ export default function Task({
             }
         };
 
-        const deleteTaskHandler = (event: any, data: { taskId: number, rowIndex: number }) => {
-            const { taskId: telegramTaskId, rowIndex } = data;
-            console.log(`Received delete task event: taskId=${telegramTaskId}, rowIndex=${rowIndex}`);
+        const deleteTaskHandler = (event: any, data: { taskId: number, rowIndex: number, rowId?: string }) => {
+            const { taskId: telegramTaskId, rowIndex, rowId } = data;
+            console.log(`Received delete task event: taskId=${telegramTaskId}, rowIndex=${rowIndex}, rowId=${rowId || 'undefined'}`);
 
             if (parseInt(String(telegramTaskId)) === id) {
-                console.log(`Deleting row ${rowIndex} from task ${id}`);
-                handleDeleteMEVRow(parseInt(String(rowIndex)));
+                // Используем rowId только если он определен, иначе используем rowIndex
+                const identifierToUse = rowId !== undefined ? rowId : rowIndex;
+                console.log(`Deleting row with ${typeof identifierToUse === 'string' ? `ID ${identifierToUse}` : `index ${identifierToUse}`} from task ${id}`);
+                handleDeleteMEVRow(identifierToUse);
             }
         };
 
