@@ -18,6 +18,9 @@ class TelegramBotService {
 
         // Для отслеживания обработанных callback queries
         this.processedCallbacks = new Set();
+
+        // Хранилище для соответствия групп и задач
+        this.groupToTasksMap = {};
     }
 
     async startStream() {
@@ -432,6 +435,9 @@ class TelegramBotService {
 
             // Группируем задачи по токену и изменению
             const groupedTasks = {};
+            // Храним соответствие между группами и задачами для callback_data
+            const groupToTasksMap = {};
+            let groupCounter = 0;
 
             for (const task of tasks) {
                 if (!task.name) {
@@ -456,16 +462,28 @@ class TelegramBotService {
 
                 if (!groupedTasks[groupKey]) {
                     groupedTasks[groupKey] = [];
-                    console.log(`[TG Bot Tasks] Created new group: "${groupKey}"`);
+                    // Назначаем для каждой группы уникальный числовой идентификатор
+                    groupToTasksMap[`g${groupCounter}`] = [];
+                    console.log(`[TG Bot Tasks] Created new group: "${groupKey}" with ID g${groupCounter}`);
+                    groupCounter++;
                 }
 
+                // Получаем идентификатор группы для этой задачи
+                const groupId = Object.keys(groupToTasksMap).find(key =>
+                    groupToTasksMap[key] === groupedTasks[groupKey]);
+
                 groupedTasks[groupKey].push(task);
+                groupToTasksMap[groupId].push(task.id);
                 console.log(`[TG Bot Tasks] Added task ${task.id} to group "${groupKey}", now ${groupedTasks[groupKey].length} tasks in this group`);
             }
 
             console.log(`[TG Bot Tasks] Groups formed: ${Object.keys(groupedTasks).length}`, Object.keys(groupedTasks));
 
+            // Сохраняем карту групп в памяти для использования в callback_query
+            this.groupToTasksMap = groupToTasksMap;
+
             // Для каждой группы отправляем одно сообщение
+            let groupIndex = 0;
             for (const [groupKey, tasksInGroup] of Object.entries(groupedTasks)) {
                 // Формируем сообщение для группы
                 let message = `<b>Группа задач:</b>\n${groupKey}\n\n`;
@@ -477,24 +495,41 @@ class TelegramBotService {
                     message += `<b>Статус:</b> ${task.status}\n\n`;
                 }
 
-                // Получаем IDs всех задач в этой группе для кнопок
-                const taskIdsInGroup = tasksInGroup.map(task => task.id).join(',');
+                // Используем компактный идентификатор группы для callback_data
+                const groupId = `g${groupIndex}`;
 
                 // Создаем клавиатуру с двумя кнопками для этой группы задач
                 const replyMarkup = {
                     inline_keyboard: [
                         [
-                            { text: "⏹️ Остановить все задачи", callback_data: `stop_tasks_${taskIdsInGroup}` }
+                            { text: "⏹️ Остановить все задачи", callback_data: `stop_g_${groupId}` }
                         ],
                         [
-                            { text: "🗑️ Удалить все задачи", callback_data: `remove_tasks_${taskIdsInGroup}` }
+                            { text: "🗑️ Удалить все задачи", callback_data: `remove_g_${groupId}` }
                         ]
                     ]
                 };
 
                 // Отправляем сообщение для этой группы
-                console.log(`[TG Bot Tasks] Sending message for group "${groupKey}" with ${tasksInGroup.length} tasks`);
-                await this.sendMessage(chatId, message, { replyMarkup });
+                console.log(`[TG Bot Tasks] Sending message for group "${groupKey}" with ${tasksInGroup.length} tasks, using groupId ${groupId}`);
+                try {
+                    await this.sendMessage(chatId, message, { replyMarkup });
+                } catch (error) {
+                    console.error(`[TG Bot Tasks] Error sending message for group "${groupKey}":`, error.message);
+                    // Если сообщение слишком длинное, отправляем упрощенную версию
+                    if (error.response && error.response.status === 400) {
+                        let shortMessage = `<b>Группа задач:</b>\n${groupKey}\n\n`;
+                        shortMessage += `<b>Содержит ${tasksInGroup.length} задач</b>\n`;
+
+                        try {
+                            await this.sendMessage(chatId, shortMessage, { replyMarkup });
+                        } catch (err) {
+                            console.error(`[TG Bot Tasks] Failed to send even shortened message:`, err.message);
+                        }
+                    }
+                }
+
+                groupIndex++;
             }
         } catch (error) {
             console.error('[TG Bot Service] Ошибка при получении списка задач:', error);
@@ -619,7 +654,94 @@ class TelegramBotService {
                     console.error('Ошибка при остановке задачи:', err);
                 });
         }
-        // Обработка остановки группы задач
+        // Обработка остановки группы задач по ID группы
+        else if (callbackData.startsWith('stop_g_')) {
+            const groupId = callbackData.split('_')[2];
+
+            if (!this.groupToTasksMap || !this.groupToTasksMap[groupId]) {
+                console.error(`[TG Bot] Group ${groupId} not found in groupToTasksMap`);
+                this.answerCallbackQuery(callbackQueryId, "❌ Ошибка: группа не найдена");
+                return;
+            }
+
+            const taskIds = this.groupToTasksMap[groupId];
+            console.log(`Telegram callback: stop_g_${groupId} for tasks:`, taskIds);
+
+            // Ответим на callback query
+            this.answerCallbackQuery(callbackQueryId, `⏹️ Останавливаем ${taskIds.length} задач...`);
+
+            // Обновляем клавиатуру сообщения
+            const newReplyMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: `⏹️ ${taskIds.length} задач остановлены`, callback_data: "noop" }
+                    ]
+                ]
+            };
+
+            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup)
+                .then(() => {
+                    // Останавливаем каждую задачу в группе
+                    if (this.messageHandlers.has('stopTask')) {
+                        const stopHandler = this.messageHandlers.get('stopTask');
+                        taskIds.forEach(taskId => {
+                            stopHandler({ taskId });
+                        });
+                    }
+
+                    this.sendMessage(chatId, `⏹️ Остановлено ${taskIds.length} задач.`);
+                })
+                .catch(err => {
+                    console.error('Ошибка при остановке группы задач:', err);
+                });
+        }
+        // Обработка удаления группы задач по ID группы
+        else if (callbackData.startsWith('remove_g_')) {
+            const groupId = callbackData.split('_')[2];
+
+            if (!this.groupToTasksMap || !this.groupToTasksMap[groupId]) {
+                console.error(`[TG Bot] Group ${groupId} not found in groupToTasksMap`);
+                this.answerCallbackQuery(callbackQueryId, "❌ Ошибка: группа не найдена");
+                return;
+            }
+
+            const taskIds = this.groupToTasksMap[groupId];
+            console.log(`Telegram callback: remove_g_${groupId} for tasks:`, taskIds);
+
+            // Ответим на callback query
+            this.answerCallbackQuery(callbackQueryId, `🗑️ Удаляем ${taskIds.length} задач...`);
+
+            // Обновляем клавиатуру сообщения
+            const newReplyMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: `🗑️ ${taskIds.length} задач удалены`, callback_data: "noop" }
+                    ]
+                ]
+            };
+
+            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup)
+                .then(() => {
+                    // Сначала останавливаем, потом удаляем каждую задачу
+                    if (this.messageHandlers.has('stopTask') && this.messageHandlers.has('removeTask')) {
+                        const stopHandler = this.messageHandlers.get('stopTask');
+                        const removeHandler = this.messageHandlers.get('removeTask');
+
+                        taskIds.forEach(taskId => {
+                            // Сначала останавливаем
+                            stopHandler({ taskId });
+                            // Затем удаляем
+                            removeHandler({ taskId });
+                        });
+                    }
+
+                    this.sendMessage(chatId, `🗑️ Удалено ${taskIds.length} задач.`);
+                })
+                .catch(err => {
+                    console.error('Ошибка при удалении группы задач:', err);
+                });
+        }
+        // Обработка остановки группы задач (старый метод, для обратной совместимости)
         else if (callbackData.startsWith('stop_tasks_')) {
             const taskIdsStr = callbackData.split('_')[2];
             const taskIds = taskIdsStr.split(',').map(id => parseInt(id));
@@ -654,7 +776,7 @@ class TelegramBotService {
                     console.error('Ошибка при остановке группы задач:', err);
                 });
         }
-        // Обработка удаления группы задач (остановка + удаление)
+        // Обработка удаления группы задач (старый метод, для обратной совместимости)
         else if (callbackData.startsWith('remove_tasks_')) {
             const taskIdsStr = callbackData.split('_')[2];
             const taskIds = taskIdsStr.split(',').map(id => parseInt(id));
