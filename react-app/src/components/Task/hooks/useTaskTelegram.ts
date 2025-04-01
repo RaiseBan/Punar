@@ -243,16 +243,39 @@ export function useTaskTelegram(
       console.log(`Received resume task event: taskId=${telegramTaskId}`);
 
       if (parseInt(String(telegramTaskId)) === id) {
-        console.log(`Resuming task ${id} via Telegram command`);
+        console.log(`[ResumeTask] Task ${id} match found for resuming. Current status=${status}`);
 
         // Возобновляем задачу, только если она остановлена
         if (status === "Stopped" && config) {
-          console.log(`Resuming stopped task ${id} with config:`, config);
-          window.electronAPI?.resumeProcess(id, config);
-          dispatch(updateTask({ id, status: "Running" }));
+          console.log(`[ResumeTask] Resuming stopped task ${id}, config exists:`,
+            JSON.stringify({
+              moduleType: config.module_name,
+              configKeys: Object.keys(config)
+            }));
+
+          try {
+            console.log(`[ResumeTask] Calling window.electronAPI?.resumeProcess for task ${id}`);
+            // Проверяем наличие метода resumeProcess в electronAPI
+            if (typeof window.electronAPI?.resumeProcess === 'function') {
+              window.electronAPI.resumeProcess(id, config);
+              console.log(`[ResumeTask] Successfully called resumeProcess for task ${id}`);
+
+              // Обновляем статус в Redux
+              console.log(`[ResumeTask] Dispatching status update to Redux for task ${id}`);
+              dispatch(updateTask({ id, status: "Running" }));
+              console.log(`[ResumeTask] Status update dispatched for task ${id}`);
+            } else {
+              console.error(`[ResumeTask] ERROR: window.electronAPI?.resumeProcess is not a function:`,
+                typeof window.electronAPI?.resumeProcess);
+            }
+          } catch (error) {
+            console.error(`[ResumeTask] ERROR resuming task ${id}:`, error);
+          }
         } else {
-          console.log(`Task ${id} not resumed: status=${status}, config=${config ? 'exists' : 'missing'}`);
+          console.log(`[ResumeTask] Task ${id} not resumed: status=${status}, config=${config ? 'exists' : 'missing'}`);
         }
+      } else {
+        console.log(`[ResumeTask] Task ID mismatch: received=${telegramTaskId}, current=${id}`);
       }
     };
 
