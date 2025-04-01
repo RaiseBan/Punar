@@ -41,15 +41,26 @@ export const electronMiddleware: Middleware = (store) => {
             });
 
             window.electronAPI.onProcessOutput((event, data) => {
-                // console.log("Middleware: process output", data);
-                store.dispatch(addTaskLog({ taskId: data.taskId, log: data.log }));
+                // Получаем текущее состояние задачи для проверки модуля
+                const state = store.getState() as RootState;
+                const task = state.tasks.tasks.find(t => t.id === data.taskId);
+
+                // Пропускаем логирование для mev_subtask модуля
+                if (task && task.moduleName === "mev_subtask") {
+                    // Проверяем, содержит ли лог данные таблицы или сообщения об ошибках
+                    if (data.log.includes("[TABLE_DATA]") || data.log.includes("ERROR") || data.log.includes("error")) {
+                        // Логируем только важные сообщения
+                        store.dispatch(addTaskLog({ taskId: data.taskId, log: data.log }));
+                    }
+                    // Для остальных сообщений просто выходим
+                    return;
+                } else {
+                    // Для остальных модулей логируем как обычно
+                    store.dispatch(addTaskLog({ taskId: data.taskId, log: data.log }));
+                }
 
                 const rowCells = parseTableRowFromLog(data.log);
                 if (rowCells) {
-                    // Получаем текущее состояние задачи
-                    const state = store.getState() as RootState;
-                    const task = state.tasks.tasks.find(t => t.id === data.taskId);
-
                     // Проверяем, что это задача MEV Module
                     if (task && task.moduleName === "MEV Module") {
                         // Первый элемент в ячейках - это токен
@@ -64,18 +75,19 @@ export const electronMiddleware: Middleware = (store) => {
                         // Инициализируем Set для этой задачи, если его еще нет
                         if (!processedTokens[data.taskId]) {
                             processedTokens[data.taskId] = new Set();
+                            console.log(`ТОКЕНЫ: Создан новый список для задачи ${data.taskId}`);
                         }
 
                         // Проверяем, был ли этот токен уже обработан
                         if (processedTokens[data.taskId].has(token)) {
-                            console.log(`Token ${token} already processed for task ${data.taskId}, skipping`);
+                            console.log(`ТОКЕНЫ: ${token} уже существует в списке для задачи ${data.taskId}, пропускаем`);
                             return;
                         }
 
                         // Добавляем токен в список обработанных
                         processedTokens[data.taskId].add(token);
-                        console.log(`Added token ${token} to processed list for task ${data.taskId}, 
-                            current count: ${processedTokens[data.taskId].size}`);
+                        console.log(`ТОКЕНЫ: Добавлен ${token} в список для задачи ${data.taskId}, 
+                            текущее количество: ${processedTokens[data.taskId].size}`);
                     }
 
                     // Добавляем строку в таблицу если это не дубликат для MEV Module
@@ -102,6 +114,7 @@ export const electronMiddleware: Middleware = (store) => {
 
             // Удаляем список токенов для удаленной задачи
             if (processedTokens[taskId]) {
+                console.log(`ТОКЕНЫ: Удален весь список токенов для задачи ${taskId}`);
                 delete processedTokens[taskId];
             }
         }
@@ -119,6 +132,7 @@ export const electronMiddleware: Middleware = (store) => {
             for (const taskId of removedTaskIds) {
                 console.log(`Task ${taskId} was removed (detected by state change), cleaning up token list`);
                 if (processedTokens[taskId]) {
+                    console.log(`ТОКЕНЫ: Удален весь список токенов для задачи ${taskId} (обнаружено по изменению состояния)`);
                     delete processedTokens[taskId];
                 }
             }

@@ -29,12 +29,12 @@ function sanitizeFileName(name) {
 // Функция для проверки лучшего пула Meteora для токена
 async function findBestMeteoraPool(tokenAddress, currentPairAddress) {
     try {
-        console.log(`Checking best Meteora pool for token ${tokenAddress}, current pool: ${currentPairAddress}`);
+        console.log(`МОНИТОРИНГ: Проверка лучшего пула Meteora для токена ${tokenAddress}, текущий пул: ${currentPairAddress}`);
 
         const response = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
 
         if (!response.data.pairs || response.data.pairs.length === 0) {
-            console.log(`No pairs found for token ${tokenAddress}`);
+            console.log(`МОНИТОРИНГ: Пары не найдены для токена ${tokenAddress}`);
             return null;
         }
 
@@ -42,7 +42,7 @@ async function findBestMeteoraPool(tokenAddress, currentPairAddress) {
         const meteoraPairs = response.data.pairs.filter(pair => pair.dexId === "meteora");
 
         if (meteoraPairs.length === 0) {
-            console.log(`No Meteora pairs found for token ${tokenAddress}`);
+            console.log(`МОНИТОРИНГ: Пары Meteora не найдены для токена ${tokenAddress}`);
             return null;
         }
 
@@ -59,21 +59,21 @@ async function findBestMeteoraPool(tokenAddress, currentPairAddress) {
         }
 
         if (!bestPair) {
-            console.log(`No best Meteora pair found for token ${tokenAddress}`);
+            console.log(`МОНИТОРИНГ: Не найдена лучшая пара Meteora для токена ${tokenAddress}`);
             return null;
         }
 
         // Проверяем, отличается ли лучшая пара от текущей
         if (bestPair.pairAddress !== currentPairAddress) {
-            console.log(`Found better Meteora pair: ${bestPair.pairAddress} with volume ${maxVolume}`);
+            console.log(`МОНИТОРИНГ: Найдена лучшая пара Meteora: ${bestPair.pairAddress} с объемом ${maxVolume}, старая пара: ${currentPairAddress}`);
             return bestPair.pairAddress;
         } else {
-            console.log(`Current Meteora pair ${currentPairAddress} is already the best`);
+            console.log(`МОНИТОРИНГ: Текущая пара Meteora ${currentPairAddress} остается лучшей, объем: ${maxVolume}`);
         }
 
         return null;
     } catch (error) {
-        console.error(`Error checking DexScreener API: ${error.message}`);
+        console.error(`МОНИТОРИНГ: Ошибка при проверке DexScreener API: ${error.message}`);
         return null;
     }
 }
@@ -85,13 +85,14 @@ function stopMevProcess(taskId) {
 
         // Останавливаем мониторинг
         if (processInfo.intervalId) {
+            console.log(`МОНИТОРИНГ: Остановка интервала проверки для задачи ${taskId}`);
             clearInterval(processInfo.intervalId);
         }
 
         // Удаляем из карты отслеживания
         mevSubtaskProcesses.delete(taskId);
 
-        console.log(`Monitoring for task ${taskId} has been stopped`);
+        console.log(`МОНИТОРИНГ: Мониторинг для задачи ${taskId} остановлен полностью`);
     }
 }
 
@@ -206,7 +207,7 @@ async function spawnProcess(taskConfig, userSettings) {
         const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
         // const wslCommand = `${fileToExecute} ${configFilePath}`;
         console.log(`full command: wsl ${program} ${configFilePathWSL}`);
-        child = spawn('wsl', [program, "run",configFilePathWSL], {
+        child = spawn('wsl', [program, "run", configFilePathWSL], {
             stdio: 'pipe', // или 'inherit', если нужно выводить логи в терминал
             shell: true, // Используем shell для корректного выполнения
             detached: false,
@@ -215,7 +216,7 @@ async function spawnProcess(taskConfig, userSettings) {
 
         // Проверяем, включен ли режим мониторинга
         if (updatedTaskConfig.enablePoolMonitoring === true) {
-            console.log(`Enabling pool monitoring for mev_subtask ${updatedTaskConfig.taskId}`);
+            console.log(`МОНИТОРИНГ: Включение мониторинга пулов для задачи ${updatedTaskConfig.taskId}`);
 
             // Получаем информацию о токене и текущем пуле Meteora
             const tokenAddress = updatedTaskConfig.rowData[0];
@@ -227,16 +228,19 @@ async function spawnProcess(taskConfig, userSettings) {
             const meteoraPoolMatch = tomlContent.match(/meteora_dlmm_pool_list\s*=\s*\[\s*"([^"]+)"\s*\]/);
             const currentMeteoraPair = meteoraPoolMatch ? meteoraPoolMatch[1] : null;
 
-            console.log(`Token address: ${tokenAddress}, current Meteora pool: ${currentMeteoraPair}`);
+            console.log(`МОНИТОРИНГ: Адрес токена: ${tokenAddress}, текущий пул Meteora: ${currentMeteoraPair}`);
 
             // Устанавливаем интервал проверки (по умолчанию 5 минут)
             const checkInterval = updatedTaskConfig.poolCheckInterval || 300000; // 5 минут в миллисекундах
+            console.log(`МОНИТОРИНГ: Настройка интервала проверки ${checkInterval}ms для задачи ${updatedTaskConfig.taskId}`);
 
             const intervalId = setInterval(async () => {
                 try {
+                    console.log(`МОНИТОРИНГ: Выполняется проверка пула для задачи ${updatedTaskConfig.taskId} в ${new Date().toISOString()}`);
+
                     // Проверяем, если процесс завершен, останавливаем мониторинг
                     if (child.exitCode !== null) {
-                        console.log(`Process already exited with code ${child.exitCode}, stopping monitoring`);
+                        console.log(`МОНИТОРИНГ: Процесс уже завершен с кодом ${child.exitCode}, останавливаем мониторинг`);
                         stopMevProcess(updatedTaskConfig.taskId);
                         return;
                     }
@@ -245,10 +249,11 @@ async function spawnProcess(taskConfig, userSettings) {
                     const betterPairAddress = await findBestMeteoraPool(tokenAddress, currentMeteoraPair);
 
                     if (betterPairAddress) {
-                        console.log(`Better Meteora pool found, regenerating config and restarting process`);
+                        console.log(`МОНИТОРИНГ: Найден лучший пул Meteora, перегенерируем конфиг и перезапускаем процесс`);
 
                         // Останавливаем текущий процесс
                         child.kill();
+                        console.log(`МОНИТОРИНГ: Текущий процесс остановлен`);
 
                         // Создаем новый конфиг с обновленным пулом Meteora
                         const newConfigFilePath = await generateMevConfig(
@@ -259,11 +264,11 @@ async function spawnProcess(taskConfig, userSettings) {
                         );
 
                         if (!newConfigFilePath) {
-                            console.error(`Failed to generate new config with updated Meteora pool`);
+                            console.error(`МОНИТОРИНГ: Не удалось создать новый конфиг с обновленным пулом Meteora`);
                             return;
                         }
 
-                        console.log(`New config generated at: ${newConfigFilePath}`);
+                        console.log(`МОНИТОРИНГ: Новый конфиг создан: ${newConfigFilePath}`);
 
                         // Запускаем процесс с новым конфигом
                         const newConfigFilePathWSL = convertWindowsPathToWSL(newConfigFilePath);
@@ -277,6 +282,7 @@ async function spawnProcess(taskConfig, userSettings) {
 
                         // Заменяем дочерний процесс в mevSubtaskProcesses
                         child = newChild;
+                        console.log(`МОНИТОРИНГ: Новый процесс запущен`);
 
                         // Обновляем инфо о процессе в мапе
                         const processInfo = mevSubtaskProcesses.get(updatedTaskConfig.taskId);
@@ -284,12 +290,15 @@ async function spawnProcess(taskConfig, userSettings) {
                             processInfo.process = newChild;
                             processInfo.meteoraPairAddress = betterPairAddress;
                             processInfo.configFilePath = newConfigFilePath;
+                            console.log(`МОНИТОРИНГ: Обновлена информация о процессе в кэше`);
                         }
 
-                        console.log(`Process restarted with new Meteora pool: ${betterPairAddress}`);
+                        console.log(`МОНИТОРИНГ: Процесс перезапущен с новым пулом Meteora: ${betterPairAddress}`);
+                    } else {
+                        console.log(`МОНИТОРИНГ: Лучший пул не найден, сохраняем текущий пул для задачи ${updatedTaskConfig.taskId}`);
                     }
                 } catch (error) {
-                    console.error(`Error in monitoring interval: ${error.message}`);
+                    console.error(`МОНИТОРИНГ: Ошибка в интервале мониторинга: ${error.message}`);
                 }
             }, checkInterval);
 
@@ -303,7 +312,7 @@ async function spawnProcess(taskConfig, userSettings) {
                 configFilePath: configFilePath
             });
 
-            console.log(`Pool monitoring started for task ${updatedTaskConfig.taskId}, interval: ${checkInterval}ms`);
+            console.log(`МОНИТОРИНГ: Мониторинг пулов запущен для задачи ${updatedTaskConfig.taskId}, интервал: ${checkInterval}ms`);
         }
     } else {
         child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
