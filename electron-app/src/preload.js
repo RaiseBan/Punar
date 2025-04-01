@@ -142,6 +142,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
             ipcRenderer.send(channel, data);
         }
     },
+
+    // Добавляем новые методы для работы с уведомлениями о смене пула
+    onPoolChanged: (callback) => {
+        ipcRenderer.on('telegram-notify-pool-change', (event, data) => callback(data));
+    },
 });
 
 ipcRenderer.on('telegram-get-tasks', () => {

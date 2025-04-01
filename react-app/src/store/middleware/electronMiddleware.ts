@@ -101,6 +101,16 @@ export const electronMiddleware: Middleware = (store) => {
                 store.dispatch(updateTask({ id: data.taskId, status: "Stopped" }));
             });
 
+            // Добавляем обработчик для уведомлений о смене пула Meteora
+            window.electronAPI.onPoolChanged((data) => {
+                console.log(`Middleware: Pool changed notification for task ${data.taskId}`);
+                // Добавляем специальный лог для отображения смены пула
+                store.dispatch(addTaskLog({
+                    taskId: data.taskId,
+                    log: `[MONITOR] Meteora pool change detected, process restarted with better pool`
+                }));
+            });
+
             // Указываем, что подписка уже была выполнена
             (window as any)._electronMiddlewareSubscribed = true;
         }

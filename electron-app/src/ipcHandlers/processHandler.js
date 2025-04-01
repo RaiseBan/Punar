@@ -12,6 +12,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         const scriptPath = getSettings();
 
         try {
+
             const child = await spawnProcess(config, scriptPath);
             if (!child) {
                 console.error(`ПРОЦЕСС: Не удалось запустить процесс для задачи ${taskId}`);
@@ -85,6 +86,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         const scriptPath = getSettings();
 
         try {
+
             // СНАЧАЛА запускаем процесс
             const child = await spawnProcess(config, scriptPath);
             if (!child) {

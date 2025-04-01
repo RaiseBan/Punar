@@ -164,6 +164,9 @@ declare global {
                     data: { taskId: number }
                 ) => void
             ) => void;
+
+            // Уведомление о смене пула
+            onPoolChanged: (callback: (data: { taskId: number }) => void) => void;
         };
     }
 }

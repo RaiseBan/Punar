@@ -349,6 +349,105 @@ class TelegramBotService {
         }
     }
 
+    // Функция для фильтрации логов, чтобы выводить только важные
+    filterLogs(logs) {
+        if (!Array.isArray(logs) || logs.length === 0) {
+            return [];
+        }
+
+        // Оставляем только важные логи: ошибки, предупреждения и системные сообщения
+        return logs.filter(log => {
+            // Проверяем на наличие ключевых слов
+            return log.includes("ERROR") ||
+                log.includes("error") ||
+                log.includes("Warning") ||
+                log.includes("warning") ||
+                log.includes("[INFO]") ||
+                log.includes("[TABLE_DATA]") ||
+                log.includes("Starting") ||
+                log.includes("Completed") ||
+                log.includes("Pool") ||
+                log.includes("MONITOR");
+        }).slice(-10); // Берем последние 10 записей
+    }
+
+    // Экранирование HTML для безопасного вывода в Telegram
+    escapeHtml(text) {
+        if (!text) return '';
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    // Функция отправки статуса задачи
+    async sendTaskStatus(taskId) {
+        try {
+            console.log(`[TG Bot] Отправка статуса для задачи ${taskId}`);
+
+            const tasks = await this.getTasks();
+
+            if (!tasks || tasks.length === 0) {
+                console.log(`[TG Bot] Задачи не найдены при отправке статуса`);
+                return;
+            }
+
+            const task = tasks.find(t => t.id === parseInt(taskId));
+
+            if (!task) {
+                console.log(`[TG Bot] Задача ${taskId} не найдена для отправки статуса`);
+                return;
+            }
+
+            // Фильтруем логи, чтобы показать только важные
+            const filteredLogs = this.filterLogs(task.logs);
+
+            // Формируем сообщение
+            let message = `📊 <b>Статус задачи #${task.id}</b>\n\n`;
+            message += `<b>Название:</b> ${this.escapeHtml(task.name)}\n`;
+            message += `<b>Модуль:</b> ${this.escapeHtml(task.moduleName)}\n`;
+            message += `<b>Статус:</b> ${task.status}\n\n`;
+
+            if (filteredLogs.length > 0) {
+                message += `<b>Последние важные события:</b>\n`;
+                for (const log of filteredLogs) {
+                    // Ограничиваем длину лога для читаемости
+                    const trimmedLog = log.length > 100 ? log.substring(0, 97) + '...' : log;
+                    message += `• ${this.escapeHtml(trimmedLog)}\n`;
+                }
+            } else {
+                message += `<i>Нет важных логов для отображения</i>\n`;
+            }
+
+            // Добавляем кнопки управления
+            const replyMarkup = {
+                inline_keyboard: [
+                    [
+                        {
+                            text: task.status === "Running" ? "⏹️ Остановить" : "▶️ Запустить",
+                            callback_data: task.status === "Running" ? `stop_task_${task.id}` : `resume_g_${task.id}`
+                        }
+                    ],
+                    [
+                        { text: "🗑️ Удалить", callback_data: `remove_g_${task.id}` }
+                    ]
+                ]
+            };
+
+            // Отправка сообщения всем чатам
+            for (const chatId of this.chatIds) {
+                await this.sendMessage(chatId, message, { replyMarkup });
+                console.log(`[TG Bot] Статус задачи ${taskId} отправлен в чат ${chatId}`);
+            }
+
+            return true;
+        } catch (error) {
+            console.error(`[TG Bot] Ошибка при отправке статуса задачи ${taskId}:`, error);
+            return false;
+        }
+    }
+
     handleIncomingMessage(chatId, message) {
         if (message.text.startsWith('/')) {
             const command = message.text.split(' ')[0].substring(1);
@@ -357,10 +456,25 @@ class TelegramBotService {
                     this.sendMessage(chatId, 'Добро пожаловать в MEV бот! Вы будете получать уведомления о новых MEV возможностях.');
                     break;
                 case 'help':
-                    this.sendMessage(chatId, 'Команды:\n/start - Запустить бота\n/help - Показать это сообщение\n/tasks - Показать активные задачи');
+                    this.sendMessage(chatId, 'Команды:\n/start - Запустить бота\n/help - Показать это сообщение\n/tasks - Показать активные задачи\n/status <taskId> - Показать статус задачи');
                     break;
                 case 'tasks':
                     this.handleTasksCommand(chatId);
+                    break;
+                case 'status':
+                    // Проверяем, есть ли параметр taskId
+                    const parts = message.text.split(' ');
+                    if (parts.length > 1) {
+                        const taskId = parts[1].trim();
+                        if (taskId && !isNaN(parseInt(taskId))) {
+                            this.sendMessage(chatId, `Получение статуса задачи #${taskId}...`);
+                            this.sendTaskStatus(taskId);
+                        } else {
+                            this.sendMessage(chatId, 'Пожалуйста, укажите корректный ID задачи, например: /status 123');
+                        }
+                    } else {
+                        this.sendMessage(chatId, 'Пожалуйста, укажите ID задачи, например: /status 123');
+                    }
                     break;
             }
             return;
@@ -959,6 +1073,11 @@ ipcMain.handle('telegram-bot:start-stream', (event) => {
 
 ipcMain.handle('telegram-bot:stop-stream', (event) => {
     return telegramBotService.stopStream();
+});
+
+ipcMain.handle('telegram-bot:send-task-status', (event, taskId) => {
+    console.log(`telegramBotService.send-task-status для задачи ${taskId}`);
+    return telegramBotService.sendTaskStatus(taskId);
 });
 
 module.exports = telegramBotService;

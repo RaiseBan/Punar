@@ -288,6 +288,22 @@ async function spawnProcess(taskConfig, userSettings) {
                         child.kill();
                         console.log(`МОНИТОРИНГ: Текущий процесс ${taskId} остановлен`);
 
+                        // Отправляем уведомление о смене пула через Telegram
+                        try {
+                            const { BrowserWindow } = require('electron');
+                            const mainWindow = BrowserWindow.getAllWindows()[0];
+                            if (mainWindow) {
+                                console.log(`МОНИТОРИНГ: Отправка уведомления о смене пула для задачи ${taskId}`);
+                                mainWindow.webContents.send('telegram-notify-pool-change', { taskId });
+
+                                // Отправляем запрос на отображение статуса задачи через Telegram
+                                const ipcMain = require('electron').ipcMain;
+                                ipcMain.emit('telegram-bot:send-task-status', null, taskId);
+                            }
+                        } catch (notifyError) {
+                            console.error(`МОНИТОРИНГ: Ошибка при отправке уведомления:`, notifyError);
+                        }
+
                         // Создаем новый конфиг с обновленным пулом Meteora
                         const newConfigFilePath = await generateMevConfig(
                             userSettings.mevBotDirectory,

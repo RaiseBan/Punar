@@ -104,6 +104,7 @@ export function useTaskActions(
 
         const taskConfig = {
           ...config,
+          taskId: taskId,
           module_name: "mev_subtask",
           task_name: taskName,
           strategy,
