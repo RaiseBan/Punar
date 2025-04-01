@@ -449,9 +449,10 @@ class TelegramBotService {
                 groupedTasks[groupKey].push(task);
             }
 
-            // Отправляем информацию по каждой группе
+            // Для каждой группы отправляем одно сообщение
             for (const [groupKey, tasksInGroup] of Object.entries(groupedTasks)) {
-                let message = `<b>Группа задач: ${groupKey}</b>\n\n`;
+                // Формируем сообщение для группы
+                let message = `<b>Группа задач:</b>\n${groupKey}\n\n`;
 
                 // Добавляем информацию о каждой задаче в группе
                 for (const task of tasksInGroup) {
@@ -460,9 +461,10 @@ class TelegramBotService {
                     message += `<b>Статус:</b> ${task.status}\n\n`;
                 }
 
-                // Получаем IDs всех задач в группе для кнопок
+                // Получаем IDs всех задач в этой группе для кнопок
                 const taskIdsInGroup = tasksInGroup.map(task => task.id).join(',');
 
+                // Создаем клавиатуру с двумя кнопками для этой группы задач
                 const replyMarkup = {
                     inline_keyboard: [
                         [
@@ -474,6 +476,7 @@ class TelegramBotService {
                     ]
                 };
 
+                // Отправляем сообщение для этой группы
                 await this.sendMessage(chatId, message, { replyMarkup });
             }
         } catch (error) {
