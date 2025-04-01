@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import {TaskDataRow, TaskProps} from "../components/Task/types";
+import { TaskDataRow, TaskProps } from "../components/Task/types";
 
 
 interface TaskState {
@@ -17,6 +17,9 @@ interface TaskState {
 interface TasksState {
     tasks: TaskState[];
 }
+
+// Custom action type for middleware to handle token removal
+export const REMOVE_MEV_TOKEN = 'tasks/removeMevToken';
 
 const initialState: TasksState = {
     tasks: [],
@@ -117,6 +120,14 @@ export const tasksSlice = createSlice({
                 task.data.push({ cells: rowCells });
             }
         },
+        // Действие только для миддлвера, не изменяет состояние
+        removeMevToken: (
+            state,
+            action: PayloadAction<{ taskId: number; token: string }>
+        ) => {
+            // Это действие не меняет состояние напрямую, а обрабатывается в middleware
+            console.log(`REMOVE_MEV_TOKEN CALLED for task ${action.payload.taskId}, token ${action.payload.token}`);
+        }
     },
 });
 
@@ -127,6 +138,7 @@ export const {
     addTaskLog,
     addOrUpdateTask,
     addTaskRow,
+    removeMevToken,
 } = tasksSlice.actions;
 
 export default tasksSlice.reducer;

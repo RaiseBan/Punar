@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { removeTask, updateTask, addOrUpdateTask } from '../../../store/tasksSlice';
+import { removeTask, updateTask, addOrUpdateTask, removeMevToken } from '../../../store/tasksSlice';
 import { TaskDataRow } from '../types';
 
 export function useTaskActions(
@@ -23,6 +23,9 @@ export function useTaskActions(
   const [editConfig, setEditConfig] = useState<any>(config || {});
   const [editName, setEditName] = useState(name);
   const [editModuleName, setEditModuleName] = useState(config?.module_name || '');
+
+  // Проверка на MEV Module
+  const isMEVModule = config?.module_name === "MEV Module" || editModuleName === "MEV Module";
 
   // Функции управления диалогами
   const handleOpenSettings = () => {
@@ -152,10 +155,21 @@ export function useTaskActions(
       rowIndex = rowIndexOrId;
     }
 
+    const rowToDelete = currentData[rowIndex];
+    const token = rowToDelete.cells[0]?.trim() || '';
+
+    // Если это задача MEV Module, отправляем специальное действие для удаления токена из фильтра
+    if (isMEVModule && token) {
+      console.log(`MEV Module: Removing token ${token} from filtered list for task ${id}`);
+      dispatch(removeMevToken({
+        taskId: id,
+        token
+      }));
+    }
+
     const newData = [...currentData.slice(0, rowIndex), ...currentData.slice(rowIndex + 1)];
     console.log(`Original data length: ${currentData.length}, New data length: ${newData.length}`);
 
-    const rowToDelete = currentData[rowIndex];
     const rowIdToDelete = rowToDelete.rowId || '';
 
     const newProcessedRows = currentProcessedRows.filter(item => {
