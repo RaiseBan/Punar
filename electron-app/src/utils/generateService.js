@@ -91,7 +91,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
         },
         spam: {
             enabled: !config.useJito,
-            sending_rpc_url: [config.main_rpc],
+            sending_rpc_urls: [config.main_rpc],
             compute_unit_price: 105,
             max_retries: 0,
             enable_simple_send: false
@@ -119,7 +119,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
             enabled: true
         },
         bot: {
-            compute_unit_limit: 290_000,
+            compute_unit_limit: 650_000,
             merge_mints: false
         },
         wallet: {}
