@@ -420,34 +420,50 @@ class TelegramBotService {
 
             const tasks = await this.getTasks();
 
+            console.log('[TG Bot Tasks] Received tasks:', JSON.stringify(tasks));
+
             if (!tasks || tasks.length === 0) {
+                console.log('[TG Bot Tasks] No tasks found');
                 this.sendMessage(chatId, 'В данный момент нет активных задач.');
                 return;
             }
+
+            console.log(`[TG Bot Tasks] Total tasks received: ${tasks.length}`);
 
             // Группируем задачи по токену и изменению
             const groupedTasks = {};
 
             for (const task of tasks) {
-                if (!task.name) continue;
+                if (!task.name) {
+                    console.log(`[TG Bot Tasks] Task with ID ${task.id} has no name, using moduleName`);
+                    continue;
+                }
 
                 // Пытаемся извлечь информацию о токене и изменении из имени задачи
                 let groupKey = '';
 
+                console.log(`[TG Bot Tasks] Processing task ID ${task.id}, name: "${task.name}"`);
+
                 if (task.name.includes('->')) {
                     // Если есть стрелка, берем ТОЛЬКО часть ДО "->" как ключ группы
                     groupKey = task.name.split('->')[0].trim();
+                    console.log(`[TG Bot Tasks] Task has "->", extracted group key: "${groupKey}"`);
                 } else {
                     // Иначе используем moduleName в качестве ключа группы
                     groupKey = task.moduleName || 'Другие задачи';
+                    console.log(`[TG Bot Tasks] Task has no "->", using moduleName as key: "${groupKey}"`);
                 }
 
                 if (!groupedTasks[groupKey]) {
                     groupedTasks[groupKey] = [];
+                    console.log(`[TG Bot Tasks] Created new group: "${groupKey}"`);
                 }
 
                 groupedTasks[groupKey].push(task);
+                console.log(`[TG Bot Tasks] Added task ${task.id} to group "${groupKey}", now ${groupedTasks[groupKey].length} tasks in this group`);
             }
+
+            console.log(`[TG Bot Tasks] Groups formed: ${Object.keys(groupedTasks).length}`, Object.keys(groupedTasks));
 
             // Для каждой группы отправляем одно сообщение
             for (const [groupKey, tasksInGroup] of Object.entries(groupedTasks)) {
@@ -477,6 +493,7 @@ class TelegramBotService {
                 };
 
                 // Отправляем сообщение для этой группы
+                console.log(`[TG Bot Tasks] Sending message for group "${groupKey}" with ${tasksInGroup.length} tasks`);
                 await this.sendMessage(chatId, message, { replyMarkup });
             }
         } catch (error) {
