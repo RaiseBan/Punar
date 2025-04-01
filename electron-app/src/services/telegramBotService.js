@@ -460,27 +460,42 @@ class TelegramBotService {
                     console.log(`[TG Bot Tasks] Task has no "->", using moduleName as key: "${groupKey}"`);
                 }
 
+                // Если группа с этим ключом еще не создана
                 if (!groupedTasks[groupKey]) {
                     groupedTasks[groupKey] = [];
-                    // Назначаем для каждой группы уникальный числовой идентификатор
-                    groupToTasksMap[`g${groupCounter}`] = [];
-                    console.log(`[TG Bot Tasks] Created new group: "${groupKey}" with ID g${groupCounter}`);
+                    // Создаем уникальный идентификатор для этой группы и сохраняем в маппинге
+                    const groupId = `g${groupCounter}`;
+                    groupToTasksMap[groupId] = {
+                        key: groupKey,
+                        tasks: []
+                    };
+                    console.log(`[TG Bot Tasks] Created new group: "${groupKey}" with ID ${groupId}`);
                     groupCounter++;
                 }
 
-                // Получаем идентификатор группы для этой задачи
-                const groupId = Object.keys(groupToTasksMap).find(key =>
-                    groupToTasksMap[key] === groupedTasks[groupKey]);
-
+                // Добавляем задачу в группу
                 groupedTasks[groupKey].push(task);
-                groupToTasksMap[groupId].push(task.id);
-                console.log(`[TG Bot Tasks] Added task ${task.id} to group "${groupKey}", now ${groupedTasks[groupKey].length} tasks in this group`);
+
+                // Ищем идентификатор группы по ключу группы
+                const groupId = Object.keys(groupToTasksMap).find(id =>
+                    groupToTasksMap[id].key === groupKey);
+
+                // Добавляем ID задачи в список задач этой группы
+                if (groupId) {
+                    groupToTasksMap[groupId].tasks.push(task.id);
+                    console.log(`[TG Bot Tasks] Added task ${task.id} to group "${groupKey}" (ID: ${groupId}), now ${groupedTasks[groupKey].length} tasks in this group`);
+                } else {
+                    console.error(`[TG Bot Tasks] Failed to find groupId for group "${groupKey}"`);
+                }
             }
 
             console.log(`[TG Bot Tasks] Groups formed: ${Object.keys(groupedTasks).length}`, Object.keys(groupedTasks));
 
             // Сохраняем карту групп в памяти для использования в callback_query
-            this.groupToTasksMap = groupToTasksMap;
+            this.groupToTasksMap = {};
+            for (const groupId in groupToTasksMap) {
+                this.groupToTasksMap[groupId] = groupToTasksMap[groupId].tasks;
+            }
 
             // Для каждой группы отправляем одно сообщение
             let groupIndex = 0;
@@ -514,6 +529,7 @@ class TelegramBotService {
                 console.log(`[TG Bot Tasks] Sending message for group "${groupKey}" with ${tasksInGroup.length} tasks, using groupId ${groupId}`);
                 try {
                     await this.sendMessage(chatId, message, { replyMarkup });
+                    console.log(`[TG Bot Tasks] Message sent successfully for group "${groupKey}"`);
                 } catch (error) {
                     console.error(`[TG Bot Tasks] Error sending message for group "${groupKey}":`, error.message);
                     // Если сообщение слишком длинное, отправляем упрощенную версию
@@ -523,6 +539,7 @@ class TelegramBotService {
 
                         try {
                             await this.sendMessage(chatId, shortMessage, { replyMarkup });
+                            console.log(`[TG Bot Tasks] Shortened message sent successfully for group "${groupKey}"`);
                         } catch (err) {
                             console.error(`[TG Bot Tasks] Failed to send even shortened message:`, err.message);
                         }
