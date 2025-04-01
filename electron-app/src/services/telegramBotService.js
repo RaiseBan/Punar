@@ -364,18 +364,53 @@ class TelegramBotService {
         }
     }
 
-    // Обработчик команды /tasks
+    // Метод для получения задач через IPC
+    async getTasks() {
+        return new Promise((resolve, reject) => {
+            try {
+                const { ipcMain, BrowserWindow } = require('electron');
+                const mainWindow = BrowserWindow.getAllWindows()[0];
+
+                if (!mainWindow) {
+                    return resolve([]);
+                }
+
+                // Устанавливаем одноразовый слушатель для ответа
+                const responseListener = (event, tasks) => {
+                    resolve(tasks);
+                };
+
+                // Регистрируем временный обработчик
+                ipcMain.once('tasks-from-redux', responseListener);
+
+                // Устанавливаем таймаут на случай, если ответ не придет
+                const timeout = setTimeout(() => {
+                    ipcMain.removeListener('tasks-from-redux', responseListener);
+                    reject(new Error('Таймаут при получении задач'));
+                }, 3000);
+
+                // Отправляем запрос в renderer process
+                mainWindow.webContents.send('get-tasks-from-redux');
+            } catch (error) {
+                console.error('Ошибка при запросе задач:', error);
+                reject(error);
+            }
+        });
+    }
+
+    // Теперь используем этот метод в handleTasksCommand
     async handleTasksCommand(chatId) {
         try {
-            // Используем main процесс для получения задач
-            const tasks = await ipcMain.handle('get-active-tasks', () => { });
+            this.sendMessage(chatId, 'Получение списка задач...');
+
+            const tasks = await this.getTasks();
 
             if (!tasks || tasks.length === 0) {
                 this.sendMessage(chatId, 'В данный момент нет активных задач.');
                 return;
             }
 
-            // Отправляем каждую задачу отдельным сообщением
+            // Отправляем информацию о каждой задаче
             for (const task of tasks) {
                 let message = `<b>Задача #${task.id}</b>: ${task.name}\n`;
                 message += `<b>Модуль:</b> ${task.moduleName}\n`;
@@ -398,7 +433,7 @@ class TelegramBotService {
             }
         } catch (error) {
             console.error('Ошибка при получении списка задач:', error);
-            this.sendMessage(chatId, 'Произошла ошибка при получении списка задач.');
+            this.sendMessage(chatId, 'Произошла ошибка при получении списка задач: ' + error.message);
         }
     }
 

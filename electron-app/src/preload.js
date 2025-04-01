@@ -1,5 +1,5 @@
 // preload.js
-const {contextBridge, ipcRenderer} = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
     // Запуск процесса
@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
             console.log(`Process started for task ${taskId}`);
         });
     },
-    resumeProcess: (taskId, config) => ipcRenderer.send("resume-process", {taskId, config}),
+    resumeProcess: (taskId, config) => ipcRenderer.send("resume-process", { taskId, config }),
     removeAllListeners: () => {
         ipcRenderer.removeAllListeners("process-started");
         ipcRenderer.removeAllListeners("process-output");
@@ -108,4 +108,36 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Добавляем в объект electronAPI
     onTelegramStopTask: (callback) => ipcRenderer.on('telegram-bot:stop-task', callback),
 
+});
+
+ipcRenderer.on('telegram-get-tasks', () => {
+    const tasksState = document.getElementById('redux-store-data');
+    let tasks = [];
+
+    if (tasksState) {
+        try {
+            const state = JSON.parse(tasksState.textContent);
+            tasks = state.tasks.tasks;
+        } catch (e) {
+            console.error('Error parsing tasks:', e);
+        }
+    }
+
+    // Вместо invoke используем send 
+    ipcRenderer.send('telegram-tasks-response', tasks);
+});
+
+// Добавляем новый обработчик для запроса задач
+ipcRenderer.on('get-tasks-from-redux', (event) => {
+    try {
+        // Получаем состояние Redux через глобальную функцию
+        const state = window.getReduxState();
+        const tasks = state?.tasks?.tasks || [];
+
+        // Отправляем задачи обратно в main process
+        ipcRenderer.send('tasks-from-redux', tasks);
+    } catch (error) {
+        console.error('Ошибка при получении задач из Redux:', error);
+        ipcRenderer.send('tasks-from-redux', []);
+    }
 });

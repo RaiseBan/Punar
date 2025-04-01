@@ -66,6 +66,11 @@ app.whenReady().then(() => {
     console.log(`Sending stop task to renderer: taskId=${taskId}`);
     mainWindow.webContents.send('telegram-bot:stop-task', { taskId });
   });
+
+  // Добавить обработчик для задач Telegram
+  ipcMain.handle('telegram-tasks-response', (event, tasks) => {
+    return tasks;
+  });
 });
 
 app.commandLine.appendSwitch("ignore-certificate-errors");
