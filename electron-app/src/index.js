@@ -4,7 +4,7 @@ const { initializeProcessHandlers } = require("./ipcHandlers/processHandler");
 const { initializeWalletHandlers } = require("./ipcHandlers/walletHandler");
 const { initializeConfigHandlers } = require("./ipcHandlers/configHandler");
 const { initializeWindowHandlers } = require("./ipcHandlers/windowHandler");
-const {initializeApiHandlers} = require("./ipcHandlers/tensorApiHandler");
+const { initializeApiHandlers } = require("./ipcHandlers/tensorApiHandler");
 
 const telegramBotService = require('./services/telegramBotService');
 
@@ -33,9 +33,9 @@ function createWindow() {
 
   mainWindow.setMenuBarVisibility(false);
   mainWindow.loadURL(
-      app.isPackaged
-          ? `file://${path.join(app.getAppPath(), "react-app", "build", "index.html")}`
-          : "http://localhost:3000"
+    app.isPackaged
+      ? `file://${path.join(app.getAppPath(), "react-app", "build", "index.html")}`
+      : "http://localhost:3000"
   );
 }
 
@@ -48,13 +48,14 @@ app.whenReady().then(() => {
   initializeWindowHandlers(ipcMain, mainWindow);
   initializeApiHandlers(ipcMain);
 
-  telegramBotService.onTaskRun(({ taskId, strategy }) => {
-    // Find the corresponding window and send a message to the renderer
-    mainWindow.webContents.send('telegram-bot:run-task', { taskId, strategy });
+  telegramBotService.onTaskRun(({ taskId, rowIndex, strategy }) => {
+    console.log(`Sending run task to renderer: taskId=${taskId}, rowIndex=${rowIndex}, strategy=${strategy}`);
+    mainWindow.webContents.send('telegram-bot:run-task', { taskId, rowIndex, strategy });
   });
 
-  telegramBotService.onTaskDelete(({ taskId }) => {
-    mainWindow.webContents.send('telegram-bot:delete-task', { taskId });
+  telegramBotService.onTaskDelete(({ taskId, rowIndex }) => {
+    console.log(`Sending delete task to renderer: taskId=${taskId}, rowIndex=${rowIndex}`);
+    mainWindow.webContents.send('telegram-bot:delete-task', { taskId, rowIndex });
   });
 });
 

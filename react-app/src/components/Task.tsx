@@ -368,28 +368,43 @@ export default function Task({
     useEffect(() => {
         if (!window.electronAPI) return;
 
-        const runTaskHandler = (event: any, { taskId: telegramTaskId, rowIndex, strategy }: { taskId: number, rowIndex: number, strategy: string }) => {
-            if (telegramTaskId === id && rowIndex !== undefined) {
-                handleRunMEVTask(rowIndex, strategy);
+        console.log(`Setting up Telegram handlers for task ${id}`);
+
+        const runTaskHandler = (event: any, data: { taskId: number, rowIndex: number, strategy: string }) => {
+            const { taskId: telegramTaskId, rowIndex, strategy } = data;
+            console.log(`Received run task event: taskId=${telegramTaskId}, rowIndex=${rowIndex}, strategy=${strategy}`);
+
+            if (parseInt(String(telegramTaskId)) === id) {
+                console.log(`Running task ${id}, row ${rowIndex} with strategy ${strategy}`);
+                handleRunMEVTask(parseInt(String(rowIndex)), strategy);
             }
         };
 
-        const deleteTaskHandler = (event: any, { taskId: telegramTaskId, rowIndex }: { taskId: number, rowIndex: number }) => {
-            if (telegramTaskId === id && rowIndex !== undefined) {
-                handleDeleteMEVRow(rowIndex);
+        const deleteTaskHandler = (event: any, data: { taskId: number, rowIndex: number }) => {
+            const { taskId: telegramTaskId, rowIndex } = data;
+            console.log(`Received delete task event: taskId=${telegramTaskId}, rowIndex=${rowIndex}`);
+
+            if (parseInt(String(telegramTaskId)) === id) {
+                console.log(`Deleting row ${rowIndex} from task ${id}`);
+                handleDeleteMEVRow(parseInt(String(rowIndex)));
             }
         };
 
-        // Регистрируем слушателей событий
-        window.electronAPI.onTelegramRunTask(runTaskHandler);
-        window.electronAPI.onTelegramDeleteTask(deleteTaskHandler);
+        // Добавляем проверку на undefined
+        if (window.electronAPI) {
+            window.electronAPI.onTelegramRunTask(runTaskHandler);
+            window.electronAPI.onTelegramDeleteTask(deleteTaskHandler);
+        }
 
         return () => {
+            console.log(`Removing Telegram handlers for task ${id}`);
             // Добавляем проверку на undefined
-            window.electronAPI?.removeListener('telegram-bot:run-task', runTaskHandler);
-            window.electronAPI?.removeListener('telegram-bot:delete-task', deleteTaskHandler);
+            if (window.electronAPI) {
+                window.electronAPI.removeListener('telegram-bot:run-task', runTaskHandler);
+                window.electronAPI.removeListener('telegram-bot:delete-task', deleteTaskHandler);
+            }
         };
-    }, [id]);
+    }, [id]); // Зависим только от id
 
     // Автоматически запускать задачи в автоматическом режиме
     useEffect(() => {
