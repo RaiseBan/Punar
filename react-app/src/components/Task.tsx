@@ -257,6 +257,7 @@ export default function Task({
         }
 
         // Проверяем, есть ли данные вообще
+        console.log(`data-TASK-ATFTER SIGNAL: ${JSON.stringify(data, null, 2)}`);
         if (!data || data.length === 0) {
             console.error(`No data to delete from: data is empty`);
             return;
