@@ -76,6 +76,12 @@ app.whenReady().then(() => {
     mainWindow.webContents.send('telegram-bot:remove-task', { taskId });
   });
 
+  // Регистрируем обработчик возобновления задач
+  telegramBotService.onTaskResume(({ taskId }) => {
+    console.log(`Sending resume task to renderer: taskId=${taskId}`);
+    mainWindow.webContents.send('telegram-bot:resume-task', { taskId });
+  });
+
   // Добавить обработчик для задач Telegram
   ipcMain.handle('telegram-tasks-response', (event, tasks) => {
     return tasks;

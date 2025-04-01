@@ -513,16 +513,29 @@ class TelegramBotService {
                 // Используем компактный идентификатор группы для callback_data
                 const groupId = `g${groupIndex}`;
 
-                // Создаем клавиатуру с двумя кнопками для этой группы задач
+                // Проверяем, все ли задачи в группе остановлены
+                const allTasksStopped = tasksInGroup.every(task => task.status === "Stopped");
+
+                // Создаем клавиатуру с кнопками для этой группы задач
+                let inlineKeyboard = [];
+
+                // Если все задачи остановлены, добавляем кнопку запуска
+                if (allTasksStopped) {
+                    inlineKeyboard.push([
+                        { text: "▶️ Запустить все задачи", callback_data: `resume_g_${groupId}` }
+                    ]);
+                }
+
+                // Всегда добавляем кнопки остановки и удаления
+                inlineKeyboard.push([
+                    { text: "⏹️ Остановить все задачи", callback_data: `stop_g_${groupId}` }
+                ]);
+                inlineKeyboard.push([
+                    { text: "🗑️ Удалить все задачи", callback_data: `remove_g_${groupId}` }
+                ]);
+
                 const replyMarkup = {
-                    inline_keyboard: [
-                        [
-                            { text: "⏹️ Остановить все задачи", callback_data: `stop_g_${groupId}` }
-                        ],
-                        [
-                            { text: "🗑️ Удалить все задачи", callback_data: `remove_g_${groupId}` }
-                        ]
-                    ]
+                    inline_keyboard: inlineKeyboard
                 };
 
                 // Отправляем сообщение для этой группы
@@ -639,6 +652,47 @@ class TelegramBotService {
                         ]
                     };
                     this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
+                });
+        }
+        // Обработка запуска группы задач
+        else if (callbackData.startsWith('resume_g_')) {
+            const groupId = callbackData.split('_')[2];
+
+            if (!this.groupToTasksMap || !this.groupToTasksMap[groupId]) {
+                console.error(`[TG Bot] Group ${groupId} not found in groupToTasksMap`);
+                this.answerCallbackQuery(callbackQueryId, "❌ Ошибка: группа не найдена");
+                return;
+            }
+
+            const taskIds = this.groupToTasksMap[groupId];
+            console.log(`Telegram callback: resume_g_${groupId} for tasks:`, taskIds);
+
+            // Ответим на callback query
+            this.answerCallbackQuery(callbackQueryId, `▶️ Запускаем ${taskIds.length} задач...`);
+
+            // Обновляем клавиатуру сообщения
+            const newReplyMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: `▶️ ${taskIds.length} задач запущены`, callback_data: "noop" }
+                    ]
+                ]
+            };
+
+            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup)
+                .then(() => {
+                    // Запускаем каждую задачу в группе
+                    if (this.messageHandlers.has('resumeTask')) {
+                        const resumeHandler = this.messageHandlers.get('resumeTask');
+                        taskIds.forEach(taskId => {
+                            resumeHandler({ taskId });
+                        });
+                    }
+
+                    this.sendMessage(chatId, `▶️ Запущено ${taskIds.length} задач.`);
+                })
+                .catch(err => {
+                    console.error('Ошибка при запуске группы задач:', err);
                 });
         }
         // Добавляем обработку команды остановки задачи
@@ -855,6 +909,11 @@ class TelegramBotService {
     // Новый метод для регистрации обработчика полного удаления задачи
     onTaskRemove(handler) {
         this.registerHandler('removeTask', handler);
+    }
+
+    // Новый метод для регистрации обработчика запуска задачи
+    onTaskResume(handler) {
+        this.registerHandler('resumeTask', handler);
     }
 
     async getMe() {

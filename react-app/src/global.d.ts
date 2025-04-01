@@ -156,6 +156,14 @@ declare global {
                     data: { taskId: number }
                 ) => void
             ) => void;
+
+            // Метод для возобновления работы остановленных задач
+            onTelegramResumeTask: (
+                callback: (
+                    event: any,
+                    data: { taskId: number }
+                ) => void
+            ) => void;
         };
     }
 }

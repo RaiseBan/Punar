@@ -237,11 +237,31 @@ export function useTaskTelegram(
       }
     };
 
+    // Добавляем обработчик возобновления задачи
+    const resumeTaskHandler = (event: any, data: { taskId: number }) => {
+      const { taskId: telegramTaskId } = data;
+      console.log(`Received resume task event: taskId=${telegramTaskId}`);
+
+      if (parseInt(String(telegramTaskId)) === id) {
+        console.log(`Resuming task ${id} via Telegram command`);
+
+        // Возобновляем задачу, только если она остановлена
+        if (status === "Stopped" && config) {
+          console.log(`Resuming stopped task ${id} with config:`, config);
+          window.electronAPI?.resumeProcess(id, config);
+          dispatch(updateTask({ id, status: "Running" }));
+        } else {
+          console.log(`Task ${id} not resumed: status=${status}, config=${config ? 'exists' : 'missing'}`);
+        }
+      }
+    };
+
     if (window.electronAPI) {
       window.electronAPI.onTelegramRunTask(runTaskHandler);
       window.electronAPI.onTelegramDeleteTask(deleteTaskHandler);
       window.electronAPI.onTelegramStopTask(stopTaskHandler);
       window.electronAPI.onTelegramRemoveTask(removeTaskHandler);
+      window.electronAPI.onTelegramResumeTask(resumeTaskHandler);
     }
 
     return () => {
@@ -251,6 +271,7 @@ export function useTaskTelegram(
         window.electronAPI.removeListener('telegram-bot:delete-task', deleteTaskHandler);
         window.electronAPI.removeListener('telegram-bot:stop-task', stopTaskHandler);
         window.electronAPI.removeListener('telegram-bot:remove-task', removeTaskHandler);
+        window.electronAPI.removeListener('telegram-bot:resume-task', resumeTaskHandler);
       }
     };
   }, [id]);

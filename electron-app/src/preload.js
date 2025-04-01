@@ -111,6 +111,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Новый метод для полного удаления задачи
     onTelegramRemoveTask: (callback) => ipcRenderer.on('telegram-bot:remove-task', callback),
 
+    // Новый метод для возобновления задачи
+    onTelegramResumeTask: (callback) => ipcRenderer.on('telegram-bot:resume-task', callback),
+
     // Новые методы для работы с задачами через IPC
     listenForTasks: (callback) => {
         const wrappedCallback = (event) => {
