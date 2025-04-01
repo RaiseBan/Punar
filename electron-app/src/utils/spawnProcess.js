@@ -80,8 +80,14 @@ async function findBestMeteoraPool(tokenAddress, currentPairAddress) {
 
 // Функция для остановки процесса
 function stopMevProcess(taskId) {
+    if (!taskId) {
+        console.warn(`МОНИТОРИНГ: Вызов stopMevProcess без taskId!`);
+        return;
+    }
+
     if (mevSubtaskProcesses.has(taskId)) {
         const processInfo = mevSubtaskProcesses.get(taskId);
+        console.log(`МОНИТОРИНГ: Останавливаем мониторинг для задачи ${taskId}...`);
 
         // Останавливаем мониторинг
         if (processInfo.intervalId) {
@@ -93,6 +99,10 @@ function stopMevProcess(taskId) {
         mevSubtaskProcesses.delete(taskId);
 
         console.log(`МОНИТОРИНГ: Мониторинг для задачи ${taskId} остановлен полностью`);
+        return true;
+    } else {
+        console.log(`МОНИТОРИНГ: Процесс ${taskId} не найден в карте мониторинга`);
+        return false;
     }
 }
 
@@ -103,6 +113,13 @@ async function spawnProcess(taskConfig, userSettings) {
         console.error("Ошибка: taskConfig должен содержать module_name и task_name");
         return null;
     }
+
+    // Убедимся, что taskId доступен и корректен
+    const taskId = taskConfig.taskId || (taskConfig.sourceTaskId ? taskConfig.sourceTaskId : Date.now());
+    console.log(`ПРОЦЕСС: Используем taskId: ${taskId} для процесса ${taskConfig.module_name}/${taskConfig.task_name}`);
+
+    // Сохраняем taskId в конфигурации, если его там нет
+    taskConfig.taskId = taskId;
 
     // Получаем правильную директорию конфигов
     const configDir = getConfigDirectory();
@@ -216,7 +233,7 @@ async function spawnProcess(taskConfig, userSettings) {
 
         // Проверяем, включен ли режим мониторинга
         if (updatedTaskConfig.enablePoolMonitoring === true) {
-            console.log(`МОНИТОРИНГ: Включение мониторинга пулов для задачи ${updatedTaskConfig.taskId}`);
+            console.log(`МОНИТОРИНГ: Включение мониторинга пулов для задачи ${taskId}`);
 
             // Получаем информацию о токене и текущем пуле Meteora
             const tokenAddress = updatedTaskConfig.rowData[0];
@@ -232,16 +249,32 @@ async function spawnProcess(taskConfig, userSettings) {
 
             // Устанавливаем интервал проверки (по умолчанию 5 минут)
             const checkInterval = updatedTaskConfig.poolCheckInterval || 300000; // 5 минут в миллисекундах
-            console.log(`МОНИТОРИНГ: Настройка интервала проверки ${checkInterval}ms для задачи ${updatedTaskConfig.taskId}`);
+            console.log(`МОНИТОРИНГ: Настройка интервала проверки ${checkInterval}ms для задачи ${taskId}`);
 
+            // Создаем структуру для хранения информации о процессе
+            const processInfo = {
+                taskId: taskId,
+                process: child,
+                intervalId: null, // Заполним позже
+                tokenAddress: tokenAddress,
+                meteoraPairAddress: currentMeteoraPair,
+                configFilePath: configFilePath,
+                lastCheckTime: Date.now(),
+                checkCount: 0
+            };
+
+            // Устанавливаем интервал
             const intervalId = setInterval(async () => {
                 try {
-                    console.log(`МОНИТОРИНГ: Выполняется проверка пула для задачи ${updatedTaskConfig.taskId} в ${new Date().toISOString()}`);
+                    const currentTime = Date.now();
+                    processInfo.checkCount++;
+                    console.log(`МОНИТОРИНГ: Выполняется проверка пула для задачи ${taskId} в ${new Date().toISOString()} [Проверка #${processInfo.checkCount}, прошло ${Math.floor((currentTime - processInfo.lastCheckTime) / 1000)}с]`);
+                    processInfo.lastCheckTime = currentTime;
 
                     // Проверяем, если процесс завершен, останавливаем мониторинг
                     if (child.exitCode !== null) {
-                        console.log(`МОНИТОРИНГ: Процесс уже завершен с кодом ${child.exitCode}, останавливаем мониторинг`);
-                        stopMevProcess(updatedTaskConfig.taskId);
+                        console.log(`МОНИТОРИНГ: Процесс ${taskId} уже завершен с кодом ${child.exitCode}, останавливаем мониторинг`);
+                        stopMevProcess(taskId);
                         return;
                     }
 
@@ -249,11 +282,11 @@ async function spawnProcess(taskConfig, userSettings) {
                     const betterPairAddress = await findBestMeteoraPool(tokenAddress, currentMeteoraPair);
 
                     if (betterPairAddress) {
-                        console.log(`МОНИТОРИНГ: Найден лучший пул Meteora, перегенерируем конфиг и перезапускаем процесс`);
+                        console.log(`МОНИТОРИНГ: Найден лучший пул Meteora для задачи ${taskId}, перегенерируем конфиг и перезапускаем процесс`);
 
                         // Останавливаем текущий процесс
                         child.kill();
-                        console.log(`МОНИТОРИНГ: Текущий процесс остановлен`);
+                        console.log(`МОНИТОРИНГ: Текущий процесс ${taskId} остановлен`);
 
                         // Создаем новый конфиг с обновленным пулом Meteora
                         const newConfigFilePath = await generateMevConfig(
@@ -264,11 +297,11 @@ async function spawnProcess(taskConfig, userSettings) {
                         );
 
                         if (!newConfigFilePath) {
-                            console.error(`МОНИТОРИНГ: Не удалось создать новый конфиг с обновленным пулом Meteora`);
+                            console.error(`МОНИТОРИНГ: Не удалось создать новый конфиг с обновленным пулом Meteora для задачи ${taskId}`);
                             return;
                         }
 
-                        console.log(`МОНИТОРИНГ: Новый конфиг создан: ${newConfigFilePath}`);
+                        console.log(`МОНИТОРИНГ: Новый конфиг создан для задачи ${taskId}: ${newConfigFilePath}`);
 
                         // Запускаем процесс с новым конфигом
                         const newConfigFilePathWSL = convertWindowsPathToWSL(newConfigFilePath);
@@ -282,37 +315,30 @@ async function spawnProcess(taskConfig, userSettings) {
 
                         // Заменяем дочерний процесс в mevSubtaskProcesses
                         child = newChild;
-                        console.log(`МОНИТОРИНГ: Новый процесс запущен`);
+                        console.log(`МОНИТОРИНГ: Новый процесс для задачи ${taskId} запущен`);
 
                         // Обновляем инфо о процессе в мапе
-                        const processInfo = mevSubtaskProcesses.get(updatedTaskConfig.taskId);
-                        if (processInfo) {
-                            processInfo.process = newChild;
-                            processInfo.meteoraPairAddress = betterPairAddress;
-                            processInfo.configFilePath = newConfigFilePath;
-                            console.log(`МОНИТОРИНГ: Обновлена информация о процессе в кэше`);
-                        }
+                        processInfo.process = newChild;
+                        processInfo.meteoraPairAddress = betterPairAddress;
+                        processInfo.configFilePath = newConfigFilePath;
+                        console.log(`МОНИТОРИНГ: Обновлена информация о процессе ${taskId} в кэше`);
 
-                        console.log(`МОНИТОРИНГ: Процесс перезапущен с новым пулом Meteora: ${betterPairAddress}`);
+                        console.log(`МОНИТОРИНГ: Процесс задачи ${taskId} перезапущен с новым пулом Meteora: ${betterPairAddress}`);
                     } else {
-                        console.log(`МОНИТОРИНГ: Лучший пул не найден, сохраняем текущий пул для задачи ${updatedTaskConfig.taskId}`);
+                        console.log(`МОНИТОРИНГ: Лучший пул не найден, сохраняем текущий пул для задачи ${taskId}`);
                     }
                 } catch (error) {
-                    console.error(`МОНИТОРИНГ: Ошибка в интервале мониторинга: ${error.message}`);
+                    console.error(`МОНИТОРИНГ: Ошибка в интервале мониторинга для задачи ${taskId}: ${error.message}`);
                 }
             }, checkInterval);
 
-            // Сохраняем информацию о процессе
-            mevSubtaskProcesses.set(updatedTaskConfig.taskId, {
-                taskId: updatedTaskConfig.taskId,
-                process: child,
-                intervalId: intervalId,
-                tokenAddress: tokenAddress,
-                meteoraPairAddress: currentMeteoraPair,
-                configFilePath: configFilePath
-            });
+            // Сохраняем ID интервала в processInfo
+            processInfo.intervalId = intervalId;
 
-            console.log(`МОНИТОРИНГ: Мониторинг пулов запущен для задачи ${updatedTaskConfig.taskId}, интервал: ${checkInterval}ms`);
+            // Сохраняем информацию о процессе
+            mevSubtaskProcesses.set(taskId, processInfo);
+
+            console.log(`МОНИТОРИНГ: Мониторинг пулов запущен для задачи ${taskId}, интервал: ${checkInterval}ms`);
         }
     } else {
         child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
@@ -343,8 +369,8 @@ async function spawnProcess(taskConfig, userSettings) {
     // Добавляем обработчик завершения для mev_subtask процессов
     if (updatedTaskConfig.module_name === "mev_subtask" && updatedTaskConfig.enablePoolMonitoring) {
         child.on("exit", (code) => {
-            console.log(`mev_subtask process exited with code ${code}, cleaning up monitoring`);
-            stopMevProcess(updatedTaskConfig.taskId);
+            console.log(`mev_subtask process ${taskId} exited with code ${code}, cleaning up monitoring`);
+            stopMevProcess(taskId);
         });
     }
 

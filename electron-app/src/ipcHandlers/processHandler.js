@@ -3,19 +3,39 @@ const treeKill = require("tree-kill");
 const { getSettings } = require("../utils/fsHelper");
 const { spawnProcess, stopMevProcess } = require("../utils/spawnProcess");
 
+// Карта для отслеживания процессов
 const processes = {};
 
 function initializeProcessHandlers(ipcMain, mainWindow) {
     ipcMain.on("start-process", async (event, { taskId, config }) => {
         console.log(`ПРОЦЕСС: Создан taskId: ${taskId}, запускаем процесс...`);
         const scriptPath = getSettings();
-        event.reply("process-started", { taskId, config });
 
         try {
             const child = await spawnProcess(config, scriptPath);
-            // const child = spawn("node", ["your_script.js"]);
-            processes[taskId] = child;
+            if (!child) {
+                console.error(`ПРОЦЕСС: Не удалось запустить процесс для задачи ${taskId}`);
+                mainWindow?.webContents.send("process-output", {
+                    taskId,
+                    log: `[ERROR] Не удалось запустить процесс`
+                });
+                return;
+            }
+
+            // Сохраняем информацию о процессе
+            processes[taskId] = {
+                process: child,
+                pid: child.pid,
+                isActive: true,
+                moduleName: config.module_name,
+                startTime: Date.now()
+            };
+
             console.log(`ПРОЦЕСС: Процесс ${taskId} успешно запущен, PID: ${child.pid}`);
+
+            // Отправляем событие только после сохранения процесса в карту
+            event.reply("process-started", { taskId, config });
+            mainWindow?.webContents.send("process-started", { taskId, config });
 
             child.stdout.on("data", (data) => {
                 // Для mev_subtask логируем более сжато
@@ -41,9 +61,17 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
             child.on("exit", (code) => {
                 console.log(`ПРОЦЕСС: Процесс ${taskId} завершился с кодом ${code}`);
+                // Обновляем статус в карте процессов
+                if (processes[taskId]) {
+                    processes[taskId].isActive = false;
+                    processes[taskId].exitCode = code;
+                    processes[taskId].exitTime = Date.now();
+                }
+
                 mainWindow?.webContents.send("process-exit", { taskId, code });
-                // Удаляем процесс из списка
-                delete processes[taskId];
+
+                // НЕ удаляем процесс из карты здесь, чтобы избежать race condition
+                // с остановкой процесса. Вместо этого помечаем его как неактивный
             });
         } catch (error) {
             console.error(`ПРОЦЕСС: Ошибка при запуске процесса ${taskId}:`, error);
@@ -59,7 +87,24 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         try {
             // СНАЧАЛА запускаем процесс
             const child = await spawnProcess(config, scriptPath);
-            processes[taskId] = child;
+            if (!child) {
+                console.error(`ПРОЦЕСС: Не удалось возобновить процесс для задачи ${taskId}`);
+                mainWindow?.webContents.send("process-output", {
+                    taskId,
+                    log: `[ERROR] Не удалось возобновить процесс`
+                });
+                return;
+            }
+
+            // Сохраняем информацию о процессе
+            processes[taskId] = {
+                process: child,
+                pid: child.pid,
+                isActive: true,
+                moduleName: config.module_name,
+                startTime: Date.now()
+            };
+
             console.log(`ПРОЦЕСС: Процесс возобновлен для Task ${taskId}, PID:`, child.pid);
 
             // ЗАТЕМ отправляем события после успешного запуска процесса
@@ -91,9 +136,14 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
             child.on("exit", (code) => {
                 console.log(`ПРОЦЕСС: Процесс Task ${taskId} (resume) завершился с кодом ${code}`);
+                // Обновляем статус в карте процессов
+                if (processes[taskId]) {
+                    processes[taskId].isActive = false;
+                    processes[taskId].exitCode = code;
+                    processes[taskId].exitTime = Date.now();
+                }
+
                 mainWindow?.webContents.send("process-exit", { taskId, code });
-                // Удаляем процесс из списка
-                delete processes[taskId];
             });
         } catch (error) {
             console.error(`ПРОЦЕСС: Ошибка при возобновлении процесса для Task ${taskId}:`, error);
@@ -105,27 +155,100 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
 
     ipcMain.on("stop-process", (event, taskId) => {
-        const child = processes[taskId];
         console.log(`ПРОЦЕСС: Остановка процесса ${taskId}`);
 
         // Сначала останавливаем мониторинг пулов для mev_subtask процессов
         stopMevProcess(taskId);
 
+        // Проверяем наличие процесса в карте
+        const processInfo = processes[taskId];
+        if (!processInfo) {
+            console.log(`ПРОЦЕСС: Процесс ${taskId} не найден в карте процессов`);
+            return;
+        }
+
+        // Проверяем, активен ли процесс
+        if (!processInfo.isActive) {
+            console.log(`ПРОЦЕСС: Процесс ${taskId} уже остановлен (неактивен) в ${new Date(processInfo.exitTime).toISOString()}`);
+            return;
+        }
+
+        const child = processInfo.process;
+
         if (child && !child.killed) {
-            console.log(`ПРОЦЕСС: Остановка процесса ${taskId} с PID ${child.pid}`);
-            treeKill(child.pid, "SIGKILL", (err) => {
-                if (err) {
-                    console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, err);
-                } else {
-                    console.log(`ПРОЦЕСС: Процесс ${taskId} и все его дочерние процессы убиты`);
-                    // Удаляем процесс из списка
-                    delete processes[taskId];
-                }
-            });
+            const pid = processInfo.pid;
+            console.log(`ПРОЦЕСС: Остановка процесса ${taskId} с PID ${pid}, возраст: ${Math.floor((Date.now() - processInfo.startTime) / 1000)}с`);
+
+            try {
+                // Сначала пробуем остановить процесс мягко
+                child.kill('SIGTERM');
+
+                // Устанавливаем таймаут для принудительного завершения
+                setTimeout(() => {
+                    if (processInfo.isActive) {
+                        console.log(`ПРОЦЕСС: Процесс ${taskId} не завершился мягко, применяем tree-kill`);
+
+                        treeKill(pid, "SIGKILL", (err) => {
+                            if (err) {
+                                // Проверяем, не связана ли ошибка с тем, что процесс уже завершен
+                                if (err.message && (
+                                    err.message.includes("no running instance") ||
+                                    err.message.includes("process not found") ||
+                                    err.message.includes("process doesn't exist")
+                                )) {
+                                    console.log(`ПРОЦЕСС: Процесс ${taskId} уже завершен при попытке tree-kill`);
+                                } else {
+                                    console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, err);
+                                }
+                            } else {
+                                console.log(`ПРОЦЕСС: Процесс ${taskId} и все его дочерние процессы убиты через tree-kill`);
+                            }
+
+                            // В любом случае отмечаем процесс как неактивный
+                            processInfo.isActive = false;
+                            processInfo.exitTime = Date.now();
+                            processInfo.exitReason = 'stopped';
+                        });
+                    }
+                }, 500); // Даем 500мс на мягкое завершение
+            } catch (error) {
+                console.error(`ПРОЦЕСС: Ошибка при остановке процесса ${taskId}:`, error);
+                // Отмечаем процесс как неактивный в любом случае
+                processInfo.isActive = false;
+                processInfo.exitTime = Date.now();
+                processInfo.exitReason = 'error';
+            }
         } else {
-            console.log(`ПРОЦЕСС: Процесс ${taskId} не найден или уже остановлен`);
+            console.log(`ПРОЦЕСС: Процесс ${taskId} уже завершен или убит`);
+            // Отмечаем процесс как неактивный
+            processInfo.isActive = false;
+            processInfo.exitTime = Date.now();
+            processInfo.exitReason = 'already_stopped';
         }
     });
+
+    // Функция для очистки неактивных процессов (запускать периодически)
+    const cleanupInactiveProcesses = () => {
+        const now = Date.now();
+        const taskIds = Object.keys(processes);
+        let cleaned = 0;
+
+        for (const taskId of taskIds) {
+            const processInfo = processes[taskId];
+            // Удаляем процессы, которые неактивны более 5 минут
+            if (!processInfo.isActive && (now - processInfo.exitTime > 5 * 60 * 1000)) {
+                delete processes[taskId];
+                cleaned++;
+            }
+        }
+
+        if (cleaned > 0) {
+            console.log(`ПРОЦЕСС: Очищено ${cleaned} неактивных процессов из карты`);
+        }
+    };
+
+    // Запускаем очистку каждые 10 минут
+    setInterval(cleanupInactiveProcesses, 10 * 60 * 1000);
 }
 
 module.exports = { initializeProcessHandlers };
