@@ -15,6 +15,9 @@ class TelegramBotService {
         this.messageHandlers = new Map();
         this.isPolling = false;
         this.loadConfig();
+
+        // Для отслеживания обработанных callback queries
+        this.processedCallbacks = new Set();
     }
 
     async startStream() {
@@ -43,7 +46,6 @@ class TelegramBotService {
             lastActivity: new Date().toISOString()
         };
     }
-
 
     loadConfig() {
         try {
@@ -180,10 +182,29 @@ class TelegramBotService {
                             this.handleIncomingMessage(chatId, update.message);
                         }
                     } else if (update.callback_query) {
+                        // Проверка на повторную обработку callback_query
+                        if (this.processedCallbacks.has(update.callback_query.id)) {
+                            console.log(`Callback query ${update.callback_query.id} уже обработан, пропускаем`);
+                            return;
+                        }
+
+                        // Добавляем в обработанные
+                        this.processedCallbacks.add(update.callback_query.id);
+
+                        // Если набор слишком большой, очищаем старые записи
+                        if (this.processedCallbacks.size > 1000) {
+                            this.processedCallbacks.clear();
+                        }
+
                         const chatId = update.callback_query.message.chat.id;
                         const callbackData = update.callback_query.data;
 
-                        this.handleCallbackQuery(chatId, callbackData, update.callback_query.message.message_id);
+                        this.handleCallbackQuery(
+                            chatId,
+                            callbackData,
+                            update.callback_query.message.message_id,
+                            update.callback_query.id
+                        );
                     }
                 });
             }
@@ -241,6 +262,42 @@ class TelegramBotService {
         }
     }
 
+    // Добавляем метод для удаления сообщения
+    async deleteMessage(chatId, messageId) {
+        if (!this.botToken) return;
+
+        try {
+            const response = await axios.post(`https://api.telegram.org/bot${this.botToken}/deleteMessage`, {
+                chat_id: chatId,
+                message_id: messageId
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Ошибка удаления сообщения Telegram:', error.message);
+        }
+    }
+
+    // Метод для ответа на callback query
+    async answerCallbackQuery(callbackQueryId, text = null, showAlert = false) {
+        if (!this.botToken) return;
+
+        try {
+            const data = {
+                callback_query_id: callbackQueryId,
+                show_alert: showAlert
+            };
+
+            if (text) {
+                data.text = text;
+            }
+
+            const response = await axios.post(`https://api.telegram.org/bot${this.botToken}/answerCallbackQuery`, data);
+            return response.data;
+        } catch (error) {
+            console.error('Ошибка ответа на callback query:', error.message);
+        }
+    }
+
     async sendTaskNotification(taskData) {
         const { taskId, rowIndex, rowId, token, volumeChange, volumeValue, allCells = [] } = taskData;
 
@@ -270,16 +327,16 @@ class TelegramBotService {
         message += `\n<a href="${dexScreenerUrl}">🔍 Посмотреть токен на DexScreener</a>\n\n`;
 
         // Добавляем призыв к действию
-        message += `<b>Choose option:</b>`;
+        message += `<b>Выберите действие:</b>`;
 
         const replyMarkup = {
             inline_keyboard: [
                 [
-                    { text: "🚀 run Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium_${rowId || ''}` },
-                    { text: "🚀 run PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap_${rowId || ''}` }
+                    { text: "🚀 Запустить Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium_${rowId || ''}` },
+                    { text: "🚀 Запустить PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap_${rowId || ''}` }
                 ],
                 [
-                    { text: "❌ ignoore", callback_data: `delete_${taskId}_${rowIndex}_${rowId || ''}` }
+                    { text: "❌ Игнорировать", callback_data: `delete_${taskId}_${rowIndex}_${rowId || ''}` }
                 ]
             ]
         };
@@ -297,14 +354,55 @@ class TelegramBotService {
                     this.sendMessage(chatId, 'Добро пожаловать в MEV бот! Вы будете получать уведомления о новых MEV возможностях.');
                     break;
                 case 'help':
-                    this.sendMessage(chatId, 'Команды:\n/start - Запустить бота\n/help - Показать это сообщение');
+                    this.sendMessage(chatId, 'Команды:\n/start - Запустить бота\n/help - Показать это сообщение\n/tasks - Показать активные задачи');
+                    break;
+                case 'tasks':
+                    this.handleTasksCommand(chatId);
                     break;
             }
             return;
         }
     }
 
-    handleCallbackQuery(chatId, callbackData, messageId) {
+    // Обработчик команды /tasks
+    async handleTasksCommand(chatId) {
+        try {
+            // Используем main процесс для получения задач
+            const tasks = await ipcMain.handle('get-active-tasks', () => { });
+
+            if (!tasks || tasks.length === 0) {
+                this.sendMessage(chatId, 'В данный момент нет активных задач.');
+                return;
+            }
+
+            // Отправляем каждую задачу отдельным сообщением
+            for (const task of tasks) {
+                let message = `<b>Задача #${task.id}</b>: ${task.name}\n`;
+                message += `<b>Модуль:</b> ${task.moduleName}\n`;
+                message += `<b>Статус:</b> ${task.status}\n`;
+
+                if (task.config && task.config.collection_id) {
+                    const collectionUrl = `https://tensor.trade/trade/${task.config.collection_id}`;
+                    message += `\n<a href="${collectionUrl}">🔍 Открыть коллекцию</a>\n`;
+                }
+
+                const replyMarkup = {
+                    inline_keyboard: [
+                        [
+                            { text: "⏹️ Остановить задачу", callback_data: `stop_task_${task.id}` }
+                        ]
+                    ]
+                };
+
+                await this.sendMessage(chatId, message, { replyMarkup });
+            }
+        } catch (error) {
+            console.error('Ошибка при получении списка задач:', error);
+            this.sendMessage(chatId, 'Произошла ошибка при получении списка задач.');
+        }
+    }
+
+    handleCallbackQuery(chatId, callbackData, messageId, callbackQueryId) {
         if (callbackData === "noop") return;
 
         if (callbackData.startsWith('run_')) {
@@ -316,15 +414,11 @@ class TelegramBotService {
 
             console.log(`Telegram callback: run_${taskId}_${rowIndex}_${strategy}_${rowId || 'undefined'}`);
 
-            const newReplyMarkup = {
-                inline_keyboard: [
-                    [
-                        { text: "✅ Task started", callback_data: "noop" }
-                    ]
-                ]
-            };
+            // Сначала ответим на callback query
+            this.answerCallbackQuery(callbackQueryId, "✅ Задача запускается...");
 
-            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup)
+            // Удаляем исходное сообщение вместо изменения клавиатуры
+            this.deleteMessage(chatId, messageId)
                 .then(() => {
                     if (this.messageHandlers.has('runTask')) {
                         const parsedTaskId = parseInt(taskId);
@@ -338,10 +432,20 @@ class TelegramBotService {
                         });
                     }
 
-                    this.sendMessage(chatId, `Task ${taskId} started with strategy ${strategy}.`);
+                    // Отправляем новое короткое сообщение
+                    this.sendMessage(chatId, `✅ Задача запущена со стратегией ${strategy}.`);
                 })
                 .catch(err => {
-                    console.error('Error updating keyboard:', err);
+                    console.error('Ошибка при обработке запуска задачи:', err);
+                    // Если не удалось удалить, то изменяем клавиатуру
+                    const newReplyMarkup = {
+                        inline_keyboard: [
+                            [
+                                { text: "✅ Задача запущена", callback_data: "noop" }
+                            ]
+                        ]
+                    };
+                    this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
                 });
         }
         else if (callbackData.startsWith('delete_')) {
@@ -352,15 +456,11 @@ class TelegramBotService {
 
             console.log(`Telegram callback: delete_${taskId}_${rowIndex}_${rowId || 'undefined'}`);
 
-            const newReplyMarkup = {
-                inline_keyboard: [
-                    [
-                        { text: "❌ Удалено", callback_data: "noop" }
-                    ]
-                ]
-            };
+            // Сначала ответим на callback query
+            this.answerCallbackQuery(callbackQueryId, "❌ Задача игнорируется...");
 
-            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup)
+            // Удаляем исходное сообщение вместо изменения клавиатуры
+            this.deleteMessage(chatId, messageId)
                 .then(() => {
                     if (this.messageHandlers.has('deleteTask')) {
                         const parsedTaskId = parseInt(taskId);
@@ -373,10 +473,50 @@ class TelegramBotService {
                         });
                     }
 
-                    this.sendMessage(chatId, `Row ${rowIndex} deleted from task ${taskId}.`);
+                    // Отправляем новое короткое сообщение
+                    this.sendMessage(chatId, `❌ Задача игнорирована.`);
                 })
                 .catch(err => {
-                    console.error('Error updating keyboard:', err);
+                    console.error('Ошибка при обработке удаления задачи:', err);
+                    // Если не удалось удалить, то изменяем клавиатуру
+                    const newReplyMarkup = {
+                        inline_keyboard: [
+                            [
+                                { text: "❌ Удалено", callback_data: "noop" }
+                            ]
+                        ]
+                    };
+                    this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
+                });
+        }
+        // Добавляем обработку команды остановки задачи
+        else if (callbackData.startsWith('stop_task_')) {
+            const taskId = callbackData.split('_')[2];
+            console.log(`Telegram callback: stop_task_${taskId}`);
+
+            // Сначала ответим на callback query
+            this.answerCallbackQuery(callbackQueryId, "⏹️ Останавливаем задачу...");
+
+            // Обновляем клавиатуру текущего сообщения
+            const newReplyMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: "⏹️ Задача остановлена", callback_data: "noop" }
+                    ]
+                ]
+            };
+
+            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup)
+                .then(() => {
+                    if (this.messageHandlers.has('stopTask')) {
+                        const parsedTaskId = parseInt(taskId);
+                        this.messageHandlers.get('stopTask')({ taskId: parsedTaskId });
+                    }
+
+                    this.sendMessage(chatId, `⏹️ Задача ${taskId} остановлена.`);
+                })
+                .catch(err => {
+                    console.error('Ошибка при остановке задачи:', err);
                 });
         }
     }
@@ -391,6 +531,11 @@ class TelegramBotService {
 
     onTaskDelete(handler) {
         this.registerHandler('deleteTask', handler);
+    }
+
+    // Новый метод для регистрации обработчика остановки задачи
+    onTaskStop(handler) {
+        this.registerHandler('stopTask', handler);
     }
 
     async getMe() {
