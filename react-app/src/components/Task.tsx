@@ -155,6 +155,19 @@ export default function Task({
         dataRef.current = data;
     }, [data]);
 
+    // Получаем processedRows ПЕРЕД созданием ref для него
+    const processedRows = useSelector((state: RootState) =>
+        state.tasks.tasks.find(t => t.id === id)?.processedTelegramRows || []
+    );
+
+    // Добавьте этот ref на верхнем уровне компонента (рядом с dataRef)
+    const processedRowsRef = React.useRef<string[]>([]);
+
+    // Обновляйте ref при изменении processedRows
+    useEffect(() => {
+        processedRowsRef.current = processedRows;
+    }, [processedRows]);
+
     // -----------------------
     // Кнопки
     // -----------------------
@@ -254,7 +267,7 @@ export default function Task({
 
     };
 
-    // И обновляем функцию удаления
+    // Исправьте функцию handleDeleteMEVRow
     const handleDeleteMEVRow = (rowIndex: number) => {
         console.log(`Attempting to delete row ${rowIndex} from task ${id}`);
 
@@ -282,10 +295,8 @@ export default function Task({
 
         console.log(`Original data length: ${currentData.length}, New data length: ${newData.length}`);
 
-        // Обновляем processedRows
-        const currentProcessedRows = useSelector((state: RootState) =>
-            state.tasks.tasks.find(t => t.id === id)?.processedTelegramRows || []
-        );
+        // Используем processedRowsRef вместо useSelector
+        const currentProcessedRows = processedRowsRef.current;
 
         const newProcessedRows = currentProcessedRows
             .filter(idx => parseInt(idx) !== rowIndex)
@@ -321,9 +332,6 @@ export default function Task({
 
     const isMEVManualMode = isMEVModule && (!config?.mode || config?.mode === "manual");
     const isMEVAutomaticMode = isMEVModule && config?.mode === "automatic";
-    const processedRows = useSelector((state: RootState) =>
-        state.tasks.tasks.find(t => t.id === id)?.processedTelegramRows || []
-    );
 
     // Модифицированный useEffect
     useEffect(() => {
