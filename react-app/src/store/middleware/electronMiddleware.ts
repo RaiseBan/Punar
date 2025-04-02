@@ -45,18 +45,24 @@ export const electronMiddleware: Middleware = (store) => {
                 const state = store.getState() as RootState;
                 const task = state.tasks.tasks.find(t => t.id === data.taskId);
 
-                // Пропускаем логирование для mev_subtask модуля
-                if (task && task.moduleName === "mev_subtask") {
-                    // Проверяем, содержит ли лог данные таблицы или сообщения об ошибках
-                    if (data.log.includes("[TABLE_DATA]") || data.log.includes("ERROR") || data.log.includes("error")) {
-                        // Логируем только важные сообщения
-                        store.dispatch(addTaskLog({ taskId: data.taskId, log: data.log }));
-                    }
-                    // Для остальных сообщений просто выходим
-                    return;
+                // Проверяем содержимое лога
+                const log = data.log.toString();
+
+                // Логируем сообщения, если они:
+                // 1. Содержат квадратные скобки [...]
+                // 2. Содержат сообщения об ошибках ERROR или error
+                // 3. Содержат данные таблицы [TABLE_DATA]
+                if (log.includes("[") && log.includes("]") ||
+                    log.includes("ERROR") ||
+                    log.includes("error") ||
+                    log.includes("[TABLE_DATA]")) {
+
+                    console.log(`Logging message for task ${data.taskId}: ${log.substring(0, 100)}${log.length > 100 ? '...' : ''}`);
+                    store.dispatch(addTaskLog({ taskId: data.taskId, log }));
                 } else {
-                    // Для остальных модулей логируем как обычно
-                    store.dispatch(addTaskLog({ taskId: data.taskId, log: data.log }));
+                    // Для незначимых сообщений просто выходим
+                    console.log(`Skipping non-important message for task ${data.taskId}`);
+                    return;
                 }
 
                 const rowCells = parseTableRowFromLog(data.log);

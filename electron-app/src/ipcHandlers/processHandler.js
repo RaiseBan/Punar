@@ -186,7 +186,19 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
                 console.log(`ПРОЦЕСС: Принудительное завершение процесса ${taskId} через tree-kill`);
                 treeKill(pid, "SIGKILL", (err) => {
                     if (err) {
-                        console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, err);
+                        // Проверяем, указывает ли ошибка на то, что процесс уже завершен
+                        const errorStr = err.toString().toLowerCase();
+                        const isProcessGoneError = errorStr.includes('no running instance') ||
+                            errorStr.includes('does not exist') ||
+                            errorStr.includes('no such process');
+
+                        if (isProcessGoneError) {
+                            // Процесс уже завершен, это нормально
+                            console.log(`ПРОЦЕСС: Процесс ${taskId} уже завершен, игнорируем ошибку.`);
+                        } else {
+                            // Другая ошибка, логируем
+                            console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, err);
+                        }
                     } else {
                         console.log(`ПРОЦЕСС: Процесс ${taskId} и все его дочерние процессы убиты через tree-kill`);
                     }

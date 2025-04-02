@@ -502,9 +502,9 @@ class TelegramBotService {
                     clearTimeout(timeoutId);
                     console.log(`[TG Bot Service] Received telegram-tasks-response. Tasks count: ${tasks.length}`);
 
-                    if (tasks.length > 0) {
-                        console.log('[TG Bot Service] First task received:', JSON.stringify(tasks[0], null, 2));
-                    }
+                    // if (tasks.length > 0) {
+                    //     console.log('[TG Bot Service] First task received:', JSON.stringify(tasks[0], null, 2));
+                    // }
 
                     resolve(tasks);
                 };
@@ -537,7 +537,7 @@ class TelegramBotService {
 
             const tasks = await this.getTasks();
 
-            console.log('[TG Bot Tasks] Received tasks:', JSON.stringify(tasks));
+            // console.log('[TG Bot Tasks] Received tasks:', JSON.stringify(tasks));
 
             if (!tasks || tasks.length === 0) {
                 console.log('[TG Bot Tasks] No tasks found');
