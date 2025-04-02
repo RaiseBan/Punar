@@ -2,6 +2,7 @@ const { spawn } = require("child_process");
 const treeKill = require("tree-kill");
 const { getSettings } = require("../utils/fsHelper");
 const { spawnProcess, stopMevProcess } = require("../utils/spawnProcess");
+const telegramBotService = require("../services/telegramBotService");
 
 // Карта для отслеживания процессов
 const processes = {};
@@ -39,37 +40,66 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
             mainWindow?.webContents.send("process-started", { taskId, config });
 
             child.stdout.on("data", (data) => {
-                // Для mev_subtask логируем более сжато
-                if (config.module_name === "mev_subtask") {
-                    // Логируем только важные сообщения
-                    const output = data.toString();
-                    if (output.includes("[TABLE_DATA]") || output.includes("ERROR") || output.includes("error")) {
-                        console.log(`STDOUT [Task ${taskId}]:`, output);
-                        mainWindow?.webContents.send("process-output", { taskId, log: output });
-                    }
-                } else {
-                    // Для остальных модулей логируем все
-                    console.log(`STDOUT [Task ${taskId}]:`, data.toString());
-                    mainWindow?.webContents.send("process-output", { taskId, log: data.toString() });
+                const output = data.toString();
+
+                // Всегда выводим полную информацию в консоль электрона 
+                console.log(`STDOUT [Task ${taskId}]:`, output);
+
+                // Для UI фильтруем и отправляем только важные сообщения
+                if (output.includes("[TABLE_DATA]") ||
+                    output.includes("ERROR") ||
+                    output.includes("error") ||
+                    (output.includes("[") && output.includes("]"))) {
+
+                    mainWindow?.webContents.send("process-output", { taskId, log: output });
                 }
             });
 
             child.stderr.on("data", (data) => {
-                console.error(`STDERR [Task ${taskId}]:`, data.toString());
-                // Всегда отправляем ошибки, независимо от модуля
-                mainWindow?.webContents.send("process-output", { taskId, log: `[ERROR] ${data.toString()}` });
+                const output = data.toString();
+
+                // Всегда выводим ошибки в консоль
+                console.error(`STDERR [Task ${taskId}]:`, output);
+
+                // Ошибки всегда отправляем в UI
+                mainWindow?.webContents.send("process-output", { taskId, log: `[ERROR] ${output}` });
             });
 
             child.on("exit", (code) => {
                 console.log(`ПРОЦЕСС: Процесс ${taskId} завершился с кодом ${code}`);
+
                 // Обновляем статус в карте процессов
+                let exitReason = code === 0 ? 'нормальное завершение' : `ошибка (код ${code})`;
+                let runTime = 0;
+
                 if (processes[taskId]) {
                     processes[taskId].isActive = false;
                     processes[taskId].exitCode = code;
                     processes[taskId].exitTime = Date.now();
+                    processes[taskId].exitReason = exitReason;
+
+                    // Вычисляем время работы в секундах
+                    runTime = Math.floor((processes[taskId].exitTime - processes[taskId].startTime) / 1000);
                 }
 
                 mainWindow?.webContents.send("process-exit", { taskId, code });
+
+                // Отправляем уведомление в Telegram
+                try {
+                    const exitTime = new Date().toISOString();
+                    const moduleName = config.module_name || 'неизвестно';
+
+                    const message = `🛑 Процесс остановлен\n\n` +
+                        `Задача ID: ${taskId}\n` +
+                        `Модуль: ${moduleName}\n` +
+                        `Причина: ${exitReason}\n` +
+                        `Время работы: ${runTime}с\n` +
+                        `Время остановки: ${exitTime}`;
+
+                    telegramBotService.sendSystemNotification(message);
+                } catch (error) {
+                    console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
+                }
 
                 // НЕ удаляем процесс из карты здесь, чтобы избежать race condition
                 // с остановкой процесса. Вместо этого помечаем его как неактивный
@@ -115,37 +145,66 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
             mainWindow?.webContents.send("process-started", { taskId, config }); // Отправляем в главное окно
 
             child.stdout.on("data", (data) => {
-                // Для mev_subtask логируем более сжато
-                if (config.module_name === "mev_subtask") {
-                    // Логируем только важные сообщения
-                    const output = data.toString();
-                    if (output.includes("[TABLE_DATA]") || output.includes("ERROR") || output.includes("error")) {
-                        console.log(`STDOUT [Task ${taskId}]:`, output);
-                        mainWindow?.webContents.send("process-output", { taskId, log: output });
-                    }
-                } else {
-                    // Для остальных модулей логируем все
-                    console.log(`STDOUT [Task ${taskId}]:`, data.toString());
-                    mainWindow?.webContents.send("process-output", { taskId, log: data.toString() });
+                const output = data.toString();
+
+                // Всегда выводим полную информацию в консоль электрона 
+                console.log(`STDOUT [Task ${taskId}]:`, output);
+
+                // Для UI фильтруем и отправляем только важные сообщения
+                if (output.includes("[TABLE_DATA]") ||
+                    output.includes("ERROR") ||
+                    output.includes("error") ||
+                    (output.includes("[") && output.includes("]"))) {
+
+                    mainWindow?.webContents.send("process-output", { taskId, log: output });
                 }
             });
 
             child.stderr.on("data", (data) => {
-                console.error(`STDERR [Task ${taskId}]:`, data.toString());
-                // Отправляем ошибки тоже как вывод, чтобы они отображались в логах
-                mainWindow?.webContents.send("process-output", { taskId, log: `[ERROR] ${data.toString()}` });
+                const output = data.toString();
+
+                // Всегда выводим ошибки в консоль
+                console.error(`STDERR [Task ${taskId}]:`, output);
+
+                // Ошибки всегда отправляем в UI
+                mainWindow?.webContents.send("process-output", { taskId, log: `[ERROR] ${output}` });
             });
 
             child.on("exit", (code) => {
                 console.log(`ПРОЦЕСС: Процесс Task ${taskId} (resume) завершился с кодом ${code}`);
+
                 // Обновляем статус в карте процессов
+                let exitReason = code === 0 ? 'нормальное завершение' : `ошибка (код ${code})`;
+                let runTime = 0;
+
                 if (processes[taskId]) {
                     processes[taskId].isActive = false;
                     processes[taskId].exitCode = code;
                     processes[taskId].exitTime = Date.now();
+                    processes[taskId].exitReason = exitReason;
+
+                    // Вычисляем время работы в секундах
+                    runTime = Math.floor((processes[taskId].exitTime - processes[taskId].startTime) / 1000);
                 }
 
                 mainWindow?.webContents.send("process-exit", { taskId, code });
+
+                // Отправляем уведомление в Telegram
+                try {
+                    const exitTime = new Date().toISOString();
+                    const moduleName = config.module_name || 'неизвестно';
+
+                    const message = `🛑 Процесс остановлен\n\n` +
+                        `Задача ID: ${taskId}\n` +
+                        `Модуль: ${moduleName}\n` +
+                        `Причина: ${exitReason}\n` +
+                        `Время работы: ${runTime}с\n` +
+                        `Время остановки: ${exitTime}`;
+
+                    telegramBotService.sendSystemNotification(message);
+                } catch (error) {
+                    console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
+                }
             });
         } catch (error) {
             console.error(`ПРОЦЕСС: Ошибка при возобновлении процесса для Task ${taskId}:`, error);
@@ -182,6 +241,28 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
             console.log(`ПРОЦЕСС: Остановка процесса ${taskId} с PID ${pid}, возраст: ${Math.floor((Date.now() - processInfo.startTime) / 1000)}с`);
 
             try {
+                // Записываем причину остановки
+                processInfo.exitReason = 'ручная остановка пользователем';
+                processInfo.exitTime = Date.now();
+                const runTime = Math.floor((processInfo.exitTime - processInfo.startTime) / 1000);
+
+                // Отправляем уведомление в Telegram перед остановкой
+                try {
+                    const exitTime = new Date().toISOString();
+                    const moduleName = processInfo.moduleName || 'неизвестно';
+
+                    const message = `🛑 Процесс остановлен вручную\n\n` +
+                        `Задача ID: ${taskId}\n` +
+                        `Модуль: ${moduleName}\n` +
+                        `Причина: ручная остановка\n` +
+                        `Время работы: ${runTime}с\n` +
+                        `Время остановки: ${exitTime}`;
+
+                    telegramBotService.sendSystemNotification(message);
+                } catch (error) {
+                    console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
+                }
+
                 // Убедимся, что убиваем процесс принудительно сразу через treeKill
                 console.log(`ПРОЦЕСС: Принудительное завершение процесса ${taskId} через tree-kill`);
                 treeKill(pid, "SIGKILL", (err) => {

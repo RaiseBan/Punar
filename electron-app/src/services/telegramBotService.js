@@ -381,6 +381,29 @@ class TelegramBotService {
             .replace(/"/g, "&quot;");
     }
 
+    // Функция для отправки системных уведомлений в Telegram
+    async sendSystemNotification(message) {
+        try {
+            console.log(`[TG Bot] Отправка системного уведомления: ${message.substring(0, 50)}...`);
+
+            if (!this.botToken || !this.chatIds || this.chatIds.length === 0) {
+                console.error(`[TG Bot] Не удалось отправить системное уведомление: нет токена или чатов`);
+                return false;
+            }
+
+            // Отправляем сообщение всем чатам
+            for (const chatId of this.chatIds) {
+                await this.sendMessage(chatId, message);
+                console.log(`[TG Bot] Системное уведомление отправлено в чат ${chatId}`);
+            }
+
+            return true;
+        } catch (error) {
+            console.error(`[TG Bot] Ошибка при отправке системного уведомления:`, error);
+            return false;
+        }
+    }
+
     // Функция отправки статуса задачи
     async sendTaskStatus(taskId) {
         try {
