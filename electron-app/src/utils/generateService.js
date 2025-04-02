@@ -33,32 +33,6 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
     const meteoraPairs = tokenConfig.meteora_pairs;
     console.log(3);
 
-
-    // const raydiumPair = tokenConfig.raydium_pairs[0];
-
-
-    // const raydiumPairsAMM = await getFilteredPairs(config.main_rpc, tokenConfig.raydium_pairs, RAYDIUM_AMM_OWNER);
-    // if (raydiumPairsAMM.length === 0) {
-    //     console.log(`[RAYDIUM AMM] no such pools with owner: ${RAYDIUM_AMM_OWNER}`);
-    // }
-
-    // const raydiumPairsCPMM = await getFilteredPairs(config.main_rpc, tokenConfig.raydium_pairs, RAYDIUM_CPMM_OWNER);
-    // if (raydiumPairsCPMM.length === 0) {
-    //     console.log(`[RAYDIUM CPMM] no such pools with owner: ${RAYDIUM_CPMM_OWNER}`);
-    // }
-
-    // const raydiumPairAMMToUse = (await sortPairsByParameter(config.main_rpc, raydiumPairsAMM, {
-    //     parameter: 'volume',
-    //     timeFrame: 'h1',
-    //     order: 'desc'
-    // }))[0].pair;
-
-    // const raydiumPairCPMMToUse = (await sortPairsByParameter(config.main_rpc, raydiumPairsCPMM, {
-    //     parameter: 'volume',
-    //     timeFrame: "h1",
-    //     order: 'desc'
-    // }))[0].pair;
-
     const pumpPairs = (await sortPairsByParameter(config.main_rpc, tokenConfig.pump_swap_pairs, {
         parameter: 'volume',
         timeFrame: "h1",
@@ -142,7 +116,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
             order: 'desc'
         }))[0].pair;
 
-        if (!targetMeteoraPair) { // было filteredMeteoraPairs
+        if (!targetMeteoraPair) {
             console.log(`Meteora pairs with owner ${METEORA_OWNER} not found`);
             return;
         }
@@ -150,34 +124,16 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
         mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [targetMeteoraPair];
     }
 
-    // if (filteredMeteoraPairs.length === 1) {
-    //     // Если не больше 1 пары, добавляем их в список
-    //     mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [targetMeteoraPair];
-    // } else {
-    //     mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [targetMeteoraPair];
-    //     // Если больше 1 пары, получаем lookup таблицы
-    //     const lookupTables = await updateIfNotExistsAndGet(config.main_rpc, filteredMeteoraPairs, config.private_key);
-
-    //     if (!lookupTables) {
-    //         console.error("Не удалось получить lookup таблицы");
-    //         return;
-    //     }
-
-    //     mevConfig.routing.mint_config_list[0].lookup_table_accounts = lookupTables;
-
-    //     // Оставляем meteora_dlmm_pool_list пустым
-    //     // mevConfig.routing.mint_config_list[0].meteora_dlmm_pool_list = [];
-    // }
-
     // Создаем директорию, если она не существует
     if (!fs.existsSync(targetDir)) {
         fs.mkdirSync(targetDir, { recursive: true });
     }
 
     // Формируем имя файла и путь для сохранения
-    // Добавляем к имени файла информацию о пуле, если это повторная генерация
+    // Добавляем taskId в имя файла для уникальности
+    const taskId = config.taskId || Date.now();
     const poolSuffix = specificMeteoraPool ? `_updated_${Date.now()}` : '';
-    const tomlFileName = `${tokenConfig.token_address}_${value}_${config.useJito === true ? "jito" : "default"}${poolSuffix}.toml`;
+    const tomlFileName = `${tokenConfig.token_address}_${value}_${config.useJito === true ? "jito" : "default"}_task${taskId}${poolSuffix}.toml`;
     const tomlFilePath = path.join(targetDir, tomlFileName);
 
     try {
