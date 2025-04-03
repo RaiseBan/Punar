@@ -10,6 +10,52 @@ const { convertWindowsPathToWSL } = require("./fsHelper");  // Получаем 
 // Карта для отслеживания процессов mev_subtask
 const mevSubtaskProcesses = new Map();
 
+// Добавляем более надежную функцию для принудительного завершения процесса в Windows
+async function forceKillWindowsProcess(pid) {
+    if (!pid) {
+        console.error("Невозможно убить процесс: PID не указан");
+        return false;
+    }
+
+    return new Promise((resolve) => {
+        try {
+            console.log(`Принудительное завершение процесса с PID ${pid} через taskkill`);
+
+            // Сначала пытаемся завершить с помощью tree-kill
+            const treeKill = require('tree-kill');
+            treeKill(pid, 'SIGKILL', (treeKillError) => {
+                if (treeKillError) {
+                    console.log(`tree-kill не завершил процесс ${pid}, пробуем taskkill: ${treeKillError}`);
+
+                    // Если не удалось через tree-kill, пробуем через taskkill как резервный вариант
+                    const { execSync } = require('child_process');
+                    try {
+                        // Используем /F для принудительного завершения и /T для завершения дерева процессов
+                        execSync(`taskkill /pid ${pid} /T /F`);
+                        console.log(`Процесс ${pid} успешно завершен через taskkill`);
+                        resolve(true);
+                    } catch (taskkillError) {
+                        // Если taskkill не нашел процесс, это нормально
+                        if (taskkillError.message.includes('не найден')) {
+                            console.log(`Процесс ${pid} не найден, возможно уже завершен`);
+                            resolve(true);
+                        } else {
+                            console.error(`Ошибка завершения процесса ${pid} через taskkill: ${taskkillError.message}`);
+                            resolve(false);
+                        }
+                    }
+                } else {
+                    console.log(`Процесс ${pid} успешно завершен через tree-kill`);
+                    resolve(true);
+                }
+            });
+        } catch (error) {
+            console.error(`Общая ошибка при завершении процесса ${pid}: ${error.message}`);
+            resolve(false);
+        }
+    });
+}
+
 // Переменная для отслеживания идентификаторов процессов WSL
 const wslProcessTracking = {
     pidMap: new Map(),  // Map taskId -> wsl PID
@@ -110,6 +156,19 @@ function stopMevProcess(taskId) {
     if (!taskId) {
         console.warn(`МОНИТОРИНГ: Вызов stopMevProcess без taskId!`);
         return;
+    }
+
+    // Получаем PID из карты отслеживания и пытаемся завершить процесс
+    const pid = wslProcessTracking.getProcessPid(taskId);
+    if (pid) {
+        console.log(`МОНИТОРИНГ: Останавливаем WSL-процесс для задачи ${taskId}, PID: ${pid}`);
+        forceKillWindowsProcess(pid)
+            .then(success => {
+                console.log(`МОНИТОРИНГ: Результат остановки процесса ${taskId}: ${success ? 'успешно' : 'не удалось'}`);
+            })
+            .catch(err => {
+                console.error(`МОНИТОРИНГ: Ошибка при остановке процесса ${taskId}:`, err);
+            });
     }
 
     // Удаляем процесс из отслеживания WSL
@@ -314,28 +373,25 @@ async function spawnProcess(taskConfig, userSettings) {
                     if (betterPairAddress) {
                         console.log(`МОНИТОРИНГ: Найден лучший пул Meteora для задачи ${taskId}, перегенерируем конфиг и перезапускаем процесс`);
 
-                        // Останавливаем текущий процесс перед запуском нового
                         try {
-                            // Мягкое завершение процесса
-                            child.kill();
-                            console.log(`МОНИТОРИНГ: Отправлен сигнал завершения процессу ${taskId}`);
+                            // Используем нашу новую функцию для надежного завершения процесса
+                            if (child && child.pid) {
+                                console.log(`МОНИТОРИНГ: Завершение процесса ${taskId} с PID ${child.pid} для перезапуска с новым пулом`);
 
-                            // Принудительное завершение через tree-kill для гарантии
-                            const treeKill = require('tree-kill');
-                            treeKill(child.pid, 'SIGKILL', (err) => {
-                                if (err) {
-                                    console.log(`МОНИТОРИНГ: Ошибка при завершении процесса: ${err}`);
-                                } else {
-                                    console.log(`МОНИТОРИНГ: Процесс ${taskId} успешно завершен через treeKill`);
-                                }
-                            });
+                                // Принудительно завершаем процесс
+                                await forceKillWindowsProcess(child.pid);
 
-                            // Ждем небольшую задержку для завершения процесса
-                            await new Promise(resolve => setTimeout(resolve, 1000));
+                                // Увеличиваем задержку перед запуском нового процесса до 5 секунд
+                                // для гарантии полного завершения старого процесса и освобождения ресурсов
+                                await new Promise(resolve => setTimeout(resolve, 5000));
 
-                            console.log(`МОНИТОРИНГ: Текущий процесс ${taskId} остановлен`);
+                                console.log(`МОНИТОРИНГ: Текущий процесс ${taskId} остановлен`);
+                            }
                         } catch (killError) {
                             console.error(`МОНИТОРИНГ: Ошибка при попытке остановить процесс ${taskId}:`, killError);
+
+                            // Даже если была ошибка, даем немного времени для возможного завершения
+                            await new Promise(resolve => setTimeout(resolve, 5000));
                         }
 
                         // Отправляем уведомление о смене пула через Telegram
@@ -475,6 +531,12 @@ async function spawnProcess(taskConfig, userSettings) {
     if (updatedTaskConfig.module_name === "mev_subtask" && updatedTaskConfig.enablePoolMonitoring) {
         child.on("exit", (code) => {
             console.log(`mev_subtask process ${taskId} exited with code ${code}, cleaning up monitoring`);
+
+            // Даже если код равен null (принудительное завершение), мы должны корректно очистить ресурсы
+            if (code === null) {
+                console.log(`МОНИТОРИНГ: Процесс ${taskId} был завершен принудительно. Очищаем ресурсы.`);
+            }
+
             stopMevProcess(taskId);
         });
     }
@@ -536,5 +598,6 @@ async function spawnProcess(taskConfig, userSettings) {
 // Экспортируем функции
 module.exports = {
     spawnProcess,
-    stopMevProcess
+    stopMevProcess,
+    forceKillWindowsProcess
 };

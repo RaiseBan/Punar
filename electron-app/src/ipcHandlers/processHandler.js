@@ -1,7 +1,7 @@
 const { spawn } = require("child_process");
 const treeKill = require("tree-kill");
 const { getSettings } = require("../utils/fsHelper");
-const { spawnProcess, stopMevProcess } = require("../utils/spawnProcess");
+const { spawnProcess, stopMevProcess, forceKillWindowsProcess } = require("../utils/spawnProcess");
 const telegramBotService = require("../services/telegramBotService");
 const fs = require("fs");
 const path = require("path");
@@ -435,7 +435,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         }
     });
 
-    ipcMain.on("stop-process", (event, taskId) => {
+    ipcMain.on("stop-process", async (event, taskId) => {
         console.log(`ПРОЦЕСС: Остановка процесса ${taskId}`);
 
         // Сначала останавливаем мониторинг пулов для mev_subtask процессов
@@ -485,34 +485,45 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
                     }
                 });
 
-                // Убедимся, что убиваем процесс принудительно сразу через treeKill
-                console.log(`ПРОЦЕСС: Принудительное завершение процесса ${taskId} через tree-kill`);
-                treeKill(pid, "SIGKILL", (err) => {
-                    if (err) {
-                        // Проверяем, указывает ли ошибка на то, что процесс уже завершен
-                        const errorStr = err.toString().toLowerCase();
-                        const isProcessGoneError = errorStr.includes('no running instance') ||
-                            errorStr.includes('does not exist') ||
-                            errorStr.includes('no such process');
+                // Убедимся, что убиваем процесс принудительно с помощью нашей улучшенной функции
+                console.log(`ПРОЦЕСС: Принудительное завершение процесса ${taskId} с PID ${pid}`);
 
-                        if (isProcessGoneError) {
-                            // Процесс уже завершен, это нормально
-                            console.log(`ПРОЦЕСС: Процесс ${taskId} уже завершен, игнорируем ошибку.`);
-                        } else {
-                            // Другая ошибка, логируем
-                            console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, err);
-                        }
+                try {
+                    // Используем асинхронную функцию и ждем результата
+                    const killSuccess = await forceKillWindowsProcess(pid);
+
+                    if (killSuccess) {
+                        console.log(`ПРОЦЕСС: Процесс ${taskId} успешно завершен через forceKillWindowsProcess`);
                     } else {
-                        console.log(`ПРОЦЕСС: Процесс ${taskId} и все его дочерние процессы убиты через tree-kill`);
-                    }
+                        console.log(`ПРОЦЕСС: Не удалось завершить процесс ${taskId} через forceKillWindowsProcess, пробуем treeKill`);
 
-                    // В любом случае отмечаем процесс как неактивный
-                    if (processes[taskId]) {
-                        processes[taskId].isActive = false;
-                        processes[taskId].exitTime = Date.now();
-                        processes[taskId].exitReason = 'killed';
+                        // Резервный метод, если наша функция не сработала
+                        treeKill(pid, "SIGKILL", (err) => {
+                            if (err) {
+                                // Проверяем, указывает ли ошибка на то, что процесс уже завершен
+                                const errorStr = err.toString().toLowerCase();
+                                const isProcessGoneError = errorStr.includes('no running instance') ||
+                                    errorStr.includes('does not exist') ||
+                                    errorStr.includes('no such process');
+
+                                if (isProcessGoneError) {
+                                    // Процесс уже завершен, это нормально
+                                    console.log(`ПРОЦЕСС: Процесс ${taskId} уже завершен, игнорируем ошибку.`);
+                                } else {
+                                    // Другая ошибка, логируем
+                                    console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, err);
+                                }
+                            }
+                        });
                     }
-                });
+                } catch (error) {
+                    console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, error);
+                }
+
+                // В любом случае отмечаем процесс как неактивный
+                processInfo.isActive = false;
+                processInfo.exitTime = Date.now();
+                processInfo.exitReason = 'killed';
             } catch (error) {
                 console.error(`ПРОЦЕСС: Ошибка при остановке процесса ${taskId}:`, error);
                 // Отмечаем процесс как неактивный в любом случае
