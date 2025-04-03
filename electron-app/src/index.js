@@ -64,6 +64,33 @@ app.whenReady().then(() => {
   initializeWindowHandlers(ipcMain, mainWindow);
   initializeApiHandlers(ipcMain);
 
+  // Регистрируем обработчик события telegram-notify-pool-change после создания телеграм-бота
+  // (после строки с initializeApiHandlers)
+
+  // Добавляем обработчик для отправки уведомлений о смене пула Meteora
+  ipcMain.on('telegram-notify-pool-change', (event, { taskId, oldPool, newPool, tokenAddress }) => {
+    try {
+      console.log(`Получено уведомление о смене пула для задачи ${taskId}`);
+
+      // Формируем подробное сообщение о смене пула
+      const poolChangeMessage = `🔄 Обнаружена смена пула Meteora\n\n` +
+        `Задача ID: ${taskId}\n` +
+        `Токен: ${tokenAddress || 'не указан'}\n` +
+        `Старый пул: ${oldPool || 'не указан'}\n` +
+        `Новый пул: ${newPool || 'не указан'}\n` +
+        `Время: ${new Date().toISOString()}\n\n` +
+        `Процесс будет перезапущен автоматически с новым пулом.`;
+
+      // Отправляем уведомление с высоким приоритетом
+      telegramBotService.sendSystemNotification(poolChangeMessage);
+
+      // Также отправляем запрос на обновление статуса задачи
+      telegramBotService.sendTaskStatus(taskId);
+    } catch (error) {
+      console.error(`Ошибка при отправке уведомления о смене пула:`, error);
+    }
+  });
+
   // Используем асинхронные обработчики для Telegram-бота
   telegramBotService.onTaskRun(({ taskId, rowIndex, strategy, rowId }) => {
     console.log(`Sending run task to renderer: taskId=${taskId}, rowIndex=${rowIndex}, strategy=${strategy}, rowId=${rowId || 'undefined'}`);

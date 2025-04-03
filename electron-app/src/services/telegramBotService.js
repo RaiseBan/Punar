@@ -393,17 +393,26 @@ class TelegramBotService {
     // Модифицируем sendSystemNotification для работы с очередью
     async sendSystemNotification(message) {
         try {
-            console.log(`[TG Bot] Отправка системного уведомления: ${message.substring(0, 50)}...`);
+            // Добавляем полный лог сообщения для отладки
+            console.log(`[TG Bot] Отправка системного уведомления:`);
+            console.log(message); // Пишем полное сообщение в лог
 
             if (!this.botToken || !this.chatIds || this.chatIds.length === 0) {
                 console.error(`[TG Bot] Не удалось отправить системное уведомление: нет токена или чатов`);
                 return false;
             }
 
+            // Проверяем, что сообщение не пустое и не обрезано
+            if (!message || typeof message !== 'string' || message.length < 5) {
+                console.error(`[TG Bot] Попытка отправить пустое или некорректное сообщение`);
+                return false;
+            }
+
             // Добавляем в очередь вместо прямой отправки
             this.addMessageToQueue({
                 type: 'notification',
-                text: message
+                text: message,
+                priority: message.includes('смене пула') ? 'high' : 'normal' // Повышенный приоритет для сообщений о смене пула
             });
 
             return true;
@@ -432,13 +441,25 @@ class TelegramBotService {
         this.isProcessingQueue = true;
 
         try {
+            // Сортируем сообщения по приоритету - сначала высокоприоритетные
+            this.messageQueue.sort((a, b) => {
+                if (a.priority === 'high' && b.priority !== 'high') return -1;
+                if (a.priority !== 'high' && b.priority === 'high') return 1;
+                return 0;
+            });
+
             const message = this.messageQueue.shift();
+
+            // Логируем обработку сообщения для отладки
+            console.log(`[TG Bot] Обработка сообщения из очереди, тип: ${message.type}, приоритет: ${message.priority || 'normal'}`);
 
             if (message.type === 'notification') {
                 // Отправляем системное уведомление всем чатам
                 if (this.botToken && this.chatIds && this.chatIds.length > 0) {
                     for (const chatId of this.chatIds) {
                         try {
+                            // Добавляем задержку между сообщениями, чтобы избежать блокировки API Telegram
+                            await new Promise(resolve => setTimeout(resolve, 100));
                             await this.sendMessage(chatId, message.text);
                             console.log(`[TG Bot] Системное уведомление отправлено в чат ${chatId}`);
                         } catch (error) {
@@ -461,7 +482,7 @@ class TelegramBotService {
 
             // Если в очереди остались сообщения, продолжаем обработку
             if (this.messageQueue.length > 0) {
-                setTimeout(() => this.processMessageQueue(), 100);
+                setTimeout(() => this.processMessageQueue(), 300); // Увеличиваем задержку для стабильности
             }
         }
     }

@@ -329,39 +329,60 @@ async function spawnProcess(taskConfig, userSettings) {
                     if (betterPairAddress) {
                         console.log(`МОНИТОРИНГ: Найден лучший пул Meteora для задачи ${taskId}, перегенерируем конфиг и перезапускаем процесс`);
 
-                        // Останавливаем текущий процесс - используем более надежный способ для WSL процессов
+                        // Останавливаем текущий процесс перед запуском нового
                         try {
-                            // Пробуем сначала мягкое завершение
+                            // Мягкое завершение процесса
                             child.kill();
                             console.log(`МОНИТОРИНГ: Отправлен сигнал завершения процессу ${taskId}`);
 
-                            // Для WSL процессов может потребоваться дополнительное принудительное завершение
-                            const { exec } = require('child_process');
-                            // Ищем и убиваем все WSL процессы, связанные с smb-onchain
-                            exec('taskkill /F /FI "IMAGENAME eq wsl.exe" /FI "WINDOWTITLE eq *smb-onchain*"', (err) => {
+                            // Принудительное завершение через tree-kill для гарантии
+                            const treeKill = require('tree-kill');
+                            treeKill(child.pid, 'SIGKILL', (err) => {
                                 if (err) {
-                                    console.log(`МОНИТОРИНГ: WSL процессы не найдены или уже завершены: ${err.message}`);
+                                    console.log(`МОНИТОРИНГ: Ошибка при завершении процесса: ${err}`);
                                 } else {
-                                    console.log(`МОНИТОРИНГ: WSL процессы принудительно завершены`);
+                                    console.log(`МОНИТОРИНГ: Процесс ${taskId} успешно завершен через treeKill`);
                                 }
                             });
+
+                            // Ждем небольшую задержку для завершения процесса
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+
+                            console.log(`МОНИТОРИНГ: Текущий процесс ${taskId} остановлен`);
                         } catch (killError) {
                             console.error(`МОНИТОРИНГ: Ошибка при попытке остановить процесс ${taskId}:`, killError);
                         }
 
-                        console.log(`МОНИТОРИНГ: Текущий процесс ${taskId} остановлен`);
-
                         // Отправляем уведомление о смене пула через Telegram
                         try {
+                            // Импортируем telegramBotService прямо здесь для прямого обращения
+                            const telegramBotService = require('../services/telegramBotService');
+
+                            // Формируем подробное сообщение о смене пула
+                            const poolChangeMessage = `🔄 Обнаружена смена пула Meteora\n\n` +
+                                `Задача ID: ${taskId}\n` +
+                                `Модуль: ${updatedTaskConfig.module_name || 'mev_subtask'}\n` +
+                                `Токен: ${tokenAddress}\n` +
+                                `Старый пул: ${currentMeteoraPair}\n` +
+                                `Новый пул: ${betterPairAddress}\n` +
+                                `Время: ${new Date().toISOString()}\n\n` +
+                                `Процесс будет перезапущен автоматически с новым пулом.`;
+
+                            // Отправляем прямое уведомление с приоритетом
+                            console.log(`МОНИТОРИНГ: Отправка подробного уведомления о смене пула для задачи ${taskId}`);
+                            telegramBotService.sendSystemNotification(poolChangeMessage);
+
+                            // Также отправляем через mainWindow для совместимости
                             const { BrowserWindow } = require('electron');
                             const mainWindow = BrowserWindow.getAllWindows()[0];
                             if (mainWindow) {
-                                console.log(`МОНИТОРИНГ: Отправка уведомления о смене пула для задачи ${taskId}`);
-                                mainWindow.webContents.send('telegram-notify-pool-change', { taskId });
-
-                                // Отправляем запрос на отображение статуса задачи через Telegram
-                                const ipcMain = require('electron').ipcMain;
-                                ipcMain.emit('telegram-bot:send-task-status', null, taskId);
+                                console.log(`МОНИТОРИНГ: Отправка уведомления о смене пула для задачи ${taskId} через mainWindow`);
+                                mainWindow.webContents.send('telegram-notify-pool-change', {
+                                    taskId,
+                                    oldPool: currentMeteoraPair,
+                                    newPool: betterPairAddress,
+                                    tokenAddress: tokenAddress
+                                });
                             }
                         } catch (notifyError) {
                             console.error(`МОНИТОРИНГ: Ошибка при отправке уведомления:`, notifyError);
@@ -392,9 +413,29 @@ async function spawnProcess(taskConfig, userSettings) {
                             cwd: userSettings.mevBotDirectory
                         });
 
+                        // Проверяем, что процесс успешно запущен
+                        if (!newChild || !newChild.pid) {
+                            console.error(`МОНИТОРИНГ: Не удалось запустить новый процесс для задачи ${taskId}`);
+                            return;
+                        }
+
+                        // Устанавливаем обработчики для отслеживания состояния нового процесса
+                        newChild.on('error', (err) => {
+                            console.error(`МОНИТОРИНГ: Ошибка в новом процессе для задачи ${taskId}:`, err);
+                        });
+
+                        newChild.stdout.once('data', () => {
+                            console.log(`МОНИТОРИНГ: Новый процесс ${taskId} начал работу - получены первые данные`);
+                        });
+
+                        newChild.on('exit', (code) => {
+                            console.log(`МОНИТОРИНГ: Новый процесс ${taskId} завершился с кодом ${code}`);
+                            stopMevProcess(taskId);
+                        });
+
                         // Заменяем дочерний процесс в mevSubtaskProcesses
                         child = newChild;
-                        console.log(`МОНИТОРИНГ: Новый процесс для задачи ${taskId} запущен`);
+                        console.log(`МОНИТОРИНГ: Новый процесс для задачи ${taskId} запущен успешно, PID: ${newChild.pid}`);
 
                         // Обновляем инфо о процессе в мапе
                         processInfo.process = newChild;
