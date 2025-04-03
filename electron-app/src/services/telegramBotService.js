@@ -22,8 +22,7 @@ class TelegramBotService {
         // Хранилище для соответствия групп и задач
         this.groupToTasksMap = {};
 
-        // Добавляем систему очередей для сообщений Telegram
-        // Это позволит избежать блокировки основного потока
+        // Очередь сообщений для асинхронной отправки
         this.messageQueue = [];
         this.isProcessingQueue = false;
     }
@@ -140,10 +139,14 @@ class TelegramBotService {
                 this.lastUpdateId = updates[updates.length - 1].update_id;
             }
 
+            // Создаем интервал с безопасной функцией
             this.pollInterval = setInterval(() => {
-                this.getUpdates().catch(err => {
-                    console.error('Error in getUpdates:', err.message);
-                });
+                // Простая синхронная функция в setInterval
+                if (this.isActive && !this.isPolling) {
+                    this.getUpdates().catch(err => {
+                        console.error('Error in getUpdates:', err.message);
+                    });
+                }
             }, 3000);
 
             console.log('Polling started successfully');
@@ -180,10 +183,10 @@ class TelegramBotService {
             if (updates.length > 0) {
                 this.lastUpdateId = updates[updates.length - 1].update_id;
 
-                updates.forEach(update => {
+                // Обрабатываем каждое обновление без asynchronous
+                for (const update of updates) {
                     if (update.message) {
                         const chatId = update.message.chat.id;
-
                         this.addChatId(chatId.toString());
 
                         if (update.message.text) {
@@ -193,7 +196,7 @@ class TelegramBotService {
                         // Проверка на повторную обработку callback_query
                         if (this.processedCallbacks.has(update.callback_query.id)) {
                             console.log(`Callback query ${update.callback_query.id} уже обработан, пропускаем`);
-                            return;
+                            continue;
                         }
 
                         // Добавляем в обработанные
@@ -214,7 +217,7 @@ class TelegramBotService {
                             update.callback_query.id
                         );
                     }
-                });
+                }
             }
         } catch (error) {
             if (error.response) {
@@ -224,6 +227,7 @@ class TelegramBotService {
                     console.log('Conflict detected, restarting polling...');
                     this.stopPolling();
 
+                    // Запускаем через стандартный setTimeout с нормальной функцией
                     setTimeout(() => {
                         if (this.isActive) {
                             console.log('Attempting to restart polling after conflict');
@@ -386,86 +390,83 @@ class TelegramBotService {
             .replace(/"/g, "&quot;");
     }
 
-    // Функция для отправки системных уведомлений в Telegram
+    // Модифицируем sendSystemNotification для работы с очередью
     async sendSystemNotification(message) {
-        console.log(`[TG Bot] Отправка системного уведомления через очередь: ${message.substring(0, 50)}...`);
-
-        // Добавляем сообщение в очередь вместо прямой отправки
-        this.addMessageToQueue({
-            type: 'notification',
-            text: message
-        });
-
-        return true;
-    }
-
-    // Функция отправки статуса задачи
-    async sendTaskStatus(taskId) {
         try {
-            console.log(`[TG Bot] Отправка статуса для задачи ${taskId}`);
+            console.log(`[TG Bot] Отправка системного уведомления: ${message.substring(0, 50)}...`);
 
-            const tasks = await this.getTasks();
-
-            if (!tasks || tasks.length === 0) {
-                console.log(`[TG Bot] Задачи не найдены при отправке статуса`);
-                return;
+            if (!this.botToken || !this.chatIds || this.chatIds.length === 0) {
+                console.error(`[TG Bot] Не удалось отправить системное уведомление: нет токена или чатов`);
+                return false;
             }
 
-            const task = tasks.find(t => t.id === parseInt(taskId));
-
-            if (!task) {
-                console.log(`[TG Bot] Задача ${taskId} не найдена для отправки статуса`);
-                return;
-            }
-
-            // Фильтруем логи, чтобы показать только важные
-            const filteredLogs = this.filterLogs(task.logs);
-
-            // Формируем сообщение
-            let message = `📊 <b>Статус задачи #${task.id}</b>\n\n`;
-            message += `<b>Название:</b> ${this.escapeHtml(task.name)}\n`;
-            message += `<b>Модуль:</b> ${this.escapeHtml(task.moduleName)}\n`;
-            message += `<b>Статус:</b> ${task.status}\n\n`;
-
-            if (filteredLogs.length > 0) {
-                message += `<b>Последние важные события:</b>\n`;
-                for (const log of filteredLogs) {
-                    // Ограничиваем длину лога для читаемости
-                    const trimmedLog = log.length > 100 ? log.substring(0, 97) + '...' : log;
-                    message += `• ${this.escapeHtml(trimmedLog)}\n`;
-                }
-            } else {
-                message += `<i>Нет важных логов для отображения</i>\n`;
-            }
-
-            // Добавляем кнопки управления
-            const replyMarkup = {
-                inline_keyboard: [
-                    [
-                        {
-                            text: task.status === "Running" ? "⏹️ Остановить" : "▶️ Запустить",
-                            callback_data: task.status === "Running" ? `stop_task_${task.id}` : `resume_g_${task.id}`
-                        }
-                    ],
-                    [
-                        { text: "🗑️ Удалить", callback_data: `remove_g_${task.id}` }
-                    ]
-                ]
-            };
-
-            // Отправка сообщения всем чатам
-            for (const chatId of this.chatIds) {
-                await this.sendMessage(chatId, message, { replyMarkup });
-                console.log(`[TG Bot] Статус задачи ${taskId} отправлен в чат ${chatId}`);
-            }
+            // Добавляем в очередь вместо прямой отправки
+            this.addMessageToQueue({
+                type: 'notification',
+                text: message
+            });
 
             return true;
         } catch (error) {
-            console.error(`[TG Bot] Ошибка при отправке статуса задачи ${taskId}:`, error);
+            console.error(`[TG Bot] Ошибка при отправке системного уведомления:`, error);
             return false;
         }
     }
 
+    // Функция для добавления сообщения в очередь
+    addMessageToQueue(messageData) {
+        this.messageQueue.push(messageData);
+
+        // Запускаем обработку очереди, если она еще не запущена
+        if (!this.isProcessingQueue) {
+            this.processMessageQueue();
+        }
+    }
+
+    // Функция для обработки очереди сообщений
+    async processMessageQueue() {
+        if (this.isProcessingQueue || this.messageQueue.length === 0) {
+            return;
+        }
+
+        this.isProcessingQueue = true;
+
+        try {
+            const message = this.messageQueue.shift();
+
+            if (message.type === 'notification') {
+                // Отправляем системное уведомление всем чатам
+                if (this.botToken && this.chatIds && this.chatIds.length > 0) {
+                    for (const chatId of this.chatIds) {
+                        try {
+                            await this.sendMessage(chatId, message.text);
+                            console.log(`[TG Bot] Системное уведомление отправлено в чат ${chatId}`);
+                        } catch (error) {
+                            console.error(`[TG Bot] Ошибка при отправке сообщения в чат ${chatId}:`, error);
+                        }
+                    }
+                }
+            } else if (message.type === 'direct') {
+                // Прямое сообщение в конкретный чат
+                try {
+                    await this.sendMessage(message.chatId, message.text, message.options);
+                } catch (error) {
+                    console.error(`[TG Bot] Ошибка при отправке прямого сообщения в чат ${message.chatId}:`, error);
+                }
+            }
+        } catch (error) {
+            console.error(`[TG Bot] Ошибка при обработке очереди сообщений:`, error);
+        } finally {
+            this.isProcessingQueue = false;
+
+            // Если в очереди остались сообщения, продолжаем обработку
+            if (this.messageQueue.length > 0) {
+                setTimeout(() => this.processMessageQueue(), 100);
+            }
+        }
+    }
+
+    // Функция для обработки входящих сообщений
     handleIncomingMessage(chatId, message) {
         if (message.text.startsWith('/')) {
             const command = message.text.split(' ')[0].substring(1);
@@ -1059,66 +1060,90 @@ class TelegramBotService {
             return null;
         }
     }
+}
 
-    // Функция для обработки очереди сообщений
-    async processMessageQueue() {
-        if (this.isProcessingQueue || this.messageQueue.length === 0) {
+// Создаем и экспортируем экземпляр
+const telegramBotService = new TelegramBotService();
+module.exports = telegramBotService;
+
+// Восстанавливаем метод sendTaskStatus, но с безопасной обработкой ошибок
+// Функция отправки статуса задачи
+async function sendTaskStatus(taskId) {
+    try {
+        console.log(`[TG Bot] Отправка статуса для задачи ${taskId}`);
+
+        const tasks = await telegramBotService.getTasks();
+
+        if (!tasks || tasks.length === 0) {
+            console.log(`[TG Bot] Задачи не найдены при отправке статуса`);
             return;
         }
 
-        this.isProcessingQueue = true;
+        const task = tasks.find(t => t.id === parseInt(taskId));
 
-        try {
-            const message = this.messageQueue.shift();
+        if (!task) {
+            console.log(`[TG Bot] Задача ${taskId} не найдена для отправки статуса`);
+            return;
+        }
 
-            // Используем setImmediate для асинхронной отправки сообщения
-            await new Promise(resolve => {
-                setImmediate(async () => {
-                    try {
-                        if (message.type === 'notification') {
-                            // Обычное системное уведомление
-                            if (this.botToken && this.chatIds && this.chatIds.length > 0) {
-                                for (const chatId of this.chatIds) {
-                                    await this.sendMessage(chatId, message.text);
-                                    console.log(`[TG Bot] Системное уведомление отправлено в чат ${chatId}`);
-                                }
-                            }
-                        } else if (message.type === 'direct') {
-                            // Прямое сообщение в конкретный чат
-                            await this.sendMessage(message.chatId, message.text, message.options);
-                        }
-                    } catch (error) {
-                        console.error('[TG Bot] Ошибка при отправке сообщения из очереди:', error);
+        // Фильтруем логи, чтобы показать только важные
+        const filteredLogs = telegramBotService.filterLogs(task.logs);
+
+        // Формируем сообщение
+        let message = `📊 <b>Статус задачи #${task.id}</b>\n\n`;
+        message += `<b>Название:</b> ${telegramBotService.escapeHtml(task.name)}\n`;
+        message += `<b>Модуль:</b> ${telegramBotService.escapeHtml(task.moduleName)}\n`;
+        message += `<b>Статус:</b> ${task.status}\n\n`;
+
+        if (filteredLogs.length > 0) {
+            message += `<b>Последние важные события:</b>\n`;
+            for (const log of filteredLogs) {
+                // Ограничиваем длину лога для читаемости
+                const trimmedLog = log.length > 100 ? log.substring(0, 97) + '...' : log;
+                message += `• ${telegramBotService.escapeHtml(trimmedLog)}\n`;
+            }
+        } else {
+            message += `<i>Нет важных логов для отображения</i>\n`;
+        }
+
+        // Добавляем кнопки управления
+        const replyMarkup = {
+            inline_keyboard: [
+                [
+                    {
+                        text: task.status === "Running" ? "⏹️ Остановить" : "▶️ Запустить",
+                        callback_data: task.status === "Running" ? `stop_task_${task.id}` : `resume_g_${task.id}`
                     }
-                    resolve();
-                });
-            });
-        } catch (error) {
-            console.error('[TG Bot] Ошибка при обработке очереди сообщений:', error);
-        } finally {
-            this.isProcessingQueue = false;
+                ],
+                [
+                    { text: "🗑️ Удалить", callback_data: `remove_g_${task.id}` }
+                ]
+            ]
+        };
 
-            // Если в очереди остались сообщения, продолжаем обработку
-            if (this.messageQueue.length > 0) {
-                // Используем setTimeout для предотвращения блокировки цикла событий
-                setTimeout(() => this.processMessageQueue(), 50);
+        // Отправка сообщения всем чатам асинхронно
+        if (telegramBotService.chatIds && telegramBotService.chatIds.length > 0) {
+            for (const chatId of telegramBotService.chatIds) {
+                try {
+                    await telegramBotService.sendMessage(chatId, message, { replyMarkup });
+                    console.log(`[TG Bot] Статус задачи ${taskId} отправлен в чат ${chatId}`);
+                } catch (chatError) {
+                    console.error(`[TG Bot] Ошибка при отправке статуса в чат ${chatId}:`, chatError);
+                }
             }
         }
-    }
 
-    // Функция для добавления сообщения в очередь
-    addMessageToQueue(messageData) {
-        this.messageQueue.push(messageData);
-
-        // Запускаем обработку очереди, если она еще не запущена
-        if (!this.isProcessingQueue) {
-            this.processMessageQueue();
-        }
+        return true;
+    } catch (error) {
+        console.error(`[TG Bot] Ошибка при отправке статуса задачи ${taskId}:`, error);
+        return false;
     }
 }
 
-const telegramBotService = new TelegramBotService();
+// Добавляем метод sendTaskStatus к сервису
+telegramBotService.sendTaskStatus = sendTaskStatus;
 
+// Восстанавливаем обработчики IPC
 ipcMain.handle('telegram-bot:set-token', (event, token) => {
     console.log(`telegramBotService.set-token`);
     return telegramBotService.setBotToken(token);
@@ -1153,45 +1178,3 @@ ipcMain.handle('telegram-bot:send-task-status', (event, taskId) => {
     console.log(`telegramBotService.send-task-status для задачи ${taskId}`);
     return telegramBotService.sendTaskStatus(taskId);
 });
-
-// Также оптимизируем обработку callback-запросов
-const originalHandleCallbackQuery = telegramBotService.handleCallbackQuery;
-telegramBotService.handleCallbackQuery = function (chatId, callbackData, messageId, callbackQueryId) {
-    // Запускаем асинхронно, чтобы не блокировать основной поток
-    setImmediate(() => {
-        try {
-            originalHandleCallbackQuery.call(this, chatId, callbackData, messageId, callbackQueryId);
-        } catch (error) {
-            console.error('[TG Bot] Ошибка при обработке callback query:', error);
-        }
-    });
-};
-
-// Функция для запуска getUpdates асинхронно
-function runGetUpdatesAsync() {
-    if (telegramBotService.isPolling) {
-        return;
-    }
-
-    // Устанавливаем флаг, что процесс начался
-    telegramBotService.isPolling = true;
-
-    // Используем setImmediate для асинхронного запуска
-    setImmediate(async () => {
-        try {
-            // Вызываем оригинальный метод getUpdates
-            await telegramBotService._getUpdates();
-        } catch (error) {
-            console.error('[TG Bot] Ошибка при получении обновлений:', error);
-        } finally {
-            // Сбрасываем флаг
-            telegramBotService.isPolling = false;
-        }
-    });
-}
-
-// Сохраняем оригинальный метод и заменяем его асинхронной версией
-telegramBotService._getUpdates = telegramBotService.getUpdates;
-telegramBotService.getUpdates = runGetUpdatesAsync;
-
-module.exports = telegramBotService;
