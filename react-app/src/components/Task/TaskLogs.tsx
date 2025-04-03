@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Typography, Paper, CircularProgress, Button } from '@mui/material';
-import styles from './Task.module.css';
 
 interface TaskLogsProps {
   logs: string[];
@@ -40,7 +39,7 @@ const TaskLogs: React.FC<TaskLogsProps> = ({ logs, taskId }) => {
 
       if (result && Array.isArray(result.logs)) {
         // Парсим логи из файла
-        const parsedLogs = result.logs.map(logLine => {
+        const parsedLogs = result.logs.map((logLine: string) => {
           try {
             // Предполагаем формат: [timestamp] [TYPE] message
             const matches = logLine.match(/\[(.*?)\]\s*\[(.*?)\]\s*(.*)/);
@@ -98,9 +97,9 @@ const TaskLogs: React.FC<TaskLogsProps> = ({ logs, taskId }) => {
           </Typography>
         ) : (
           limitedLogs.map((log, index) => (
-            <div key={index} className={styles.logLine}>
+            <Box key={index} sx={{ p: 0.5, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
               {log}
-            </div>
+            </Box>
           ))
         )}
         {logs.length > LOG_DISPLAY_LIMIT && (
@@ -129,11 +128,11 @@ const TaskLogs: React.FC<TaskLogsProps> = ({ logs, taskId }) => {
         ) : (
           <>
             {fileLogs.map((log, index) => (
-              <div key={index} className={styles.logLine}>
-                <span className={styles.logTimestamp}>{log.timestamp}</span>
-                <span className={styles.logType}>[{log.type}]</span>
-                <span className={styles.logContent}>{log.content}</span>
-              </div>
+              <Box key={index} sx={{ p: 0.5, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.8rem', mr: 1 }}>{log.timestamp}</Typography>
+                <Typography component="span" sx={{ color: 'primary.main', fontSize: '0.8rem', mr: 1 }}>[{log.type}]</Typography>
+                <Typography component="span">{log.content}</Typography>
+              </Box>
             ))}
             {offset < totalLogs && (
               <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
@@ -154,7 +153,7 @@ const TaskLogs: React.FC<TaskLogsProps> = ({ logs, taskId }) => {
   };
 
   return (
-    <Paper elevation={1} className={styles.logsContainer}>
+    <Paper elevation={1} sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1, borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
         <Typography variant="subtitle2">Логи</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -185,7 +184,7 @@ const TaskLogs: React.FC<TaskLogsProps> = ({ logs, taskId }) => {
         </Box>
       </Box>
 
-      <Box className={styles.logs}>
+      <Box sx={{ flexGrow: 1, overflow: 'auto', maxHeight: '500px', p: 1 }}>
         {displayMode === 'memory' ? renderMemoryLogs() : renderFileLogs()}
         <div ref={logsEndRef} />
       </Box>
