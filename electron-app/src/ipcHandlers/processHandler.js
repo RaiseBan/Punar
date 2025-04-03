@@ -7,6 +7,75 @@ const telegramBotService = require("../services/telegramBotService");
 // Карта для отслеживания процессов
 const processes = {};
 
+// Асинхронная обработка логов с использованием очереди
+// Это позволит избежать блокировки основного потока
+const logQueues = {};
+
+// Обработчик для очереди логов
+function processLogQueue(taskId) {
+    if (!logQueues[taskId] || logQueues[taskId].length === 0 || logQueues[taskId].processing) {
+        return;
+    }
+
+    logQueues[taskId].processing = true;
+
+    // Берём первый лог из очереди
+    const logItem = logQueues[taskId].shift();
+
+    // Обрабатываем лог асинхронно
+    setImmediate(() => {
+        try {
+            // Проверяем, существует ли mainWindow и не уничтожено ли оно
+            if (logItem.mainWindow && !logItem.mainWindow.isDestroyed()) {
+                logItem.mainWindow.webContents.send("process-output", {
+                    taskId: logItem.taskId,
+                    log: logItem.log
+                });
+            }
+
+            // Логируем в консоль, если необходимо
+            if (logItem.type === 'stderr') {
+                console.error(`STDERR [Task ${logItem.taskId}]:`, logItem.log);
+            } else if (logItem.shouldLogToConsole) {
+                console.log(`STDOUT [Task ${logItem.taskId}]:`, logItem.log);
+            }
+
+            // Освобождаем флаг обработки
+            logQueues[taskId].processing = false;
+
+            // Запускаем обработку следующего лога
+            process.nextTick(() => processLogQueue(taskId));
+        } catch (error) {
+            console.error(`Ошибка при обработке лога для задачи ${taskId}:`, error);
+            logQueues[taskId].processing = false;
+            process.nextTick(() => processLogQueue(taskId));
+        }
+    });
+}
+
+// Функция для добавления лога в очередь
+function addLogToQueue(taskId, logData, mainWindow, type = 'stdout', shouldLogToConsole = true) {
+    // Инициализируем очередь для задачи, если её ещё нет
+    if (!logQueues[taskId]) {
+        logQueues[taskId] = [];
+        logQueues[taskId].processing = false;
+    }
+
+    // Добавляем лог в очередь
+    logQueues[taskId].push({
+        taskId,
+        log: logData,
+        mainWindow,
+        type,
+        shouldLogToConsole
+    });
+
+    // Запускаем обработку очереди, если она не запущена
+    if (!logQueues[taskId].processing) {
+        processLogQueue(taskId);
+    }
+}
+
 function initializeProcessHandlers(ipcMain, mainWindow) {
     ipcMain.on("start-process", async (event, { taskId, config }) => {
         console.log(`ПРОЦЕСС: Создан taskId: ${taskId}, запускаем процесс...`);
@@ -17,10 +86,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
             const child = await spawnProcess(config, scriptPath);
             if (!child) {
                 console.error(`ПРОЦЕСС: Не удалось запустить процесс для задачи ${taskId}`);
-                mainWindow?.webContents.send("process-output", {
-                    taskId,
-                    log: `[ERROR] Не удалось запустить процесс`
-                });
+                addLogToQueue(taskId, `[ERROR] Не удалось запустить процесс`, mainWindow, 'stderr');
                 return;
             }
 
@@ -36,33 +102,37 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
             console.log(`ПРОЦЕСС: Процесс ${taskId} успешно запущен, PID: ${child.pid}`);
 
             // Отправляем событие только после сохранения процесса в карту
-            event.reply("process-started", { taskId, config });
-            mainWindow?.webContents.send("process-started", { taskId, config });
+            // Используем process.nextTick для асинхронной отправки событий
+            process.nextTick(() => {
+                event.reply("process-started", { taskId, config });
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send("process-started", { taskId, config });
+                }
+            });
 
             child.stdout.on("data", (data) => {
                 const output = data.toString();
 
-                // Всегда выводим полную информацию в консоль электрона 
-                console.log(`STDOUT [Task ${taskId}]:`, output);
-
-                // Для UI фильтруем и отправляем только важные сообщения
-                if (output.includes("[TABLE_DATA]") ||
+                // Проверяем, нужно ли отправлять в UI
+                const shouldSendToUI = output.includes("[TABLE_DATA]") ||
                     output.includes("ERROR") ||
                     output.includes("error") ||
-                    (output.includes("[") && output.includes("]"))) {
+                    (output.includes("[") && output.includes("]"));
 
-                    mainWindow?.webContents.send("process-output", { taskId, log: output });
+                if (shouldSendToUI) {
+                    // Добавляем в очередь обработки логов
+                    addLogToQueue(taskId, output, mainWindow, 'stdout', true);
+                } else {
+                    // Для логов, которые не нужно отправлять в UI, просто пишем в консоль
+                    addLogToQueue(taskId, output, null, 'stdout', true);
                 }
             });
 
             child.stderr.on("data", (data) => {
                 const output = data.toString();
 
-                // Всегда выводим ошибки в консоль
-                console.error(`STDERR [Task ${taskId}]:`, output);
-
                 // Ошибки всегда отправляем в UI
-                mainWindow?.webContents.send("process-output", { taskId, log: `[ERROR] ${output}` });
+                addLogToQueue(taskId, `[ERROR] ${output}`, mainWindow, 'stderr', true);
             });
 
             child.on("exit", (code) => {
@@ -82,31 +152,35 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
                     runTime = Math.floor((processes[taskId].exitTime - processes[taskId].startTime) / 1000);
                 }
 
-                mainWindow?.webContents.send("process-exit", { taskId, code });
+                // Асинхронно отправляем событие завершения
+                process.nextTick(() => {
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send("process-exit", { taskId, code });
+                    }
+                });
 
-                // Отправляем уведомление в Telegram
-                try {
-                    const exitTime = new Date().toISOString();
-                    const moduleName = config.module_name || 'неизвестно';
+                // Отправляем уведомление в Telegram асинхронно
+                setImmediate(async () => {
+                    try {
+                        const exitTime = new Date().toISOString();
+                        const moduleName = config.module_name || 'неизвестно';
 
-                    const message = `🛑 Процесс остановлен\n\n` +
-                        `Задача ID: ${taskId}\n` +
-                        `Модуль: ${moduleName}\n` +
-                        `Причина: ${exitReason}\n` +
-                        `Время работы: ${runTime}с\n` +
-                        `Время остановки: ${exitTime}`;
+                        const message = `🛑 Процесс остановлен\n\n` +
+                            `Задача ID: ${taskId}\n` +
+                            `Модуль: ${moduleName}\n` +
+                            `Причина: ${exitReason}\n` +
+                            `Время работы: ${runTime}с\n` +
+                            `Время остановки: ${exitTime}`;
 
-                    telegramBotService.sendSystemNotification(message);
-                } catch (error) {
-                    console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
-                }
-
-                // НЕ удаляем процесс из карты здесь, чтобы избежать race condition
-                // с остановкой процесса. Вместо этого помечаем его как неактивный
+                        await telegramBotService.sendSystemNotification(message);
+                    } catch (error) {
+                        console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
+                    }
+                });
             });
         } catch (error) {
             console.error(`ПРОЦЕСС: Ошибка при запуске процесса ${taskId}:`, error);
-            mainWindow?.webContents.send("process-output", { taskId, log: `[ERROR] Failed to start process: ${error.toString()}` });
+            addLogToQueue(taskId, `[ERROR] Failed to start process: ${error.toString()}`, mainWindow, 'stderr');
         }
     });
 
@@ -116,15 +190,11 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         const scriptPath = getSettings();
 
         try {
-
             // СНАЧАЛА запускаем процесс
             const child = await spawnProcess(config, scriptPath);
             if (!child) {
                 console.error(`ПРОЦЕСС: Не удалось возобновить процесс для задачи ${taskId}`);
-                mainWindow?.webContents.send("process-output", {
-                    taskId,
-                    log: `[ERROR] Не удалось возобновить процесс`
-                });
+                addLogToQueue(taskId, `[ERROR] Не удалось возобновить процесс`, mainWindow, 'stderr');
                 return;
             }
 
@@ -140,34 +210,39 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
             console.log(`ПРОЦЕСС: Процесс возобновлен для Task ${taskId}, PID:`, child.pid);
 
             // ЗАТЕМ отправляем события после успешного запуска процесса
-            event.reply(`process-started-${taskId}`); // Специфичное для задачи событие
-            event.reply("process-started", { taskId, config }); // Общее событие
-            mainWindow?.webContents.send("process-started", { taskId, config }); // Отправляем в главное окно
+            // Используем nextTick для асинхронной отправки событий
+            process.nextTick(() => {
+                event.reply(`process-started-${taskId}`); // Специфичное для задачи событие
+                event.reply("process-started", { taskId, config }); // Общее событие
+
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send("process-started", { taskId, config }); // Отправляем в главное окно
+                }
+            });
 
             child.stdout.on("data", (data) => {
                 const output = data.toString();
 
-                // Всегда выводим полную информацию в консоль электрона 
-                console.log(`STDOUT [Task ${taskId}]:`, output);
-
-                // Для UI фильтруем и отправляем только важные сообщения
-                if (output.includes("[TABLE_DATA]") ||
+                // Проверяем, нужно ли отправлять в UI
+                const shouldSendToUI = output.includes("[TABLE_DATA]") ||
                     output.includes("ERROR") ||
                     output.includes("error") ||
-                    (output.includes("[") && output.includes("]"))) {
+                    (output.includes("[") && output.includes("]"));
 
-                    mainWindow?.webContents.send("process-output", { taskId, log: output });
+                if (shouldSendToUI) {
+                    // Добавляем в очередь обработки логов
+                    addLogToQueue(taskId, output, mainWindow, 'stdout', true);
+                } else {
+                    // Для логов, которые не нужно отправлять в UI, просто пишем в консоль
+                    addLogToQueue(taskId, output, null, 'stdout', true);
                 }
             });
 
             child.stderr.on("data", (data) => {
                 const output = data.toString();
 
-                // Всегда выводим ошибки в консоль
-                console.error(`STDERR [Task ${taskId}]:`, output);
-
                 // Ошибки всегда отправляем в UI
-                mainWindow?.webContents.send("process-output", { taskId, log: `[ERROR] ${output}` });
+                addLogToQueue(taskId, `[ERROR] ${output}`, mainWindow, 'stderr', true);
             });
 
             child.on("exit", (code) => {
@@ -187,33 +262,44 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
                     runTime = Math.floor((processes[taskId].exitTime - processes[taskId].startTime) / 1000);
                 }
 
-                mainWindow?.webContents.send("process-exit", { taskId, code });
+                // Асинхронно отправляем событие завершения
+                process.nextTick(() => {
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send("process-exit", { taskId, code });
+                    }
+                });
 
                 // Отправляем уведомление в Telegram
-                try {
-                    const exitTime = new Date().toISOString();
-                    const moduleName = config.module_name || 'неизвестно';
+                setImmediate(async () => {
+                    try {
+                        const exitTime = new Date().toISOString();
+                        const moduleName = config.module_name || 'неизвестно';
 
-                    const message = `🛑 Процесс остановлен\n\n` +
-                        `Задача ID: ${taskId}\n` +
-                        `Модуль: ${moduleName}\n` +
-                        `Причина: ${exitReason}\n` +
-                        `Время работы: ${runTime}с\n` +
-                        `Время остановки: ${exitTime}`;
+                        const message = `🛑 Процесс остановлен\n\n` +
+                            `Задача ID: ${taskId}\n` +
+                            `Модуль: ${moduleName}\n` +
+                            `Причина: ${exitReason}\n` +
+                            `Время работы: ${runTime}с\n` +
+                            `Время остановки: ${exitTime}`;
 
-                    telegramBotService.sendSystemNotification(message);
-                } catch (error) {
-                    console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
-                }
+                        await telegramBotService.sendSystemNotification(message);
+                    } catch (error) {
+                        console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
+                    }
+                });
             });
         } catch (error) {
             console.error(`ПРОЦЕСС: Ошибка при возобновлении процесса для Task ${taskId}:`, error);
             // Отправляем ошибку как вывод, чтобы пользователь был уведомлен
-            mainWindow?.webContents.send("process-output", { taskId, log: `[ERROR] Failed to resume task: ${error.toString()}` });
-            mainWindow?.webContents.send("process-error", { taskId, error: error.toString() });
+            addLogToQueue(taskId, `[ERROR] Failed to resume task: ${error.toString()}`, mainWindow, 'stderr');
+
+            process.nextTick(() => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send("process-error", { taskId, error: error.toString() });
+                }
+            });
         }
     });
-
 
     ipcMain.on("stop-process", (event, taskId) => {
         console.log(`ПРОЦЕСС: Остановка процесса ${taskId}`);
@@ -247,21 +333,23 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
                 const runTime = Math.floor((processInfo.exitTime - processInfo.startTime) / 1000);
 
                 // Отправляем уведомление в Telegram перед остановкой
-                try {
-                    const exitTime = new Date().toISOString();
-                    const moduleName = processInfo.moduleName || 'неизвестно';
+                setImmediate(async () => {
+                    try {
+                        const exitTime = new Date().toISOString();
+                        const moduleName = processInfo.moduleName || 'неизвестно';
 
-                    const message = `🛑 Процесс остановлен вручную\n\n` +
-                        `Задача ID: ${taskId}\n` +
-                        `Модуль: ${moduleName}\n` +
-                        `Причина: ручная остановка\n` +
-                        `Время работы: ${runTime}с\n` +
-                        `Время остановки: ${exitTime}`;
+                        const message = `🛑 Процесс остановлен вручную\n\n` +
+                            `Задача ID: ${taskId}\n` +
+                            `Модуль: ${moduleName}\n` +
+                            `Причина: ручная остановка\n` +
+                            `Время работы: ${runTime}с\n` +
+                            `Время остановки: ${exitTime}`;
 
-                    telegramBotService.sendSystemNotification(message);
-                } catch (error) {
-                    console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
-                }
+                        await telegramBotService.sendSystemNotification(message);
+                    } catch (error) {
+                        console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
+                    }
+                });
 
                 // Убедимся, что убиваем процесс принудительно сразу через treeKill
                 console.log(`ПРОЦЕСС: Принудительное завершение процесса ${taskId} через tree-kill`);
@@ -307,6 +395,16 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         }
     });
 
+    // Очистка неактивных очередей логов
+    const cleanupLogQueues = () => {
+        const taskIds = Object.keys(logQueues);
+        for (const taskId of taskIds) {
+            if (!processes[taskId] || !processes[taskId].isActive) {
+                delete logQueues[taskId];
+            }
+        }
+    };
+
     // Функция для очистки неактивных процессов (запускать периодически)
     const cleanupInactiveProcesses = () => {
         const now = Date.now();
@@ -321,6 +419,9 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
                 cleaned++;
             }
         }
+
+        // Очищаем очереди логов для удаленных процессов
+        cleanupLogQueues();
 
         if (cleaned > 0) {
             console.log(`ПРОЦЕСС: Очищено ${cleaned} неактивных процессов из карты`);

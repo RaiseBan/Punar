@@ -39,7 +39,7 @@ function createWindow() {
   );
 }
 
-// Настройка обработчиков IPC
+// Добавляем асинхронную обработку событий для Telegram
 app.whenReady().then(() => {
   createWindow();
   initializeProcessHandlers(ipcMain, mainWindow);
@@ -48,15 +48,27 @@ app.whenReady().then(() => {
   initializeWindowHandlers(ipcMain, mainWindow);
   initializeApiHandlers(ipcMain);
 
+  // Используем асинхронные обработчики для Telegram-бота
   telegramBotService.onTaskRun(({ taskId, rowIndex, strategy, rowId }) => {
     console.log(`Sending run task to renderer: taskId=${taskId}, rowIndex=${rowIndex}, strategy=${strategy}, rowId=${rowId || 'undefined'}`);
-    mainWindow.webContents.send('telegram-bot:run-task', { taskId, rowIndex, strategy, rowId });
+
+    // Используем setImmediate для предотвращения блокировки основного потока
+    setImmediate(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('telegram-bot:run-task', { taskId, rowIndex, strategy, rowId });
+      }
+    });
   });
 
   telegramBotService.onTaskDelete(({ taskId, rowIndex, rowId }) => {
     console.log(`Sending delete task to renderer: taskId=${taskId}, rowIndex=${rowIndex}, rowId=${rowId || 'undefined'}`);
+
     if (rowIndex !== undefined || rowId) {
-      mainWindow.webContents.send('telegram-bot:delete-task', { taskId, rowIndex, rowId });
+      setImmediate(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('telegram-bot:delete-task', { taskId, rowIndex, rowId });
+        }
+      });
     } else {
       console.error('rowIndex and rowId are undefined, not sending delete task event');
     }
@@ -64,26 +76,46 @@ app.whenReady().then(() => {
 
   telegramBotService.onTaskStop(({ taskId }) => {
     console.log(`Sending stop task to renderer: taskId=${taskId}`);
-    mainWindow.webContents.send('telegram-bot:stop-task', { taskId });
+
+    setImmediate(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('telegram-bot:stop-task', { taskId });
+      }
+    });
   });
 
   // Добавляем обработчик для полного удаления задачи (остановка + удаление)
   telegramBotService.onTaskRemove(({ taskId }) => {
     console.log(`Sending remove task to renderer: taskId=${taskId}`);
+
     // Сначала останавливаем задачу
-    mainWindow.webContents.send('telegram-bot:stop-task', { taskId });
-    // Затем отправляем сигнал на удаление задачи из списка
-    mainWindow.webContents.send('telegram-bot:remove-task', { taskId });
+    setImmediate(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('telegram-bot:stop-task', { taskId });
+
+        // Даем немного времени на остановку, а затем отправляем сигнал на удаление
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('telegram-bot:remove-task', { taskId });
+          }
+        }, 200);
+      }
+    });
   });
 
   // Регистрируем обработчик возобновления задач
   telegramBotService.onTaskResume(({ taskId }) => {
     console.log(`Sending resume task to renderer: taskId=${taskId}`);
-    mainWindow.webContents.send('telegram-bot:resume-task', { taskId });
+
+    setImmediate(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('telegram-bot:resume-task', { taskId });
+      }
+    });
   });
 
-  // Добавить обработчик для задач Telegram
-  ipcMain.handle('telegram-tasks-response', (event, tasks) => {
+  // Добавить обработчик для задач Telegram - делаем его асинхронным
+  ipcMain.handle('telegram-tasks-response', async (event, tasks) => {
     return tasks;
   });
 });
