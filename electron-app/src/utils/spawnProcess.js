@@ -80,6 +80,14 @@ const wslProcessTracking = {
     },
     getAllProcesses: function () {
         return Array.from(this.pidMap.entries()).map(([taskId, pid]) => ({ taskId, pid }));
+    },
+    updateProcess: function (taskId, newPid) {
+        if (this.pidMap.has(taskId)) {
+            console.log(`WSL КОНТРОЛЬ: Обновляем процесс для задачи ${taskId}, новый PID: ${newPid}`);
+            this.pidMap.set(taskId, newPid);
+            return true;
+        }
+        return false;
     }
 };
 
@@ -413,11 +421,37 @@ async function spawnProcess(taskConfig, userSettings) {
                             console.log(`МОНИТОРИНГ: Отправка подробного уведомления о смене пула для задачи ${taskId}`);
                             telegramBotService.sendSystemNotification(poolChangeMessage);
 
-                            // Также отправляем через mainWindow для совместимости
+                            // Получаем BrowserWindow и отправляем события для UI
                             const { BrowserWindow } = require('electron');
                             const mainWindow = BrowserWindow.getAllWindows()[0];
-                            if (mainWindow) {
-                                console.log(`МОНИТОРИНГ: Отправка уведомления о смене пула для задачи ${taskId} через mainWindow`);
+
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                // Отправляем событие обновления, используя тот же taskId
+                                console.log(`МОНИТОРИНГ: Отправка события process-started для обновления UI о перезапуске задачи ${taskId}`);
+
+                                // Создаем объект с конфигурацией, похожий на тот, что использовался при первом запуске
+                                const processConfig = {
+                                    ...updatedTaskConfig,
+                                    // Добавляем сведения о новом пуле для отображения в логах
+                                    configUpdated: true,
+                                    newMeteoraPairAddress: betterPairAddress,
+                                    restartTime: new Date().toISOString()
+                                };
+
+                                // Отправляем событие process-started с тем же taskId для обновления UI
+                                mainWindow.webContents.send("process-started", {
+                                    taskId,
+                                    config: processConfig
+                                });
+
+                                // Также отправляем дополнительное уведомление для логов в UI
+                                mainWindow.webContents.send("process-output", {
+                                    taskId,
+                                    log: `[SYSTEM] Процесс перезапущен с новым пулом Meteora: ${betterPairAddress}`
+                                });
+
+                                // Дополнительно уведомляем UI о смене пула для обратной совместимости
+                                console.log(`МОНИТОРИНГ: Отправка уведомления о смене пула для задачи ${taskId} через telegram-notify-pool-change`);
                                 mainWindow.webContents.send('telegram-notify-pool-change', {
                                     taskId,
                                     oldPool: currentMeteoraPair,
@@ -485,6 +519,9 @@ async function spawnProcess(taskConfig, userSettings) {
                         console.log(`МОНИТОРИНГ: Обновлена информация о процессе ${taskId} в кэше`);
 
                         console.log(`МОНИТОРИНГ: Процесс задачи ${taskId} перезапущен с новым пулом Meteora: ${betterPairAddress}`);
+
+                        // Обновляем процесс в wslProcessTracking с новым PID
+                        wslProcessTracking.updateProcess(taskId, newChild.pid);
                     } else {
                         console.log(`МОНИТОРИНГ: Лучший пул не найден, сохраняем текущий пул для задачи ${taskId}`);
                     }

@@ -144,48 +144,34 @@ function processLogBatch(taskId) {
     });
 }
 
-// Функция для добавления лога в очередь с ограничением размера
-function addLogToQueue(taskId, logData, mainWindow, type = 'stdout', shouldLogToConsole = false) {
-    // Инициализируем очередь для задачи, если её ещё нет
-    if (!logQueues[taskId]) {
-        logQueues[taskId] = [];
-        logQueues[taskId].processing = false;
-
-        // Инициализируем состояние обновления UI
-        uiUpdateTimers[taskId] = {
-            canUpdate: true,
-            timer: null
-        };
+// Восстанавливаем функцию для добавления логов в очередь
+function addLogToQueue(taskId, logMessage, mainWindow, logType = 'stdout', isImportant = false) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        return;
     }
 
-    // Проверяем размер очереди и удаляем старые логи, если превышен лимит
-    if (logQueues[taskId].length >= MAX_LOGS_IN_MEMORY) {
-        // Удаляем старые логи (20% от максимального размера)
-        const logsToRemove = Math.floor(MAX_LOGS_IN_MEMORY * 0.2);
-        logQueues[taskId].splice(0, logsToRemove);
-
-        // Добавляем уведомление о пропущенных логах
-        logQueues[taskId].push({
-            taskId,
-            log: `[SYSTEM] Пропущено ${logsToRemove} старых логов из-за ограничения памяти`,
-            mainWindow,
-            type: 'system',
-            shouldLogToConsole: false
-        });
-    }
-
-    // Добавляем лог в очередь
-    logQueues[taskId].push({
-        taskId,
-        log: logData,
-        mainWindow,
-        type,
-        shouldLogToConsole
+    // Отправляем лог в UI
+    mainWindow.webContents.send('process-output', {
+        taskId: taskId,
+        log: logMessage
     });
 
-    // Запускаем обработку пакета логов, если она ещё не идёт
-    if (!logQueues[taskId].processing) {
-        processLogBatch(taskId);
+    // Записываем лог в файл
+    try {
+        const userDataPath = app.getPath('userData');
+        const logsDir = path.join(userDataPath, 'logs');
+        if (!fs.existsSync(logsDir)) {
+            fs.mkdirSync(logsDir, { recursive: true });
+        }
+
+        const timestamp = new Date().toISOString();
+        const prefix = logType === 'stderr' ? '[ERROR]' : '[INFO]';
+        const formattedLog = `[${timestamp}] ${prefix} ${logMessage}\n`;
+
+        const logFilePath = path.join(logsDir, `task_${taskId}.log`);
+        fs.appendFileSync(logFilePath, formattedLog);
+    } catch (error) {
+        console.error(`ПРОЦЕСС: Ошибка при записи лога в файл для задачи ${taskId}:`, error);
     }
 }
 
@@ -333,105 +319,133 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         }
     });
 
-    // Возобновление процесса
-    ipcMain.on("resume-process", async (event, { taskId, config }) => {
-        console.log(`ПРОЦЕСС: Возобновление процесса: Task ${taskId}`);
-        const scriptPath = getSettings();
+    ipcMain.on("resume-process", async (event, data) => {
+        const { taskId, config } = data;
+        console.log(`ПРОЦЕСС: Возобновление процесса ${taskId} с обновленной конфигурацией`);
 
-        try {
-            // СНАЧАЛА запускаем процесс
-            const child = await spawnProcess(config, scriptPath);
-            if (!child) {
-                console.error(`ПРОЦЕСС: Не удалось возобновить процесс для задачи ${taskId}`);
-                addLogToQueue(taskId, `[ERROR] Не удалось возобновить процесс`, mainWindow, 'stderr');
+        // Проверяем, существует ли уже процесс с этим ID
+        if (processes[taskId]) {
+            // Проверяем, не запущен ли уже процесс
+            if (processes[taskId].isActive) {
+                console.log(`ПРОЦЕСС: Процесс ${taskId} уже активен, нельзя возобновить`);
+                event.reply(`process-error`, { error: 'Process already running' });
                 return;
             }
 
-            // Сохраняем информацию о процессе
+            // Если процесс существует в реестре, но не активен, перезапускаем его
+            console.log(`ПРОЦЕСС: Перезапуск процесса ${taskId} с обновленной конфигурацией`);
+        } else {
+            // Если такого процесса нет, создаем новую запись
             processes[taskId] = {
-                process: child,
-                pid: child.pid,
-                isActive: true,
-                moduleName: config.module_name,
-                startTime: Date.now()
+                process: null,
+                pid: null,
+                isActive: false,
+                exitCode: null,
+                exitTime: null,
+                exitReason: null,
+                startTime: null,
+                moduleName: config.module_name || 'Unknown'
             };
+            console.log(`ПРОЦЕСС: Создание новой записи процесса ${taskId}`);
+        }
 
-            console.log(`ПРОЦЕСС: Процесс возобновлен для Task ${taskId}, PID:`, child.pid);
+        try {
+            // Запускаем процесс с обновленной конфигурацией
+            const childProcess = await spawnProcess(taskId, config);
 
-            // ЗАТЕМ отправляем события после успешного запуска процесса
-            // Используем nextTick для асинхронной отправки событий
-            process.nextTick(() => {
-                event.reply(`process-started-${taskId}`); // Специфичное для задачи событие
-                event.reply("process-started", { taskId, config }); // Общее событие
+            if (!childProcess) {
+                throw new Error('Не удалось запустить процесс');
+            }
 
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send("process-started", { taskId, config }); // Отправляем в главное окно
+            const pid = childProcess.pid;
+            processes[taskId].process = childProcess;
+            processes[taskId].pid = pid;
+            processes[taskId].isActive = true;
+            processes[taskId].startTime = Date.now();
+            processes[taskId].exitCode = null;
+            processes[taskId].exitTime = null;
+            processes[taskId].exitReason = null;
+            processes[taskId].moduleName = config.module_name || 'Unknown';
+
+            console.log(`ПРОЦЕСС: Процесс ${taskId} успешно запущен с PID ${pid}`);
+
+            // Отправляем уведомление о запуске процесса в Telegram
+            setImmediate(async () => {
+                try {
+                    const moduleName = config.module_name || 'неизвестно';
+                    const startTime = new Date().toISOString();
+
+                    const message = `▶️ Процесс возобновлен\n\n` +
+                        `Задача ID: ${taskId}\n` +
+                        `Модуль: ${moduleName}\n` +
+                        `Время запуска: ${startTime}\n` +
+                        `PID: ${pid}`;
+
+                    await telegramBotService.sendSystemNotification(message);
+                } catch (error) {
+                    console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram при возобновлении:`, error);
                 }
             });
 
-            child.stdout.on("data", (data) => {
+            // Отправляем событие в UI с информацией о запуске
+            console.log(`ПРОЦЕСС: Отправка события process-started в UI для задачи ${taskId}`);
+            event.reply('process-started', {
+                taskId: taskId,
+                config: config
+            });
+
+            // Настраиваем обработчики событий для процесса
+            childProcess.stdout.on('data', (data) => {
                 const output = data.toString();
                 addLogToQueue(taskId, output, mainWindow, 'stdout', false);
             });
 
-            child.stderr.on("data", (data) => {
+            childProcess.stderr.on('data', (data) => {
                 const output = data.toString();
                 addLogToQueue(taskId, `[ERROR] ${output}`, mainWindow, 'stderr', true);
             });
 
-            child.on("exit", (code) => {
-                console.log(`ПРОЦЕСС: Процесс Task ${taskId} (resume) завершился с кодом ${code}`);
-
-                // Обновляем статус в карте процессов
-                let exitReason = code === 0 ? 'нормальное завершение' : `ошибка (код ${code})`;
-                let runTime = 0;
+            childProcess.on('exit', (code) => {
+                console.log(`ПРОЦЕСС: Процесс ${taskId} завершен с кодом ${code}`);
 
                 if (processes[taskId]) {
                     processes[taskId].isActive = false;
                     processes[taskId].exitCode = code;
                     processes[taskId].exitTime = Date.now();
-                    processes[taskId].exitReason = exitReason;
+                    processes[taskId].exitReason = code === 0 ? 'normal' : 'error';
 
-                    // Вычисляем время работы в секундах
-                    runTime = Math.floor((processes[taskId].exitTime - processes[taskId].startTime) / 1000);
+                    const runTime = Math.floor((processes[taskId].exitTime - processes[taskId].startTime) / 1000);
+
+                    // Отправляем уведомление о завершении процесса в Telegram
+                    setImmediate(async () => {
+                        try {
+                            const moduleName = processes[taskId].moduleName || 'неизвестно';
+                            const exitTime = new Date().toISOString();
+
+                            const icon = code === 0 ? '✅' : '❌';
+                            const message = `${icon} Процесс завершен\n\n` +
+                                `Задача ID: ${taskId}\n` +
+                                `Модуль: ${moduleName}\n` +
+                                `Код завершения: ${code}\n` +
+                                `Время работы: ${runTime}с\n` +
+                                `Время завершения: ${exitTime}`;
+
+                            await telegramBotService.sendSystemNotification(message);
+                        } catch (error) {
+                            console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram о завершении:`, error);
+                        }
+                    });
                 }
 
-                // Асинхронно отправляем событие завершения
-                process.nextTick(() => {
-                    if (mainWindow && !mainWindow.isDestroyed()) {
-                        mainWindow.webContents.send("process-exit", { taskId, code });
-                    }
-                });
-
-                // Отправляем уведомление в Telegram
-                setImmediate(async () => {
-                    try {
-                        const exitTime = new Date().toISOString();
-                        const moduleName = config.module_name || 'неизвестно';
-
-                        const message = `🛑 Процесс остановлен\n\n` +
-                            `Задача ID: ${taskId}\n` +
-                            `Модуль: ${moduleName}\n` +
-                            `Причина: ${exitReason}\n` +
-                            `Время работы: ${runTime}с\n` +
-                            `Время остановки: ${exitTime}`;
-
-                        await telegramBotService.sendSystemNotification(message);
-                    } catch (error) {
-                        console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
-                    }
+                mainWindow.webContents.send('process-exit', {
+                    taskId: taskId,
+                    code: code
                 });
             });
+
         } catch (error) {
-            console.error(`ПРОЦЕСС: Ошибка при возобновлении процесса для Task ${taskId}:`, error);
-            // Отправляем ошибку как вывод, чтобы пользователь был уведомлен
-            addLogToQueue(taskId, `[ERROR] Failed to resume task: ${error.toString()}`, mainWindow, 'stderr');
-
-            process.nextTick(() => {
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send("process-error", { taskId, error: error.toString() });
-                }
-            });
+            console.error(`ПРОЦЕСС: Ошибка при возобновлении процесса ${taskId}:`, error);
+            event.reply(`process-error`, { taskId, error: error.message });
         }
     });
 
