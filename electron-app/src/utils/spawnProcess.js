@@ -10,6 +10,48 @@ const { convertWindowsPathToWSL } = require("./fsHelper");  // Получаем 
 // Карта для отслеживания процессов mev_subtask
 const mevSubtaskProcesses = new Map();
 
+// Переменная для отслеживания идентификаторов процессов WSL
+const wslProcessTracking = {
+    pidMap: new Map(),  // Map taskId -> wsl PID
+    registerProcess: function (taskId, childProcess) {
+        // При создании процесса сохраняем его PID
+        if (childProcess && childProcess.pid) {
+            console.log(`WSL КОНТРОЛЬ: Регистрируем процесс для задачи ${taskId}, PID: ${childProcess.pid}`);
+            this.pidMap.set(taskId, childProcess.pid);
+        }
+    },
+    removeProcess: function (taskId) {
+        // Удаляем процесс из отслеживания
+        if (this.pidMap.has(taskId)) {
+            console.log(`WSL КОНТРОЛЬ: Удаляем процесс из отслеживания для задачи ${taskId}`);
+            this.pidMap.delete(taskId);
+            return true;
+        }
+        return false;
+    },
+    cleanupWslProcesses: function () {
+        // Поиск и очистка "потерянных" процессов WSL
+        // Это выполняется при старте приложения или по запросу
+        const { exec } = require('child_process');
+        return new Promise((resolve) => {
+            console.log('WSL КОНТРОЛЬ: Поиск и очистка "потерянных" WSL процессов...');
+            exec('taskkill /F /FI "IMAGENAME eq wsl.exe" /FI "WINDOWTITLE eq *smb-onchain*"', (err) => {
+                if (err) {
+                    console.log('WSL КОНТРОЛЬ: WSL процессы не найдены или уже завершены');
+                } else {
+                    console.log('WSL КОНТРОЛЬ: "Потерянные" WSL процессы принудительно завершены');
+                }
+                resolve();
+            });
+        });
+    }
+};
+
+// Добавляем очистку при инициализации модуля
+wslProcessTracking.cleanupWslProcesses().then(() => {
+    console.log('WSL КОНТРОЛЬ: Первоначальная очистка WSL процессов завершена');
+});
+
 // Функция для получения директории конфигов, с учетом работы в dev и prod
 function getConfigDirectory() {
     if (process.env.NODE_ENV === "production") {
@@ -84,6 +126,9 @@ function stopMevProcess(taskId) {
         console.warn(`МОНИТОРИНГ: Вызов stopMevProcess без taskId!`);
         return;
     }
+
+    // Удаляем процесс из отслеживания WSL
+    wslProcessTracking.removeProcess(taskId);
 
     if (mevSubtaskProcesses.has(taskId)) {
         const processInfo = mevSubtaskProcesses.get(taskId);
@@ -224,11 +269,11 @@ async function spawnProcess(taskConfig, userSettings) {
         const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
         // const wslCommand = `${fileToExecute} ${configFilePath}`;
         console.log(`full command: wsl ${program} ${configFilePathWSL}`);
-        child = spawn('wsl', [program, "run", configFilePathWSL], {
-            stdio: 'pipe', // или 'inherit', если нужно выводить логи в терминал
-            shell: true, // Используем shell для корректного выполнения
+        child = spawn('wsl.exe', ['-e', program, "run", configFilePathWSL], {
+            stdio: 'pipe',
+            shell: false,
             detached: false,
-            cwd: userSettings.mevBotDirectory, // Устанавливаем рабочую директорию для процесса
+            cwd: userSettings.mevBotDirectory,
         });
 
         // Проверяем, включен ли режим мониторинга
@@ -340,9 +385,9 @@ async function spawnProcess(taskConfig, userSettings) {
                         // Запускаем процесс с новым конфигом
                         const newConfigFilePathWSL = convertWindowsPathToWSL(newConfigFilePath);
 
-                        const newChild = spawn('wsl', [program, "run", newConfigFilePathWSL], {
+                        const newChild = spawn('wsl.exe', ['-e', program, "run", newConfigFilePathWSL], {
                             stdio: 'pipe',
-                            shell: true,
+                            shell: false,
                             detached: false,
                             cwd: userSettings.mevBotDirectory
                         });
@@ -407,6 +452,57 @@ async function spawnProcess(taskConfig, userSettings) {
             stopMevProcess(taskId);
         });
     }
+
+    // После создания процесса для mev_subtask, добавляем:
+    wslProcessTracking.registerProcess(taskId, child);
+
+    // Добавляем обработчики для корректного отслеживания состояния процесса
+    child.on('error', (err) => {
+        console.error(`ПРОЦЕСС ${taskId}: Ошибка процесса WSL:`, err.message);
+        // Помечаем процесс как проблемный в трекере
+        wslProcessTracking.removeProcess(taskId);
+    });
+
+    // Добавляем надежное отслеживание отключения процесса
+    child.on('disconnect', () => {
+        console.log(`ПРОЦЕСС ${taskId}: WSL процесс отключен`);
+    });
+
+    // В блоке mev_subtask, после запуска процесса и перед проверкой enablePoolMonitoring
+    // добавляем код для проверки живости процесса периодически:
+
+    // Добавляем периодическую проверку состояния процесса (каждые 30 секунд)
+    const processCheckInterval = setInterval(() => {
+        // Проверяем, что процесс все еще активен
+        if (child.exitCode !== null || child.killed) {
+            console.log(`ПРОЦЕСС ${taskId}: WSL процесс завершился или был убит, останавливаем проверку`);
+            clearInterval(processCheckInterval);
+            wslProcessTracking.removeProcess(taskId);
+            return;
+        }
+
+        // Проверка, отвечает ли процесс
+        try {
+            // Отправляем сигнал 0 для проверки существования процесса
+            const isRunning = process.kill(child.pid, 0);
+            console.log(`ПРОЦЕСС ${taskId}: Проверка WSL процесса - ${isRunning ? 'активен' : 'неактивен'}`);
+        } catch (e) {
+            // Если возникла ошибка при проверке, процесс, вероятно, больше не существует
+            console.error(`ПРОЦЕСС ${taskId}: Ошибка при проверке состояния WSL процесса:`, e.message);
+            if (e.code === 'ESRCH') {
+                console.log(`ПРОЦЕСС ${taskId}: WSL процесс не найден, очищаем`);
+                clearInterval(processCheckInterval);
+                wslProcessTracking.removeProcess(taskId);
+            }
+        }
+    }, 30000); // Проверка каждые 30 секунд
+
+    // Когда задача завершается, не забываем очистить интервал проверки
+    child.on('exit', () => {
+        if (processCheckInterval) {
+            clearInterval(processCheckInterval);
+        }
+    });
 
     return child;
 }

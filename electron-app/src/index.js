@@ -5,12 +5,28 @@ const { initializeWalletHandlers } = require("./ipcHandlers/walletHandler");
 const { initializeConfigHandlers } = require("./ipcHandlers/configHandler");
 const { initializeWindowHandlers } = require("./ipcHandlers/windowHandler");
 const { initializeApiHandlers } = require("./ipcHandlers/tensorApiHandler");
-
+const { spawnProcess, stopMevProcess } = require("./utils/spawnProcess");
 const telegramBotService = require('./services/telegramBotService');
 
 let mainWindow;
 
+// Функция для очистки "потерянных" WSL процессов при запуске
+function cleanupOrphanedProcesses() {
+  console.log('Очистка "потерянных" WSL процессов при запуске...');
+  const { exec } = require('child_process');
+  exec('taskkill /F /FI "IMAGENAME eq wsl.exe" /FI "WINDOWTITLE eq *smb-onchain*"', (err) => {
+    if (err) {
+      console.log('WSL процессы не найдены или уже завершены');
+    } else {
+      console.log('Потерянные WSL процессы принудительно завершены');
+    }
+  });
+}
+
 function createWindow() {
+  // Вызываем очистку процессов перед созданием окна
+  cleanupOrphanedProcesses();
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
