@@ -59,7 +59,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Метод для получения логов из файлов
     invoke: (channel, data) => {
         // Разрешаем только безопасные каналы
-        const validChannels = ['get-task-logs'];
+        const validChannels = ['get-task-logs', 'open-log-file'];
         if (!validChannels.includes(channel)) {
             console.error(`Попытка вызвать неразрешенный канал: ${channel}`);
             return Promise.reject(new Error(`Неразрешенный канал: ${channel}`));
@@ -160,6 +160,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Добавляем новые методы для работы с уведомлениями о смене пула
     onPoolChanged: (callback) => {
         ipcRenderer.on('telegram-notify-pool-change', (event, data) => callback(data));
+    },
+
+    // Новый метод специально для открытия файла логов
+    openLogFile: (taskId) => {
+        console.log(`Opening log file for task ${taskId}`);
+        return ipcRenderer.invoke('open-log-file', { taskId });
     },
 });
 

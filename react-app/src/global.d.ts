@@ -173,6 +173,9 @@ declare global {
 
             // Уведомление о смене пула
             onPoolChanged: (callback: (data: { taskId: number }) => void) => void;
+
+            // Метод для открытия файла логов
+            openLogFile: (taskId: number) => Promise<{ success: boolean, filePath?: string, error?: string }>;
         };
     }
 }

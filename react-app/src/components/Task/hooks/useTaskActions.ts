@@ -38,7 +38,19 @@ export function useTaskActions(
   const handleCloseSettings = () => setSettingsOpen(false);
   const handleOpenFullView = () => setFullViewOpen(true);
   const handleCloseFullView = () => setFullViewOpen(false);
-  const handleOpenLogs = () => setLogsOpen(true);
+  const handleOpenLogs = () => {
+    console.log(`Opening logs file for task ${id}`);
+    window.electronAPI?.openLogFile(id)
+      .then((result: { success: boolean, filePath?: string, error?: string }) => {
+        if (!result.success) {
+          console.error(`Failed to open log file: ${result.error}`);
+          // Можно добавить уведомление пользователю о проблеме
+        }
+      })
+      .catch((err: Error) => {
+        console.error(`Error opening log file: ${err}`);
+      });
+  };
   const handleCloseLogs = () => setLogsOpen(false);
 
   // Функции управления задачей

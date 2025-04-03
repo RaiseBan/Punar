@@ -5,7 +5,7 @@ const { spawnProcess, stopMevProcess } = require("../utils/spawnProcess");
 const telegramBotService = require("../services/telegramBotService");
 const fs = require("fs");
 const path = require("path");
-const { app } = require("electron");
+const { app, shell } = require("electron");
 
 // Карта для отслеживания процессов
 const processes = {};
@@ -63,7 +63,9 @@ function processLogBatch(taskId) {
                 );
             });
 
+            // Отключаем отправку логов в UI - записываем только в файл
             // Подготавливаем логи для UI (только если UI обновления не заблокированы)
+            /* ОТКЛЮЧЕНО - больше не отправляем логи в UI
             if (!uiUpdateTimers[taskId] || uiUpdateTimers[taskId].canUpdate) {
                 // Проверяем существование mainWindow
                 const mainWindow = batch[0].mainWindow;
@@ -96,6 +98,25 @@ function processLogBatch(taskId) {
                             }, LOG_UPDATE_INTERVAL)
                         };
                     }
+                }
+            }
+            */
+
+            // Отправляем только данные таблицы в UI для обновления, чтобы не терять функциональность
+            const mainWindow = batch[0].mainWindow;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                // Отправляем только записи с данными таблицы
+                const tableDataLogs = batch.filter(logItem =>
+                    logItem.log.includes("[TABLE_DATA]")
+                );
+
+                if (tableDataLogs.length > 0) {
+                    tableDataLogs.forEach(logItem => {
+                        mainWindow.webContents.send("process-output", {
+                            taskId: logItem.taskId,
+                            log: logItem.log
+                        });
+                    });
                 }
             }
 
@@ -193,6 +214,25 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         } catch (error) {
             console.error(`Ошибка при чтении логов для задачи ${taskId}:`, error);
             return { logs: [], totalLines: 0, error: error.message };
+        }
+    });
+
+    // Добавляем новый метод для открытия файла логов
+    ipcMain.handle("open-log-file", async (event, { taskId }) => {
+        const logFile = path.join(LOG_FILE_DIR, `task_${taskId}.log`);
+
+        try {
+            if (!fs.existsSync(logFile)) {
+                console.error(`Файл логов для задачи ${taskId} не найден`);
+                return { success: false, error: "Файл логов не найден" };
+            }
+
+            // Открываем файл логов в стандартном приложении пользователя для просмотра текстовых файлов
+            await shell.openPath(logFile);
+            return { success: true, filePath: logFile };
+        } catch (error) {
+            console.error(`Ошибка при открытии файла логов для задачи ${taskId}:`, error);
+            return { success: false, error: error.message };
         }
     });
 
