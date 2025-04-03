@@ -3,62 +3,154 @@ const treeKill = require("tree-kill");
 const { getSettings } = require("../utils/fsHelper");
 const { spawnProcess, stopMevProcess } = require("../utils/spawnProcess");
 const telegramBotService = require("../services/telegramBotService");
+const fs = require("fs");
+const path = require("path");
+const { app } = require("electron");
 
 // Карта для отслеживания процессов
 const processes = {};
 
-// Асинхронная обработка логов с использованием очереди
-// Это позволит избежать блокировки основного потока
-const logQueues = {};
+// Константы для конфигурации логирования
+const MAX_LOGS_IN_MEMORY = 1000; // Максимальное количество логов для одной задачи в памяти
+const LOG_BATCH_SIZE = 10;       // Размер пакета логов для обработки за раз
+const LOG_UPDATE_INTERVAL = 500; // Интервал обновления UI логов (мс)
+const LOG_FILE_DIR = path.join(app.getPath("userData"), "logs");
 
-// Обработчик для очереди логов
-function processLogQueue(taskId) {
+// Создаем директорию для логов, если её нет
+if (!fs.existsSync(LOG_FILE_DIR)) {
+    fs.mkdirSync(LOG_FILE_DIR, { recursive: true });
+}
+
+// Асинхронная обработка логов с использованием очереди и файлового логирования
+const logQueues = {};
+const uiUpdateTimers = {}; // Таймеры для контроля частоты обновления UI
+
+// Функция для записи лога в файл
+function writeLogToFile(taskId, message, type = 'info') {
+    const logFile = path.join(LOG_FILE_DIR, `task_${taskId}.log`);
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] [${type.toUpperCase()}] ${message}\n`;
+
+    // Асинхронная запись в файл без ожидания завершения
+    fs.appendFile(logFile, logEntry, (err) => {
+        if (err) {
+            console.error(`Ошибка при записи в лог файл для задачи ${taskId}:`, err);
+        }
+    });
+}
+
+// Функция для пакетной обработки логов
+function processLogBatch(taskId) {
     if (!logQueues[taskId] || logQueues[taskId].length === 0 || logQueues[taskId].processing) {
         return;
     }
 
     logQueues[taskId].processing = true;
 
-    // Берём первый лог из очереди
-    const logItem = logQueues[taskId].shift();
+    // Берём пакет логов (но не больше LOG_BATCH_SIZE)
+    const batchSize = Math.min(LOG_BATCH_SIZE, logQueues[taskId].length);
+    const batch = logQueues[taskId].splice(0, batchSize);
 
-    // Обрабатываем лог асинхронно
+    // Обрабатываем пакет асинхронно
     setImmediate(() => {
         try {
-            // Проверяем, существует ли mainWindow и не уничтожено ли оно
-            if (logItem.mainWindow && !logItem.mainWindow.isDestroyed()) {
-                logItem.mainWindow.webContents.send("process-output", {
-                    taskId: logItem.taskId,
-                    log: logItem.log
-                });
+            // Пишем все логи в файл (всегда)
+            batch.forEach(logItem => {
+                writeLogToFile(
+                    logItem.taskId,
+                    logItem.log,
+                    logItem.type
+                );
+            });
+
+            // Подготавливаем логи для UI (только если UI обновления не заблокированы)
+            if (!uiUpdateTimers[taskId] || uiUpdateTimers[taskId].canUpdate) {
+                // Проверяем существование mainWindow
+                const mainWindow = batch[0].mainWindow;
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    // Отправляем только важные логи
+                    const importantLogs = batch.filter(logItem =>
+                        logItem.type === 'stderr' ||
+                        logItem.log.includes("[TABLE_DATA]") ||
+                        logItem.log.includes("ERROR") ||
+                        logItem.log.includes("error") ||
+                        (logItem.log.includes("[") && logItem.log.includes("]"))
+                    );
+
+                    if (importantLogs.length > 0) {
+                        // Пакетная отправка важных логов в UI
+                        importantLogs.forEach(logItem => {
+                            mainWindow.webContents.send("process-output", {
+                                taskId: logItem.taskId,
+                                log: logItem.log
+                            });
+                        });
+
+                        // Устанавливаем блокировку обновления UI на указанное время
+                        uiUpdateTimers[taskId] = {
+                            canUpdate: false,
+                            timer: setTimeout(() => {
+                                if (uiUpdateTimers[taskId]) {
+                                    uiUpdateTimers[taskId].canUpdate = true;
+                                }
+                            }, LOG_UPDATE_INTERVAL)
+                        };
+                    }
+                }
             }
 
-            // Логируем в консоль, если необходимо
-            if (logItem.type === 'stderr') {
-                console.error(`STDERR [Task ${logItem.taskId}]:`, logItem.log);
-            } else if (logItem.shouldLogToConsole) {
-                console.log(`STDOUT [Task ${logItem.taskId}]:`, logItem.log);
-            }
+            // Записываем важные ошибки в консоль (минимизируем)
+            batch.filter(item => item.type === 'stderr').forEach(errorItem => {
+                console.error(`STDERR [Task ${errorItem.taskId}]:`, errorItem.log.substring(0, 200) + (errorItem.log.length > 200 ? '...' : ''));
+            });
 
             // Освобождаем флаг обработки
             logQueues[taskId].processing = false;
 
-            // Запускаем обработку следующего лога
-            process.nextTick(() => processLogQueue(taskId));
+            // Запускаем обработку следующего пакета, если есть ещё данные
+            if (logQueues[taskId].length > 0) {
+                process.nextTick(() => processLogBatch(taskId));
+            }
         } catch (error) {
-            console.error(`Ошибка при обработке лога для задачи ${taskId}:`, error);
+            console.error(`Ошибка при пакетной обработке логов для задачи ${taskId}:`, error);
             logQueues[taskId].processing = false;
-            process.nextTick(() => processLogQueue(taskId));
+
+            // Продолжаем обработку даже в случае ошибки
+            if (logQueues[taskId].length > 0) {
+                process.nextTick(() => processLogBatch(taskId));
+            }
         }
     });
 }
 
-// Функция для добавления лога в очередь
-function addLogToQueue(taskId, logData, mainWindow, type = 'stdout', shouldLogToConsole = true) {
+// Функция для добавления лога в очередь с ограничением размера
+function addLogToQueue(taskId, logData, mainWindow, type = 'stdout', shouldLogToConsole = false) {
     // Инициализируем очередь для задачи, если её ещё нет
     if (!logQueues[taskId]) {
         logQueues[taskId] = [];
         logQueues[taskId].processing = false;
+
+        // Инициализируем состояние обновления UI
+        uiUpdateTimers[taskId] = {
+            canUpdate: true,
+            timer: null
+        };
+    }
+
+    // Проверяем размер очереди и удаляем старые логи, если превышен лимит
+    if (logQueues[taskId].length >= MAX_LOGS_IN_MEMORY) {
+        // Удаляем старые логи (20% от максимального размера)
+        const logsToRemove = Math.floor(MAX_LOGS_IN_MEMORY * 0.2);
+        logQueues[taskId].splice(0, logsToRemove);
+
+        // Добавляем уведомление о пропущенных логах
+        logQueues[taskId].push({
+            taskId,
+            log: `[SYSTEM] Пропущено ${logsToRemove} старых логов из-за ограничения памяти`,
+            mainWindow,
+            type: 'system',
+            shouldLogToConsole: false
+        });
     }
 
     // Добавляем лог в очередь
@@ -70,19 +162,45 @@ function addLogToQueue(taskId, logData, mainWindow, type = 'stdout', shouldLogTo
         shouldLogToConsole
     });
 
-    // Запускаем обработку очереди, если она не запущена
+    // Запускаем обработку пакета логов, если она ещё не идёт
     if (!logQueues[taskId].processing) {
-        processLogQueue(taskId);
+        processLogBatch(taskId);
     }
 }
 
 function initializeProcessHandlers(ipcMain, mainWindow) {
+    // Метод для получения логов из файла по запросу
+    ipcMain.handle("get-task-logs", async (event, { taskId, offset = 0, limit = 100 }) => {
+        const logFile = path.join(LOG_FILE_DIR, `task_${taskId}.log`);
+
+        try {
+            if (!fs.existsSync(logFile)) {
+                return { logs: [], totalLines: 0 };
+            }
+
+            // Читаем файл и возвращаем указанный диапазон логов
+            const content = fs.readFileSync(logFile, 'utf8');
+            const lines = content.split('\n').filter(line => line.trim());
+            const totalLines = lines.length;
+
+            const startIdx = Math.max(0, totalLines - offset - limit);
+            const endIdx = Math.max(0, totalLines - offset);
+
+            return {
+                logs: lines.slice(startIdx, endIdx).reverse(),
+                totalLines
+            };
+        } catch (error) {
+            console.error(`Ошибка при чтении логов для задачи ${taskId}:`, error);
+            return { logs: [], totalLines: 0, error: error.message };
+        }
+    });
+
     ipcMain.on("start-process", async (event, { taskId, config }) => {
         console.log(`ПРОЦЕСС: Создан taskId: ${taskId}, запускаем процесс...`);
         const scriptPath = getSettings();
 
         try {
-
             const child = await spawnProcess(config, scriptPath);
             if (!child) {
                 console.error(`ПРОЦЕСС: Не удалось запустить процесс для задачи ${taskId}`);
@@ -101,6 +219,9 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
             console.log(`ПРОЦЕСС: Процесс ${taskId} успешно запущен, PID: ${child.pid}`);
 
+            // Записываем в файл лога о запуске процесса
+            writeLogToFile(taskId, `Процесс запущен, PID: ${child.pid}`, 'system');
+
             // Отправляем событие только после сохранения процесса в карту
             // Используем process.nextTick для асинхронной отправки событий
             process.nextTick(() => {
@@ -112,31 +233,19 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
             child.stdout.on("data", (data) => {
                 const output = data.toString();
-
-                // Проверяем, нужно ли отправлять в UI
-                const shouldSendToUI = output.includes("[TABLE_DATA]") ||
-                    output.includes("ERROR") ||
-                    output.includes("error") ||
-                    (output.includes("[") && output.includes("]"));
-
-                if (shouldSendToUI) {
-                    // Добавляем в очередь обработки логов
-                    addLogToQueue(taskId, output, mainWindow, 'stdout', true);
-                } else {
-                    // Для логов, которые не нужно отправлять в UI, просто пишем в консоль
-                    addLogToQueue(taskId, output, null, 'stdout', true);
-                }
+                addLogToQueue(taskId, output, mainWindow, 'stdout', false);
             });
 
             child.stderr.on("data", (data) => {
                 const output = data.toString();
-
-                // Ошибки всегда отправляем в UI
                 addLogToQueue(taskId, `[ERROR] ${output}`, mainWindow, 'stderr', true);
             });
 
             child.on("exit", (code) => {
                 console.log(`ПРОЦЕСС: Процесс ${taskId} завершился с кодом ${code}`);
+
+                // Записываем в файл лога о завершении процесса
+                writeLogToFile(taskId, `Процесс завершился с кодом ${code}`, 'system');
 
                 // Обновляем статус в карте процессов
                 let exitReason = code === 0 ? 'нормальное завершение' : `ошибка (код ${code})`;
@@ -222,26 +331,11 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
             child.stdout.on("data", (data) => {
                 const output = data.toString();
-
-                // Проверяем, нужно ли отправлять в UI
-                const shouldSendToUI = output.includes("[TABLE_DATA]") ||
-                    output.includes("ERROR") ||
-                    output.includes("error") ||
-                    (output.includes("[") && output.includes("]"));
-
-                if (shouldSendToUI) {
-                    // Добавляем в очередь обработки логов
-                    addLogToQueue(taskId, output, mainWindow, 'stdout', true);
-                } else {
-                    // Для логов, которые не нужно отправлять в UI, просто пишем в консоль
-                    addLogToQueue(taskId, output, null, 'stdout', true);
-                }
+                addLogToQueue(taskId, output, mainWindow, 'stdout', false);
             });
 
             child.stderr.on("data", (data) => {
                 const output = data.toString();
-
-                // Ошибки всегда отправляем в UI
                 addLogToQueue(taskId, `[ERROR] ${output}`, mainWindow, 'stderr', true);
             });
 

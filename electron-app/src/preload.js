@@ -56,6 +56,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
     addWallet: (wallet) => ipcRenderer.invoke('addWallet', wallet),
     deleteWallet: (publicKey) => ipcRenderer.invoke('deleteWallet', publicKey), // Новый метод для удаления кошелька
 
+    // Метод для получения логов из файлов
+    invoke: (channel, data) => {
+        // Разрешаем только безопасные каналы
+        const validChannels = ['get-task-logs'];
+        if (!validChannels.includes(channel)) {
+            console.error(`Попытка вызвать неразрешенный канал: ${channel}`);
+            return Promise.reject(new Error(`Неразрешенный канал: ${channel}`));
+        }
+        return ipcRenderer.invoke(channel, data);
+    },
+
     // saveScriptDirectory: (directory) => ipcRenderer.send("save-script-directory", directory),
     // getScriptDirectory: () => ipcRenderer.invoke('get-script-directory'),
 

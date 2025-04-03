@@ -126,8 +126,11 @@ declare global {
                 volumeValue: number
             }) => Promise<any>;
 
-            // Добавляем метод отправки статуса задачи в Telegram
+            // Метод отправки статуса задачи в Telegram
             sendTaskStatus: (taskId: number) => Promise<boolean>;
+
+            // Метод вызова IPC с проверкой канала
+            invoke: (channel: string, data?: any) => Promise<any>;
 
             // События для обработки команд от Telegram бота
             onTelegramRunTask: (
