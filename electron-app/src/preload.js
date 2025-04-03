@@ -97,6 +97,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getTelegramBotConfig: () => ipcRenderer.invoke('telegram-bot:get-config'),
     sendTelegramTask: (taskData) => ipcRenderer.invoke('telegram-bot:send-task', taskData),
 
+    // Добавляем метод для отправки статуса задачи в Telegram
+    sendTaskStatus: (taskId) => ipcRenderer.invoke('telegram-bot:send-task-status', taskId),
+
     // Event listeners
     onTelegramRunTask: (callback) => ipcRenderer.on('telegram-bot:run-task', callback),
     onTelegramDeleteTask: (callback) => ipcRenderer.on('telegram-bot:delete-task', callback),

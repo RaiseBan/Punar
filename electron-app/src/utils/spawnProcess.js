@@ -29,28 +29,13 @@ const wslProcessTracking = {
         }
         return false;
     },
-    cleanupWslProcesses: function () {
-        // Поиск и очистка "потерянных" процессов WSL
-        // Это выполняется при старте приложения или по запросу
-        const { exec } = require('child_process');
-        return new Promise((resolve) => {
-            console.log('WSL КОНТРОЛЬ: Поиск и очистка "потерянных" WSL процессов...');
-            exec('taskkill /F /FI "IMAGENAME eq wsl.exe" /FI "WINDOWTITLE eq *smb-onchain*"', (err) => {
-                if (err) {
-                    console.log('WSL КОНТРОЛЬ: WSL процессы не найдены или уже завершены');
-                } else {
-                    console.log('WSL КОНТРОЛЬ: "Потерянные" WSL процессы принудительно завершены');
-                }
-                resolve();
-            });
-        });
+    getProcessPid: function (taskId) {
+        return this.pidMap.get(taskId) || null;
+    },
+    getAllProcesses: function () {
+        return Array.from(this.pidMap.entries()).map(([taskId, pid]) => ({ taskId, pid }));
     }
 };
-
-// Добавляем очистку при инициализации модуля
-wslProcessTracking.cleanupWslProcesses().then(() => {
-    console.log('WSL КОНТРОЛЬ: Первоначальная очистка WSL процессов завершена');
-});
 
 // Функция для получения директории конфигов, с учетом работы в dev и prod
 function getConfigDirectory() {

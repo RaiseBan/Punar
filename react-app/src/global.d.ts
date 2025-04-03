@@ -126,6 +126,9 @@ declare global {
                 volumeValue: number
             }) => Promise<any>;
 
+            // Добавляем метод отправки статуса задачи в Telegram
+            sendTaskStatus: (taskId: number) => Promise<boolean>;
+
             // События для обработки команд от Telegram бота
             onTelegramRunTask: (
                 callback: (

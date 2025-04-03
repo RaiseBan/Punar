@@ -1041,6 +1041,44 @@ class TelegramBotService {
                     console.error('Ошибка при удалении группы задач:', err);
                 });
         }
+        // Обработка возобновления одиночной задачи
+        else if (callbackData.startsWith('resume_task_')) {
+            const taskId = callbackData.split('_')[2];
+            console.log(`Telegram callback: resume_task_${taskId}`);
+
+            // Сначала ответим на callback query
+            this.answerCallbackQuery(callbackQueryId, "▶️ Запускаем задачу...");
+
+            // Обновляем клавиатуру текущего сообщения
+            const newReplyMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: "▶️ Задача запущена", callback_data: "noop" }
+                    ]
+                ]
+            };
+
+            this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup)
+                .then(() => {
+                    if (this.messageHandlers.has('resumeTask')) {
+                        const parsedTaskId = parseInt(taskId);
+                        this.messageHandlers.get('resumeTask')({ taskId: parsedTaskId });
+                    }
+
+                    this.sendMessage(chatId, `▶️ Задача ${taskId} запущена.`)
+                        .then(() => {
+                            // Обновляем статус задачи после запуска
+                            setTimeout(() => {
+                                if (typeof this.sendTaskStatus === 'function') {
+                                    this.sendTaskStatus(taskId);
+                                }
+                            }, 3000); // Даем время на запуск
+                        });
+                })
+                .catch(err => {
+                    console.error('Ошибка при запуске задачи:', err);
+                });
+        }
     }
 
     registerHandler(event, handler) {
@@ -1133,7 +1171,7 @@ async function sendTaskStatus(taskId) {
                 [
                     {
                         text: task.status === "Running" ? "⏹️ Остановить" : "▶️ Запустить",
-                        callback_data: task.status === "Running" ? `stop_task_${task.id}` : `resume_g_${task.id}`
+                        callback_data: task.status === "Running" ? `stop_task_${task.id}` : `resume_task_${task.id}`
                     }
                 ],
                 [

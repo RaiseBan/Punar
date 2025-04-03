@@ -10,23 +10,7 @@ const telegramBotService = require('./services/telegramBotService');
 
 let mainWindow;
 
-// Функция для очистки "потерянных" WSL процессов при запуске
-function cleanupOrphanedProcesses() {
-  console.log('Очистка "потерянных" WSL процессов при запуске...');
-  const { exec } = require('child_process');
-  exec('taskkill /F /FI "IMAGENAME eq wsl.exe" /FI "WINDOWTITLE eq *smb-onchain*"', (err) => {
-    if (err) {
-      console.log('WSL процессы не найдены или уже завершены');
-    } else {
-      console.log('Потерянные WSL процессы принудительно завершены');
-    }
-  });
-}
-
 function createWindow() {
-  // Вызываем очистку процессов перед созданием окна
-  cleanupOrphanedProcesses();
-
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -72,22 +56,33 @@ app.whenReady().then(() => {
     try {
       console.log(`Получено уведомление о смене пула для задачи ${taskId}`);
 
-      // Формируем подробное сообщение о смене пула
-      const poolChangeMessage = `🔄 Обнаружена смена пула Meteora\n\n` +
-        `Задача ID: ${taskId}\n` +
-        `Токен: ${tokenAddress || 'не указан'}\n` +
-        `Старый пул: ${oldPool || 'не указан'}\n` +
-        `Новый пул: ${newPool || 'не указан'}\n` +
-        `Время: ${new Date().toISOString()}\n\n` +
-        `Процесс будет перезапущен автоматически с новым пулом.`;
+      // Передаем запрос на отправку уведомления в telegramBotService
+      if (telegramBotService && typeof telegramBotService.sendSystemNotification === 'function') {
+        // Формируем подробное сообщение о смене пула
+        const poolChangeMessage = `🔄 Обнаружена смена пула Meteora\n\n` +
+          `Задача ID: ${taskId}\n` +
+          `Токен: ${tokenAddress || 'не указан'}\n` +
+          `Старый пул: ${oldPool || 'не указан'}\n` +
+          `Новый пул: ${newPool || 'не указан'}\n` +
+          `Время: ${new Date().toISOString()}\n\n` +
+          `Процесс будет перезапущен автоматически с новым пулом.`;
 
-      // Отправляем уведомление с высоким приоритетом
-      telegramBotService.sendSystemNotification(poolChangeMessage);
-
-      // Также отправляем запрос на обновление статуса задачи
-      telegramBotService.sendTaskStatus(taskId);
+        // Отправляем уведомление
+        telegramBotService.sendSystemNotification(poolChangeMessage)
+          .then(() => {
+            // После успешной отправки уведомления обновляем статус задачи
+            if (typeof telegramBotService.sendTaskStatus === 'function') {
+              telegramBotService.sendTaskStatus(taskId);
+            }
+          })
+          .catch(error => {
+            console.error(`Ошибка при отправке уведомления в Telegram:`, error);
+          });
+      } else {
+        console.error(`telegramBotService не доступен или sendSystemNotification не является функцией`);
+      }
     } catch (error) {
-      console.error(`Ошибка при отправке уведомления о смене пула:`, error);
+      console.error(`Ошибка при обработке уведомления о смене пула:`, error);
     }
   });
 
