@@ -12,7 +12,7 @@ const processes = {};
 
 // Константы для конфигурации логирования
 const MAX_LOGS_IN_MEMORY = 1000; // Максимальное количество логов для одной задачи в памяти
-const LOG_BATCH_SIZE = 10;       // Размер пакета логов для обработки за раз
+const LOG_BATCH_SIZE = 50;             // Сколько логов обрабатывать за раз
 const LOG_UPDATE_INTERVAL = 500; // Интервал обновления UI логов (мс)
 const LOG_FILE_DIR = path.join(app.getPath("userData"), "logs");
 
@@ -21,9 +21,13 @@ if (!fs.existsSync(LOG_FILE_DIR)) {
     fs.mkdirSync(LOG_FILE_DIR, { recursive: true });
 }
 
-// Асинхронная обработка логов с использованием очереди и файлового логирования
+// Константы для управления очередью логов
+const LOG_QUEUE_MAX_SIZE = 1000;       // Максимальный размер очереди логов для одной задачи
+const LOG_FLUSH_INTERVAL = 1000;       // Интервал обработки очереди (мс)
+
+// Очереди логов и флаги обработки
 const logQueues = {};
-const uiUpdateTimers = {}; // Таймеры для контроля частоты обновления UI
+const queueTimers = {};
 
 // Функция для записи лога в файл
 function writeLogToFile(taskId, message, type = 'info') {
@@ -144,41 +148,140 @@ function processLogBatch(taskId) {
     });
 }
 
-// Восстанавливаем функцию для добавления логов в очередь, делая запись файла асинхронной
+// Улучшенная функция для добавления логов в очередь
 function addLogToQueue(taskId, logMessage, mainWindow, logType = 'stdout', isImportant = false) {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return;
     }
 
-    // Отправляем лог в UI
-    mainWindow.webContents.send('process-output', {
-        taskId: taskId,
-        log: logMessage
+    // Отправляем лог в UI только если это важный лог или данные таблицы
+    const shouldSendToUI = isImportant ||
+        logMessage.includes("[TABLE_DATA]") ||
+        logType === 'stderr' ||
+        logMessage.includes("[ERROR]") ||
+        logMessage.includes("error");
+
+    if (shouldSendToUI) {
+        try {
+            mainWindow.webContents.send('process-output', {
+                taskId: taskId,
+                log: logMessage
+            });
+        } catch (error) {
+            console.error(`Ошибка при отправке лога в UI для задачи ${taskId}:`, error.message);
+        }
+    }
+
+    // Добавляем лог в очередь для записи в файл
+    if (!logQueues[taskId]) {
+        logQueues[taskId] = [];
+    }
+
+    // Если очередь слишком большая, удаляем старые логи
+    if (logQueues[taskId].length >= LOG_QUEUE_MAX_SIZE) {
+        const overflow = Math.floor(LOG_QUEUE_MAX_SIZE * 0.2); // Удаляем 20% старых логов
+        logQueues[taskId].splice(0, overflow);
+
+        // Добавляем сообщение о переполнении
+        const timestamp = new Date().toISOString();
+        logQueues[taskId].push({
+            timestamp,
+            type: 'system',
+            message: `[SYSTEM] Пропущено ${overflow} логов из-за переполнения очереди`
+        });
+    }
+
+    // Добавляем новый лог в очередь
+    const timestamp = new Date().toISOString();
+    logQueues[taskId].push({
+        timestamp,
+        type: logType,
+        message: logMessage
     });
 
-    // Записываем лог в файл АСИНХРОННО
-    try {
-        const userDataPath = app.getPath('userData');
-        const logsDir = path.join(userDataPath, 'logs');
-        if (!fs.existsSync(logsDir)) {
-            fs.mkdirSync(logsDir, { recursive: true });
-        }
-
-        const timestamp = new Date().toISOString();
-        const prefix = logType === 'stderr' ? '[ERROR]' : '[INFO]';
-        const formattedLog = `[${timestamp}] ${prefix} ${logMessage}\n`;
-
-        const logFilePath = path.join(logsDir, `task_${taskId}.log`);
-        // Используем асинхронную запись вместо синхронной
-        fs.appendFile(logFilePath, formattedLog, (err) => {
-            if (err) {
-                console.error(`ПРОЦЕСС: Ошибка при записи лога в файл для задачи ${taskId}:`, err);
-            }
-        });
-    } catch (error) {
-        console.error(`ПРОЦЕСС: Ошибка при записи лога в файл для задачи ${taskId}:`, error);
+    // Запускаем обработку очереди, если еще не запущена
+    if (!queueTimers[taskId]) {
+        queueTimers[taskId] = setTimeout(() => processLogQueue(taskId), LOG_FLUSH_INTERVAL);
     }
 }
+
+// Функция для обработки очереди логов
+function processLogQueue(taskId) {
+    // Сбрасываем таймер
+    queueTimers[taskId] = null;
+
+    // Если очередь пуста, выходим
+    if (!logQueues[taskId] || logQueues[taskId].length === 0) {
+        return;
+    }
+
+    // Извлекаем пакет логов из очереди (не более LOG_BATCH_SIZE)
+    const batchSize = Math.min(LOG_BATCH_SIZE, logQueues[taskId].length);
+    const batch = logQueues[taskId].splice(0, batchSize);
+
+    // Преобразуем в текст для записи в файл
+    const logLines = batch.map(log => {
+        const prefix = log.type === 'stderr' ? '[ERROR]' :
+            log.type === 'system' ? '[SYSTEM]' : '[INFO]';
+        return `[${log.timestamp}] ${prefix} ${log.message}`;
+    }).join('\n') + '\n';
+
+    // Записываем пакет логов в файл асинхронно
+    const userDataPath = app.getPath('userData');
+    const logsDir = path.join(userDataPath, 'logs');
+
+    if (!fs.existsSync(logsDir)) {
+        try {
+            fs.mkdirSync(logsDir, { recursive: true });
+        } catch (err) {
+            console.error(`Ошибка при создании директории логов: ${err.message}`);
+        }
+    }
+
+    const logFilePath = path.join(logsDir, `task_${taskId}.log`);
+
+    fs.appendFile(logFilePath, logLines, (err) => {
+        if (err) {
+            console.error(`ПРОЦЕСС: Ошибка при записи логов в файл для задачи ${taskId}:`, err);
+        }
+
+        // Если в очереди остались логи, планируем следующую обработку
+        if (logQueues[taskId] && logQueues[taskId].length > 0) {
+            queueTimers[taskId] = setTimeout(() => processLogQueue(taskId), LOG_FLUSH_INTERVAL);
+        }
+    });
+
+    // Если очередь еще не пуста, но таймер не установлен, устанавливаем его
+    if (logQueues[taskId] && logQueues[taskId].length > 0 && !queueTimers[taskId]) {
+        queueTimers[taskId] = setTimeout(() => processLogQueue(taskId), LOG_FLUSH_INTERVAL);
+    }
+}
+
+// Функция очистки ресурсов для неактивных задач
+function cleanupLogQueues() {
+    for (const taskId in logQueues) {
+        // Проверяем, активна ли задача
+        if (!processes[taskId] || !processes[taskId].isActive) {
+            // Если есть незаписанные логи, записываем их
+            if (logQueues[taskId] && logQueues[taskId].length > 0) {
+                processLogQueue(taskId);
+            }
+
+            // Очищаем таймер
+            if (queueTimers[taskId]) {
+                clearTimeout(queueTimers[taskId]);
+                queueTimers[taskId] = null;
+            }
+
+            // Удаляем очередь
+            delete logQueues[taskId];
+            console.log(`ЛОГИ: Очищены ресурсы очереди логов для неактивной задачи ${taskId}`);
+        }
+    }
+}
+
+// Запускаем периодическую очистку ресурсов
+setInterval(cleanupLogQueues, 60000); // Раз в минуту
 
 function initializeProcessHandlers(ipcMain, mainWindow) {
     // Метод для получения логов из файла по запросу
@@ -567,42 +670,6 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
             processInfo.exitReason = 'already_stopped';
         }
     });
-
-    // Очистка неактивных очередей логов
-    const cleanupLogQueues = () => {
-        const taskIds = Object.keys(logQueues);
-        for (const taskId of taskIds) {
-            if (!processes[taskId] || !processes[taskId].isActive) {
-                delete logQueues[taskId];
-            }
-        }
-    };
-
-    // Функция для очистки неактивных процессов (запускать периодически)
-    const cleanupInactiveProcesses = () => {
-        const now = Date.now();
-        const taskIds = Object.keys(processes);
-        let cleaned = 0;
-
-        for (const taskId of taskIds) {
-            const processInfo = processes[taskId];
-            // Удаляем процессы, которые неактивны более 5 минут
-            if (!processInfo.isActive && (now - processInfo.exitTime > 5 * 60 * 1000)) {
-                delete processes[taskId];
-                cleaned++;
-            }
-        }
-
-        // Очищаем очереди логов для удаленных процессов
-        cleanupLogQueues();
-
-        if (cleaned > 0) {
-            console.log(`ПРОЦЕСС: Очищено ${cleaned} неактивных процессов из карты`);
-        }
-    };
-
-    // Запускаем очистку каждые 10 минут
-    setInterval(cleanupInactiveProcesses, 10 * 60 * 1000);
 }
 
 module.exports = { initializeProcessHandlers };

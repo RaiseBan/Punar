@@ -10,47 +10,66 @@ const { convertWindowsPathToWSL } = require("./fsHelper");  // Получаем 
 // Карта для отслеживания процессов mev_subtask
 const mevSubtaskProcesses = new Map();
 
-// Добавляем более надежную функцию для принудительного завершения процесса в Windows
+// Улучшаем функцию для принудительного завершения процесса в Windows
 async function forceKillWindowsProcess(pid) {
     if (!pid) {
         console.error("Невозможно убить процесс: PID не указан");
         return false;
     }
 
+    console.log(`KILL: Начинаем принудительное завершение процесса с PID ${pid}`);
+
     return new Promise((resolve) => {
         try {
-            console.log(`Принудительное завершение процесса с PID ${pid} через taskkill`);
+            console.log(`KILL: Пытаемся завершить процесс ${pid} через tree-kill`);
 
             // Сначала пытаемся завершить с помощью tree-kill
             const treeKill = require('tree-kill');
             treeKill(pid, 'SIGKILL', (treeKillError) => {
                 if (treeKillError) {
-                    console.log(`tree-kill не завершил процесс ${pid}, пробуем taskkill: ${treeKillError}`);
+                    console.log(`KILL: tree-kill не завершил процесс ${pid}, ошибка: ${treeKillError}`);
+                    console.log(`KILL: Пробуем taskkill как резервный вариант`);
 
                     // Если не удалось через tree-kill, пробуем через taskkill как резервный вариант
                     const { execSync } = require('child_process');
                     try {
                         // Используем /F для принудительного завершения и /T для завершения дерева процессов
-                        execSync(`taskkill /pid ${pid} /T /F`);
-                        console.log(`Процесс ${pid} успешно завершен через taskkill`);
+                        const output = execSync(`taskkill /pid ${pid} /T /F`, { encoding: 'utf8' });
+                        console.log(`KILL: Результат taskkill для процесса ${pid}: ${output.trim()}`);
+                        console.log(`KILL: Процесс ${pid} успешно завершен через taskkill`);
                         resolve(true);
                     } catch (taskkillError) {
                         // Если taskkill не нашел процесс, это нормально
-                        if (taskkillError.message.includes('не найден')) {
-                            console.log(`Процесс ${pid} не найден, возможно уже завершен`);
+                        const errorMsg = taskkillError.message || '';
+                        if (errorMsg.includes('не найден')) {
+                            console.log(`KILL: Процесс ${pid} не найден taskkill, возможно уже завершен`);
                             resolve(true);
                         } else {
-                            console.error(`Ошибка завершения процесса ${pid} через taskkill: ${taskkillError.message}`);
-                            resolve(false);
+                            console.error(`KILL: Ошибка завершения процесса ${pid} через taskkill: ${errorMsg}`);
+
+                            // Проверяем, запущен ли еще процесс
+                            try {
+                                const checkOutput = execSync(`tasklist /FI "PID eq ${pid}" /FO CSV`, { encoding: 'utf8' });
+                                if (checkOutput.includes(pid)) {
+                                    console.error(`KILL: Процесс ${pid} все еще запущен после попыток завершения!`);
+                                    resolve(false);
+                                } else {
+                                    console.log(`KILL: Процесс ${pid} не обнаружен в списке задач, считаем завершенным`);
+                                    resolve(true);
+                                }
+                            } catch (checkError) {
+                                console.error(`KILL: Ошибка при проверке статуса процесса ${pid}: ${checkError.message}`);
+                                resolve(false);
+                            }
                         }
                     }
                 } else {
-                    console.log(`Процесс ${pid} успешно завершен через tree-kill`);
+                    console.log(`KILL: Процесс ${pid} успешно завершен через tree-kill`);
                     resolve(true);
                 }
             });
         } catch (error) {
-            console.error(`Общая ошибка при завершении процесса ${pid}: ${error.message}`);
+            console.error(`KILL: Общая ошибка при завершении процесса ${pid}: ${error.message}`);
             resolve(false);
         }
     });
@@ -402,24 +421,25 @@ async function spawnProcess(taskConfig, userSettings) {
                             console.log(`МОНИТОРИНГ: Найден лучший пул Meteora для задачи ${taskId}, перегенерируем конфиг и перезапускаем процесс`);
 
                             try {
-                                // Используем нашу новую функцию для надежного завершения процесса
+                                // Используем нашу функцию для надежного завершения процесса
                                 if (child && child.pid) {
                                     console.log(`МОНИТОРИНГ: Завершение процесса ${taskId} с PID ${child.pid} для перезапуска с новым пулом`);
 
                                     // Принудительно завершаем процесс
                                     await forceKillWindowsProcess(child.pid);
 
-                                    // Увеличиваем задержку перед запуском нового процесса до 5 секунд
+                                    // Увеличиваем задержку перед запуском нового процесса до 8 секунд
                                     // для гарантии полного завершения старого процесса и освобождения ресурсов
-                                    await new Promise(resolve => setTimeout(resolve, 5000));
+                                    console.log(`МОНИТОРИНГ: Ждем 8 секунд для полного освобождения ресурсов процесса ${taskId}`);
+                                    await new Promise(resolve => setTimeout(resolve, 8000));
 
-                                    console.log(`МОНИТОРИНГ: Текущий процесс ${taskId} остановлен`);
+                                    console.log(`МОНИТОРИНГ: Текущий процесс ${taskId} полностью остановлен, можно запускать новый`);
                                 }
                             } catch (killError) {
                                 console.error(`МОНИТОРИНГ: Ошибка при попытке остановить процесс ${taskId}:`, killError);
 
-                                // Даже если была ошибка, даем немного времени для возможного завершения
-                                await new Promise(resolve => setTimeout(resolve, 5000));
+                                // Даже если была ошибка, даем больше времени для возможного завершения
+                                await new Promise(resolve => setTimeout(resolve, 8000));
                             }
 
                             // Отправляем уведомление о смене пула через Telegram
@@ -483,7 +503,7 @@ async function spawnProcess(taskConfig, userSettings) {
                                 console.error(`МОНИТОРИНГ: Ошибка при отправке уведомления:`, notifyError);
                             }
 
-                            // Создаем новый конфиг с обновленным пулом Meteora
+                            // Создаем новый конфиг с обновленным пулом Meteora и запускаем процесс
                             const newConfigFilePath = await generateMevConfig(
                                 userSettings.mevBotDirectory,
                                 path.join(pythonScriptPath, "tokens"),
@@ -498,9 +518,10 @@ async function spawnProcess(taskConfig, userSettings) {
 
                             console.log(`МОНИТОРИНГ: Новый конфиг создан для задачи ${taskId}: ${newConfigFilePath}`);
 
-                            // Запускаем процесс с новым конфигом
+                            // Убедимся, что в новом процессе собираем и освобождаем все ресурсы корректно
                             const newConfigFilePathWSL = convertWindowsPathToWSL(newConfigFilePath);
 
+                            console.log(`МОНИТОРИНГ: Запускаем новый процесс с обновленным конфигом для задачи ${taskId}`);
                             const newChild = spawn('wsl.exe', ['-e', program, "run", newConfigFilePathWSL], {
                                 stdio: 'pipe',
                                 shell: false,
@@ -514,16 +535,43 @@ async function spawnProcess(taskConfig, userSettings) {
                                 return;
                             }
 
+                            // Удаляем все слушатели с предыдущего процесса
+                            if (child) {
+                                try {
+                                    child.removeAllListeners('error');
+                                    child.removeAllListeners('exit');
+
+                                    if (child.stdout) {
+                                        child.stdout.removeAllListeners('data');
+                                    }
+
+                                    if (child.stderr) {
+                                        child.stderr.removeAllListeners('data');
+                                    }
+
+                                    console.log(`МОНИТОРИНГ: Все слушатели событий удалены со старого процесса ${taskId}`);
+                                } catch (listenerError) {
+                                    console.error(`МОНИТОРИНГ: Ошибка при удалении слушателей для процесса ${taskId}:`, listenerError);
+                                }
+                            }
+
                             // Устанавливаем обработчики для отслеживания состояния нового процесса
                             newChild.on('error', (err) => {
                                 console.error(`МОНИТОРИНГ: Ошибка в новом процессе для задачи ${taskId}:`, err);
                             });
 
+                            // Добавляем таймер для проверки запуска
+                            let startupTimeout = setTimeout(() => {
+                                console.error(`МОНИТОРИНГ: Новый процесс ${taskId} не отправил данные в течение 30 секунд, возможно проблема с запуском`);
+                            }, 30000);
+
                             newChild.stdout.once('data', () => {
+                                clearTimeout(startupTimeout);
                                 console.log(`МОНИТОРИНГ: Новый процесс ${taskId} начал работу - получены первые данные`);
                             });
 
                             newChild.on('exit', (code) => {
+                                clearTimeout(startupTimeout);
                                 console.log(`МОНИТОРИНГ: Новый процесс ${taskId} завершился с кодом ${code}`);
                                 stopMevProcess(taskId);
                             });

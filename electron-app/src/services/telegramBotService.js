@@ -528,37 +528,46 @@ class TelegramBotService {
 
                 console.log('[TG Bot Service] Setting up one-time listener for telegram-tasks-response...');
 
+                // Сначала очищаем предыдущие слушатели, чтобы избежать конфликтов
+                ipcMain.removeAllListeners('telegram-tasks-response');
+
                 let timeoutId = null;
 
                 // Новый одноразовый обработчик для получения задач
                 const responseListener = (event, tasks) => {
                     clearTimeout(timeoutId);
                     console.log(`[TG Bot Service] Received telegram-tasks-response. Tasks count: ${tasks.length}`);
-
-                    // if (tasks.length > 0) {
-                    //     console.log('[TG Bot Service] First task received:', JSON.stringify(tasks[0], null, 2));
-                    // }
-
                     resolve(tasks);
                 };
 
                 // Регистрируем одноразовый слушатель
                 ipcMain.once('telegram-tasks-response', responseListener);
 
-                // Устанавливаем таймаут
+                // Устанавливаем таймаут (увеличен до 15 секунд)
                 timeoutId = setTimeout(() => {
                     ipcMain.removeListener('telegram-tasks-response', responseListener);
                     console.error('[TG Bot Service] Timeout waiting for telegram-tasks-response.');
-                    reject(new Error('Таймаут при получении задач'));
-                }, 5000);
 
-                // Отправляем запрос в renderer process
-                console.log('[TG Bot Service] Sending get-tasks-from-redux to renderer...');
-                mainWindow.webContents.send('get-tasks-from-redux');
+                    // Вместо отклонения промиса, возвращаем пустой массив
+                    console.log('[TG Bot Service] Returning empty array due to timeout');
+                    resolve([]);
+                }, 15000); // Увеличено с 5000 до 15000 мс
+
+                // Отправляем запрос в renderer process асинхронно с высоким приоритетом
+                setImmediate(() => {
+                    console.log('[TG Bot Service] Sending get-tasks-from-redux to renderer...');
+                    try {
+                        mainWindow.webContents.send('get-tasks-from-redux');
+                    } catch (sendError) {
+                        clearTimeout(timeoutId);
+                        console.error('[TG Bot Service] Error sending get-tasks-from-redux:', sendError);
+                        resolve([]);
+                    }
+                });
 
             } catch (error) {
                 console.error('[TG Bot Service] Error setting up IPC for getTasks:', error);
-                reject(error);
+                resolve([]); // Возвращаем пустой массив вместо отклонения промиса
             }
         });
     }
