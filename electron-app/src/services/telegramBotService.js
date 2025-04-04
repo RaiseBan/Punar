@@ -25,6 +25,9 @@ class TelegramBotService {
         // Очередь сообщений для асинхронной отправки
         this.messageQueue = [];
         this.processing = false;
+
+        // Флаги для отслеживания процессов, чтобы избежать дублирования уведомлений
+        this.processStatusTracking = new Map();
     }
 
     async startStream() {
@@ -392,30 +395,44 @@ class TelegramBotService {
 
     // Модифицируем sendSystemNotification для работы с очередью
     async sendSystemNotification(message) {
-        // Проверка конфигурации
-        if (!this.botToken || !this.chatIds || this.chatIds.length === 0) {
-            console.log('[TG Bot] Невозможно отправить системное уведомление: бот не настроен');
+        if (!this.botToken || !this.isActive || this.chatIds.length === 0) {
             return false;
         }
 
         try {
-            console.log('[TG Bot] Отправка системного уведомления...');
+            // Проверяем, содержит ли сообщение информацию об остановке процесса
+            if (message.includes('Процесс остановлен вручную') || message.includes('Задача ID:')) {
+                // Извлечем taskId из сообщения, чтобы создать уникальный ключ
+                const taskIdMatch = message.match(/Задача ID:\s*(\d+)/i) || message.match(/ID:\s*(\d+)/i);
+                const taskId = taskIdMatch ? taskIdMatch[1] : null;
 
-            // Добавляем сообщение в очередь с высоким приоритетом
-            // Перемещаем в начало очереди, чтобы уведомления отправлялись быстро
-            this.messageQueue.unshift({
-                type: 'notification',
-                text: message
-            });
+                if (taskId) {
+                    // Создаем ключ для отслеживания статуса процесса
+                    const statusKey = `task_${taskId}_stopped`;
 
-            // Запускаем обработку очереди, если она еще не запущена
-            if (!this.processing) {
-                this.processMessageQueue();
+                    // Если уже отправили уведомление об остановке этого процесса
+                    if (this.processStatusTracking.get(statusKey)) {
+                        console.log(`Пропускаем дублирующее уведомление об остановке для задачи ${taskId}`);
+                        return true; // Пропускаем дублирующее сообщение
+                    }
+
+                    // Отмечаем, что отправляем уведомление об остановке
+                    this.processStatusTracking.set(statusKey, true);
+
+                    // Очищаем флаг через некоторое время
+                    setTimeout(() => {
+                        this.processStatusTracking.delete(statusKey);
+                    }, 10000); // 10 секунд
+                }
             }
 
+            // Отправка сообщения во все разрешенные чаты
+            for (const chatId of this.chatIds) {
+                await this.sendMessage(chatId, message);
+            }
             return true;
         } catch (error) {
-            console.error('[TG Bot] Ошибка при добавлении системного уведомления в очередь:', error);
+            console.error('Error sending system notification:', error);
             return false;
         }
     }
@@ -482,6 +499,15 @@ class TelegramBotService {
 
     // Функция для обработки входящих сообщений
     handleIncomingMessage(chatId, message) {
+        // Проверка авторизации: теперь всегда проверяем, есть ли chatId в списке разрешенных
+        const chatIdStr = chatId.toString();
+        if (!this.chatIds.includes(chatIdStr)) {
+            // Если ID не в списке разрешенных, отправляем сообщение о запрете доступа
+            this.sendMessage(chatId, '⛔ Доступ запрещен. Ваш ID не авторизован для использования бота.');
+            console.log(`Попытка неавторизованного доступа к боту с ID ${chatIdStr}`);
+            return;
+        }
+
         if (message.text.startsWith('/')) {
             const command = message.text.split(' ')[0].substring(1);
             switch (command) {
