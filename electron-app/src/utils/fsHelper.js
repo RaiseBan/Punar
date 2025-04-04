@@ -1,25 +1,47 @@
-const {getGlobalConfigDirectory} = require("./wallet");
+const { getGlobalConfigDirectory } = require("./wallet");
 const path = require("path");
 const fs = require("fs");
 const fs_prom = require("fs").promises;
+const { app } = require("electron");
 
-function getSettings(){ // можно будет потом отрефакторить код и сделать какой-то Type (кароче удобно)
-    const settingsDir = getGlobalConfigDirectory();
-    const settingsFilePath = path.join(settingsDir, 'userSettings.json');
-
-    if (!fs.existsSync(settingsFilePath)) {
-        return {};
-    }
-
+function getSettings() {
     try {
-        const data = fs.readFileSync(settingsFilePath, 'utf-8');
-        return JSON.parse(data);
+        console.log("fsHelper.getSettings: Получение настроек пользователя");
+
+        // Получаем путь к глобальной конфигурационной директории
+        const settingsDir = getGlobalConfigDirectory();
+        const settingsFilePath = path.join(settingsDir, 'userSettings.json');
+
+        console.log(`fsHelper.getSettings: Путь к конфигурационному файлу: ${settingsFilePath}`);
+
+        if (!fs.existsSync(settingsFilePath)) {
+            console.error(`fsHelper.getSettings: Ошибка - конфигурационный файл не найден по пути ${settingsFilePath}`);
+
+            // Если не удалось найти файл, пробуем альтернативный путь
+            const altConfigPath = path.join(app.getPath('userData'), 'settings.json');
+            console.log(`fsHelper.getSettings: Пробуем альтернативный путь: ${altConfigPath}`);
+
+            if (!fs.existsSync(altConfigPath)) {
+                console.error(`fsHelper.getSettings: Альтернативный конфигурационный файл тоже не найден`);
+                return {};
+            }
+
+            const altSettings = JSON.parse(fs.readFileSync(altConfigPath, 'utf8'));
+            console.log(`fsHelper.getSettings: Настройки успешно получены из альтернативного файла:`, JSON.stringify(altSettings, null, 2));
+            return altSettings;
+        }
+
+        const settings = JSON.parse(fs.readFileSync(settingsFilePath, 'utf8'));
+        console.log(`fsHelper.getSettings: Настройки успешно получены:`, JSON.stringify(settings, null, 2));
+
+        return settings;
     } catch (error) {
-        console.error('Error reading settings:', error);
+        console.error(`fsHelper.getSettings: Ошибка при получении настроек:`, error);
         return {};
     }
 }
-function getLookupTablesFilePath(){
+
+function getLookupTablesFilePath() {
     const settingsDir = getGlobalConfigDirectory();
     return path.join(settingsDir, 'lookup_tables.json');
 }
@@ -65,4 +87,4 @@ function convertWindowsPathToWSL(windowsPath) {
 }
 
 
-module.exports = {getSettings, getLookupTablesFilePath, saveLookupTables, getLookupTables, convertWindowsPathToWSL}
+module.exports = { getSettings, getLookupTablesFilePath, saveLookupTables, getLookupTables, convertWindowsPathToWSL }

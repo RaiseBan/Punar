@@ -144,7 +144,7 @@ function processLogBatch(taskId) {
     });
 }
 
-// Восстанавливаем функцию для добавления логов в очередь
+// Восстанавливаем функцию для добавления логов в очередь, делая запись файла асинхронной
 function addLogToQueue(taskId, logMessage, mainWindow, logType = 'stdout', isImportant = false) {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return;
@@ -156,7 +156,7 @@ function addLogToQueue(taskId, logMessage, mainWindow, logType = 'stdout', isImp
         log: logMessage
     });
 
-    // Записываем лог в файл
+    // Записываем лог в файл АСИНХРОННО
     try {
         const userDataPath = app.getPath('userData');
         const logsDir = path.join(userDataPath, 'logs');
@@ -169,7 +169,12 @@ function addLogToQueue(taskId, logMessage, mainWindow, logType = 'stdout', isImp
         const formattedLog = `[${timestamp}] ${prefix} ${logMessage}\n`;
 
         const logFilePath = path.join(logsDir, `task_${taskId}.log`);
-        fs.appendFileSync(logFilePath, formattedLog);
+        // Используем асинхронную запись вместо синхронной
+        fs.appendFile(logFilePath, formattedLog, (err) => {
+            if (err) {
+                console.error(`ПРОЦЕСС: Ошибка при записи лога в файл для задачи ${taskId}:`, err);
+            }
+        });
     } catch (error) {
         console.error(`ПРОЦЕСС: Ошибка при записи лога в файл для задачи ${taskId}:`, error);
     }
@@ -322,6 +327,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
     ipcMain.on("resume-process", async (event, data) => {
         const { taskId, config } = data;
         console.log(`ПРОЦЕСС: Возобновление процесса ${taskId} с обновленной конфигурацией`);
+        const scriptPath = getSettings();
 
         // Проверяем, существует ли уже процесс с этим ID
         if (processes[taskId]) {
@@ -350,8 +356,8 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
         }
 
         try {
-            // Запускаем процесс с обновленной конфигурацией
-            const childProcess = await spawnProcess(taskId, config);
+            // Запускаем процесс с ПРАВИЛЬНЫМИ параметрами: (config, scriptPath)
+            const childProcess = await spawnProcess(config, scriptPath);
 
             if (!childProcess) {
                 throw new Error('Не удалось запустить процесс');
@@ -369,7 +375,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
             console.log(`ПРОЦЕСС: Процесс ${taskId} успешно запущен с PID ${pid}`);
 
-            // Отправляем уведомление о запуске процесса в Telegram
+            // Отправляем уведомление о запуске процесса в Telegram - асинхронно и не блокируя
             setImmediate(async () => {
                 try {
                     const moduleName = config.module_name || 'неизвестно';
@@ -394,6 +400,14 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
                 config: config
             });
 
+            // Также отправляем событие в main window
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send("process-started", {
+                    taskId,
+                    config
+                });
+            }
+
             // Настраиваем обработчики событий для процесса
             childProcess.stdout.on('data', (data) => {
                 const output = data.toString();
@@ -416,7 +430,7 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
 
                     const runTime = Math.floor((processes[taskId].exitTime - processes[taskId].startTime) / 1000);
 
-                    // Отправляем уведомление о завершении процесса в Telegram
+                    // Отправляем уведомление о завершении процесса в Telegram - асинхронно
                     setImmediate(async () => {
                         try {
                             const moduleName = processes[taskId].moduleName || 'неизвестно';
