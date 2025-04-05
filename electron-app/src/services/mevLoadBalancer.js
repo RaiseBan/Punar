@@ -347,6 +347,17 @@ class MevLoadBalancer {
 
       console.log(`[MEV LoadBalancer] Инициализация MEV процесса ${processId} с задержкой ${process_delay}ms`);
 
+      // Проверяем наличие userSettings
+      if (!this.userSettings) {
+        console.log('[MEV LoadBalancer] Загружаем userSettings');
+        this.userSettings = await getSettings();
+      }
+
+      if (!this.userSettings) {
+        console.error('[MEV LoadBalancer] Не удалось загрузить настройки пользователя');
+        return null;
+      }
+
       // Формируем конфигурацию для процесса
       const processConfig = {
         module_name: "mev_subtask",
@@ -363,8 +374,8 @@ class MevLoadBalancer {
 
       console.log(`[MEV LoadBalancer] Запуск MEV процесса с конфигурацией:`, JSON.stringify(processConfig));
 
-      // Отправка процесса на запуск
-      const childProcess = await spawnProcess(processConfig);
+      // Отправка процесса на запуск - передаем userSettings
+      const childProcess = await spawnProcess(processConfig, this.userSettings);
 
       if (!childProcess) {
         console.error(`[MEV LoadBalancer] Не удалось создать дочерний процесс для ${processId}`);
