@@ -26,10 +26,6 @@ class MevLoadBalancer {
     // key = tokenAddress, value = [processIds]
     this.tokenProcessMap = new Map();
 
-    // Регулярное выражение для обнаружения MEV сигналов
-    // Формат: [PERFORM_MEV_ACTION] TOKEN | POOL [END]
-    this.mevSignalRegex = /\[PERFORM_MEV_ACTION\]\s+([^\s|]+)\s+\|\s+([^\s\]]+)(?:\s+\[END\])?/;
-
     // Флаг активации балансировщика
     this.isActive = false;
 
@@ -594,17 +590,25 @@ class MevLoadBalancer {
    */
   extractSignalDataFromText(logMessage) {
     try {
-      // Применяем регулярное выражение для поиска токена и пула
-      const match = this.mevSignalRegex.exec(logMessage);
+      // Находим содержимое между [PERFORM_MEV_ACTION] и [END]
+      const startMarker = '[PERFORM_MEV_ACTION]';
+      const endMarker = '[END]';
 
-      if (!match || match.length < 3) {
-        console.error('[MEV LoadBalancer] Не удалось извлечь данные из сигнала:', logMessage);
+      const startIndex = logMessage.indexOf(startMarker);
+      const endIndex = logMessage.indexOf(endMarker);
+
+      if (startIndex === -1 || endIndex === -1) {
+        console.error('[MEV LoadBalancer] Не найдены маркеры сигнала в сообщении:', logMessage);
         return null;
       }
 
-      // Получаем токен и пул из результатов регулярного выражения
-      const tokenAddress = match[1].trim();
-      const poolAddress = match[2].trim();
+      // Извлекаем содержимое между маркерами и удаляем лишние пробелы
+      const content = logMessage
+        .substring(startIndex + startMarker.length, endIndex)
+        .trim();
+
+      // Разделяем по символу |
+      const [tokenAddress, poolAddress] = content.split('|').map(s => s.trim());
 
       if (!tokenAddress || !poolAddress) {
         console.error('[MEV LoadBalancer] Не удалось извлечь токен или пул:', { tokenAddress, poolAddress });
@@ -613,7 +617,6 @@ class MevLoadBalancer {
 
       console.log(`[MEV LoadBalancer] Извлечены данные: Токен=${tokenAddress}, Пул=${poolAddress}`);
 
-      // Возвращаем объект с данными сигнала
       return {
         tokenAddress,
         poolAddress,
