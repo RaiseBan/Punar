@@ -300,7 +300,13 @@ async function spawnProcess(taskConfig, userSettings) {
         } else if (updatedTaskConfig.module_name === "Meteora DLMM") {
             moduleDir = "meteora";
         } else if (updatedTaskConfig.module_name === "MEV Module") {
-            moduleDir = "mev";
+            if (updatedTaskConfig.globalStrategy === "check_migration"){
+                moduleDir = "new-token-release"
+            }else if (updatedTaskConfig.globalStrategy === "jito_only"){
+                moduleDir = "mev";
+                fileToExecute = "index.ts"
+            }
+            
         } else if (updatedTaskConfig.module_name === "mev_subtask") {
             moduleDir = "mev_subtask";
             fileToExecute = "smb-onchain"
@@ -342,7 +348,15 @@ async function spawnProcess(taskConfig, userSettings) {
                 cwd: pythonScriptPath,
                 env: env
             });
-
+        }else if(moduleDir === "new-token-release"){
+            child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
+                stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
+                shell: true, // Используем shell для корректного выполнения
+                detached: false,
+                cwd: userSettings.scriptDirectory, // Устанавливаем рабочую директорию для процесса
+                env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath } // Передаем CONFIG_PATH в переменные окружения
+            });
+        
         } else if (moduleDir === "mev_subtask") {
             console.log(`start mev_subtask processing`)
             // const pythonScriptPath = "C:\\Users\\user\\PycharmProjects\\fuckCloudFlare" // test
@@ -607,6 +621,7 @@ async function spawnProcess(taskConfig, userSettings) {
                 console.log(`МОНИТОРИНГ: Мониторинг пулов запущен для задачи ${taskId}, интервал: ${checkInterval}ms`);
             }
         } else {
+            console.log(userSettings)
             child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
                 stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
                 shell: true, // Используем shell для корректного выполнения
