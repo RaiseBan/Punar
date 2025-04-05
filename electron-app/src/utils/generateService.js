@@ -166,8 +166,6 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
  */
 async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool, pumpSwapPool = null) {
     try {
-        const sanitize = require('sanitize-filename');
-
         // Проверяем обязательные параметры
         if (!botDir || !tokenAddress || !meteoraPool) {
             console.error(`[TOML Generator] Ошибка: не указаны обязательные параметры для генерации TOML-файла`);
@@ -188,78 +186,82 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
         const jito_lower_bound = config.jito_lower_bound || 100000;
         const jito_upper_bound = config.jito_upper_bound || 200000;
 
-        // Создаем токенизированное имя файла
-        const shortTokenAddr = tokenAddress.substring(0, 8);
-        const timestamp = Date.now().toString().substring(8, 13);
-        const fileName = sanitize(`${shortTokenAddr}_${timestamp}_${processDelay}.toml`);
+        // Формируем массив пулов
+        const pumpPool = pumpSwapPool ? [pumpSwapPool] : [];
 
-        // Путь для сохранения конфига
+        // Формируем конфигурацию для mint_config_list
+        const mint_config_list = [
+            {
+                mint: tokenAddress,
+                pump_pool_list: pumpPool,
+                meteora_dlmm_pool_list: [meteoraPool],
+                lookup_table_accounts: [],
+                process_delay: processDelay
+            }
+        ];
+
+        // Формируем полную конфигурацию в соответствии с требуемым форматом
+        const mevConfig = {
+            routing: {
+                mint_config_list: mint_config_list
+            },
+            rpc: {
+                url: main_rpc
+            },
+            spam: {
+                enabled: !useJito,
+                sending_rpc_urls: [main_rpc],
+                compute_unit_price: 5001,
+                max_retries: 0,
+                enable_simple_send: false
+            },
+            jito: {
+                enabled: useJito,
+                block_engine_urls: [
+                    "http://localhost:8082/jitoNY/api/v1",
+                    "http://localhost:8082/jitoTOKIO/api/v1",
+                    "http://localhost:8082/jitoSLC/api/v1",
+                    "http://localhost:8082/jitoAMSTERDAM/api/v1",
+                    "http://localhost:8082/jitoFRANKFURT/api/v1",
+                    "http://localhost:8082/jitoLONDON/api/v1"
+                ],
+                uuid: "",
+                ip_addresses: [PRIMARY_IP],
+                tip_config: {
+                    strategy: "Random",
+                    from: jito_lower_bound,
+                    to: jito_upper_bound,
+                    count: 1
+                }
+            },
+            kamino_flashloan: {
+                enabled: true
+            },
+            bot: {
+                compute_unit_limit: 650000,
+                merge_mints: false
+            },
+            wallet: {}
+        };
+
+        // Создаем директорию, если она не существует
         const configDir = path.join(botDir, 'config');
         if (!fs.existsSync(configDir)) {
             fs.mkdirSync(configDir, { recursive: true });
         }
 
-        const configPath = path.join(configDir, fileName);
+        // Формируем имя файла
+        const taskId = config.taskId || Date.now();
+        const shortMeteora = meteoraPool.substring(0, 8);
+        const shortPump = pumpSwapPool ? pumpSwapPool.substring(0, 8) : '';
+        const tomlFileName = `${tokenAddress}_${useJito ? "jito" : "default"}_task${taskId}_meteora${shortMeteora}${pumpSwapPool ? `_pump${shortPump}` : ''}_delay${processDelay}.toml`;
+        const configPath = path.join(configDir, tomlFileName);
 
-        // Формируем содержимое TOML-файла
-        let poolsList = [meteoraPool];
-        const mint_config_list = [
-            {
-                mint_address: tokenAddress,
-                delay_ms: processDelay,
-                pool_address: meteoraPool
-            }
-        ];
+        // Преобразуем конфигурацию в TOML используя библиотеку @iarna/toml
+        const tomlString = TOML.stringify(mevConfig);
 
-        // Формируем базовую конфигурацию
-        let tomlContent = `
-# MEV Bot Configuration File
-# Автоматически сгенерировано для токена ${tokenAddress}
-
-[system]
-main_rpc = "${main_rpc}"
-enable_transaction_checks = true
-default_keypair_path = "~/.config/solana/id.json"
-
-[mint_addresses]
-addresses = ["${tokenAddress}"]
-
-[meteora]
-meteora_dlmm_pool_list = ["${meteoraPool}"]
-`;
-
-        // Добавляем PumpSwap пул, если он указан
-        if (pumpSwapPool) {
-            tomlContent += `
-[pumpswap]
-pumpswap_pool_list = ["${pumpSwapPool}"]
-`;
-        }
-
-        // Добавляем настройки Jito, если они включены
-        if (useJito) {
-            tomlContent += `
-[jito]
-use_jito = true
-jito_auth_keypair_path = "./keys/jito_auth.json"
-jito_connection_url = "https://mainnet.block-engine.jito.io/api/v1/bundles"
-jito_lower_bound = ${jito_lower_bound}
-jito_upper_bound = ${jito_upper_bound}
-`;
-        }
-
-        // Добавляем настройки отдельных процессов
-        mint_config_list.forEach((mintConfig, index) => {
-            tomlContent += `
-[[mint_config]]
-mint_address = "${mintConfig.mint_address}"
-delay_ms = ${mintConfig.delay_ms}
-pool_address = "${mintConfig.pool_address}"
-`;
-        });
-
-        // Записываем TOML-файл
-        fs.writeFileSync(configPath, tomlContent);
+        // Записываем файл
+        fs.writeFileSync(configPath, tomlString);
         console.log(`[TOML Generator] TOML-файл конфигурации успешно создан: ${configPath}`);
 
         return configPath;

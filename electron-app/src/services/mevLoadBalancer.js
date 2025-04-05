@@ -392,8 +392,34 @@ class MevLoadBalancer {
         pumpSwapPool,
         process: childProcess,
         startTime: Date.now(),
+        status: 'running',
+        lastActivity: Date.now(),
+        signals: [],
         config: processConfig
       });
+
+      // Добавляем процесс в карту токенов
+      if (!this.tokenProcessMap.has(tokenAddress)) {
+        this.tokenProcessMap.set(tokenAddress, []);
+      }
+
+      this.tokenProcessMap.get(tokenAddress).push(processId);
+      console.log(`[MEV LoadBalancer] Процесс ${processId} добавлен в карту токенов для ${tokenAddress}`);
+
+      // Если отслеживаем в окне, отправляем уведомление о запуске процесса
+      try {
+        const { BrowserWindow } = require('electron');
+        const mainWindow = BrowserWindow.getAllWindows()[0];
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("process-started", {
+            taskId: processId,
+            config: processConfig
+          });
+          console.log(`[MEV LoadBalancer] Отправлено уведомление о запуске процесса ${processId} в окно приложения`);
+        }
+      } catch (notifyError) {
+        console.error(`[MEV LoadBalancer] Ошибка при отправке уведомления:`, notifyError);
+      }
 
       this.stats.totalProcesses++;
 
