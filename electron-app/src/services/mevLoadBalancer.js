@@ -1,14 +1,15 @@
 /**
  * MEV LoadBalancer - Модуль балансировки нагрузки MEV процессов
  * 
- * Отвечает за обнаружение сигналов MEV в логах процессов new-token-release,
+ * Отвечает за обнаружение сигналов MEV в логах процессов, 
  * запуск MEV процессов и распределение нагрузки между ними.
+ * Основной способ взаимодействия - через Telegram.
  */
 const { ipcMain } = require('electron');
 const path = require('path');
 const { app } = require('electron');
 const { spawnProcess, stopMevProcess } = require('../utils/spawnProcess');
-const { generateMevConfig } = require('../utils/generateService');
+const { generateSimpleMevConfig } = require('../utils/generateService');
 const { getSettings } = require('../utils/fsHelper');
 const telegramBotService = require('./telegramBotService');
 const fs = require('fs');
@@ -16,12 +17,8 @@ const fs = require('fs');
 class MevLoadBalancer {
   constructor() {
     // Карта для отслеживания MEV процессов
-    // key = processId, value = { process, config, startTime, lastActivity, signals: [], status }
+    // key = processId, value = { process, config, startTime, lastActivity, status }
     this.mevProcesses = new Map();
-
-    // Карта для отслеживания процессов токен-релиза
-    // key = processId, value = true
-    this.tokenReleaseProcesses = new Map();
 
     // Карта для отслеживания связи между токенами и процессами
     // key = tokenAddress, value = [processIds]
@@ -40,8 +37,7 @@ class MevLoadBalancer {
 
     // Настройки
     this.settings = {
-      maxProcessesPerToken: 3,     // Максимальное количество процессов на токен
-      maxSignalsPerProcess: 50,    // Максимальное количество сигналов на процесс
+      maxRequestsPerSecond: 170,  // Максимальное количество запросов в секунду
       notifyTelegram: true,        // Отправлять уведомления в Telegram
       autoStopIdleTime: 30 * 60 * 1000  // 30 минут неактивности до остановки процесса
     };
@@ -68,6 +64,11 @@ class MevLoadBalancer {
       this.isActive = true;
       console.log('[MEV LoadBalancer] Балансировщик автоматически активирован при запуске');
 
+      // Уведомляем о запуске в Telegram
+      if (this.settings.notifyTelegram) {
+        telegramBotService.sendSystemNotification('✅ MEV LoadBalancer запущен и готов к обработке сигналов');
+      }
+
       console.log('[MEV LoadBalancer] Инициализация завершена');
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при инициализации:', error);
@@ -79,9 +80,8 @@ class MevLoadBalancer {
    */
   initIpcHandlers() {
     // Обработчик для логов процессов
-    ipcMain.on('process-log', async (event, data) => {
-      console.log(`FROM IPC HANDLER`)
-      this.handleProcessLog(data);
+    ipcMain.handle('process-log', async (event, data) => {
+      return this.handleProcessLog(data);
     });
 
     // Обработчики для управления балансировщиком
@@ -110,13 +110,8 @@ class MevLoadBalancer {
     });
 
     // Добавляем обработчик события завершения процесса
-    ipcMain.on('mev-process-exit', (event, { processId, exitCode, config }) => {
+    ipcMain.on('mev-process-exit', (event, { processId, exitCode }) => {
       this.handleProcessExit(processId, exitCode);
-    });
-
-    // Тестовый обработчик для проверки обработки сигналов
-    ipcMain.handle('mev-loadbalancer:test-signal', async (event, testSignal) => {
-      return this.testProcessSignal(testSignal);
     });
   }
 
@@ -145,9 +140,6 @@ class MevLoadBalancer {
       if (this.settings.notifyTelegram) {
         telegramBotService.sendSystemNotification('✅ MEV LoadBalancer запущен');
       }
-
-      // Уведомляем React UI о процессах
-      this.notifyUIProcessesChanged();
 
       return {
         success: true,
@@ -192,9 +184,6 @@ class MevLoadBalancer {
         telegramBotService.sendSystemNotification('❌ MEV LoadBalancer остановлен');
       }
 
-      // Уведомляем React UI о процессах
-      this.notifyUIProcessesChanged();
-
       return {
         success: true,
         status: 'stopped',
@@ -219,7 +208,7 @@ class MevLoadBalancer {
     return {
       isActive: this.isActive,
       processCount: this.mevProcesses.size,
-      tokenReleaseProcessCount: this.tokenReleaseProcesses.size,
+      activeTokens: this.tokenProcessMap.size,
       stats: this.getStats(),
       settings: this.settings
     };
@@ -233,7 +222,6 @@ class MevLoadBalancer {
     // Добавляем текущую информацию о процессах
     const processStats = {
       totalMevProcesses: this.mevProcesses.size,
-      totalTokenReleaseProcesses: this.tokenReleaseProcesses.size,
       activeTokens: this.tokenProcessMap.size
     };
 
@@ -287,26 +275,6 @@ class MevLoadBalancer {
   }
 
   /**
-   * Проверяет, является ли процесс процессом new-token-release
-   * @param {string} processId - Идентификатор процесса
-   * @returns {boolean} - true, если процесс является процессом new-token-release
-   */
-  isTokenReleaseProcess(processId) {
-    return this.tokenReleaseProcesses.has(processId);
-  }
-
-  /**
-   * Регистрирует процесс как процесс new-token-release
-   * @param {string} processId - Идентификатор процесса
-   */
-  registerTokenReleaseProcess(processId) {
-    if (!this.tokenReleaseProcesses.has(processId)) {
-      console.log(`[MEV LoadBalancer] Регистрация процесса ${processId} как процесса new-token-release`);
-      this.tokenReleaseProcesses.set(processId, true);
-    }
-  }
-
-  /**
    * Возвращает список всех MEV процессов
    * @returns {Array} - Массив информации о процессах
    */
@@ -318,9 +286,10 @@ class MevLoadBalancer {
         id: processId,
         config: processData.config,
         status: processData.status,
-        signals: processData.signals || [],
         startTime: processData.startTime,
-        lastActivity: processData.lastActivity || processData.startTime
+        lastActivity: processData.lastActivity || processData.startTime,
+        tokenAddress: processData.config?.tokenAddress,
+        meteoraPool: processData.config?.meteoraPool
       });
     }
 
@@ -334,7 +303,6 @@ class MevLoadBalancer {
    */
   getProcessesForToken(tokenAddress) {
     if (!tokenAddress) return [];
-
     return this.tokenProcessMap.get(tokenAddress) || [];
   }
 
@@ -347,8 +315,8 @@ class MevLoadBalancer {
     try {
       // Проверяем обязательные параметры
       const tokenAddress = config.tokenAddress;
-      const meteoraPool = config.meteoraPool || config.poolAddress;
-      let pumpSwapPool = config.pumpSwapPool || null;
+      const meteoraPool = config.meteoraPool;
+      const pumpSwapPool = config.pumpSwapPool || null;
 
       if (!tokenAddress || !meteoraPool) {
         console.error(`[MEV LoadBalancer] Не указаны обязательные параметры токена или пула.`);
@@ -371,7 +339,26 @@ class MevLoadBalancer {
 
       console.log(`[MEV LoadBalancer] Запуск MEV процесса с конфигурацией:`, JSON.stringify(processConfig));
 
-      // Отправка процесса на запуск - передаем userSettings
+      // Путь к директории с MEV ботом
+      const botDir = this.userSettings?.botDir || path.join(app.getPath('userData'), 'mev_bot');
+
+      // Создаем TOML конфиг для MEV процесса
+      const configPath = await generateSimpleMevConfig(
+        botDir,
+        processConfig,
+        tokenAddress,
+        meteoraPool,
+        pumpSwapPool
+      );
+
+      if (!configPath) {
+        console.error(`[MEV LoadBalancer] Не удалось создать конфигурационный файл для процесса ${processId}`);
+        return null;
+      }
+
+      console.log(`[MEV LoadBalancer] Создан конфигурационный файл: ${configPath}`);
+
+      // Отправка процесса на запуск
       const childProcess = await spawnProcess(processConfig, this.userSettings);
 
       if (!childProcess) {
@@ -379,19 +366,15 @@ class MevLoadBalancer {
         return null;
       }
 
-      console.log(`[MEV LoadBalancer] Успешно запущен MEV процесс ${processId}`);
+      console.log(`[MEV LoadBalancer] Успешно запущен MEV процесс ${processId}, PID: ${childProcess.pid}`);
 
       // Сохраняем информацию о процессе
       this.mevProcesses.set(processId, {
         pid: childProcess.pid,
-        tokenAddress,
-        meteoraPool,
-        pumpSwapPool,
         process: childProcess,
         startTime: Date.now(),
         status: 'running',
         lastActivity: Date.now(),
-        signals: [],
         config: processConfig
       });
 
@@ -403,32 +386,26 @@ class MevLoadBalancer {
       this.tokenProcessMap.get(tokenAddress).push(processId);
       console.log(`[MEV LoadBalancer] Процесс ${processId} добавлен в карту токенов для ${tokenAddress}`);
 
-      // Создаем числовой ID для React UI
-      const numericTaskId = Date.now() + Math.floor(Math.random() * 1000);
+      // Отправляем уведомление в Telegram
+      if (this.settings.notifyTelegram) {
+        const message = `🚀 Запущен MEV процесс\n` +
+          `ID: ${processId}\n` +
+          `Токен: ${tokenAddress}\n` +
+          `Пул Meteora: ${meteoraPool}\n` +
+          (pumpSwapPool ? `Пул PumpSwap: ${pumpSwapPool}\n` : '') +
+          `Задержка: ${processConfig.process_delay}ms`;
 
-      // Если отслеживаем в окне, отправляем уведомление о запуске процесса
-      try {
-        const { BrowserWindow } = require('electron');
-        const mainWindow = BrowserWindow.getAllWindows()[0];
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("process-started", {
-            taskId: numericTaskId,
-            config: {
-              ...processConfig,
-              originalId: processId // Сохраняем оригинальный ID для отладки
-            }
-          });
-          console.log(`[MEV LoadBalancer] Отправлено уведомление о запуске процесса ${processId} с числовым ID ${numericTaskId} в окно приложения`);
-        }
-      } catch (notifyError) {
-        console.error(`[MEV LoadBalancer] Ошибка при отправке уведомления:`, notifyError);
+        telegramBotService.sendSystemNotification(message);
       }
-
-      this.stats.totalProcesses++;
 
       return processId;
     } catch (error) {
-      console.error('[MEV LoadBalancer] Ошибка при запуске MEV процесса:', error, error.stack);
+      console.error('[MEV LoadBalancer] Ошибка при запуске MEV процесса:', error);
+
+      if (this.settings.notifyTelegram) {
+        telegramBotService.sendSystemNotification(`❌ Ошибка запуска MEV процесса: ${error.message}`);
+      }
+
       return null;
     }
   }
@@ -453,7 +430,7 @@ class MevLoadBalancer {
       console.log(`[MEV LoadBalancer] Остановка MEV процесса ${processId}`);
 
       // Останавливаем процесс
-      await stopMevProcess(processId, processData.process);
+      await stopMevProcess(processId);
 
       // Удаляем процесс из карты токенов
       if (processData.config && processData.config.tokenAddress) {
@@ -461,7 +438,6 @@ class MevLoadBalancer {
 
         if (this.tokenProcessMap.has(tokenAddress)) {
           const tokenProcesses = this.tokenProcessMap.get(tokenAddress);
-
           const index = tokenProcesses.indexOf(processId);
 
           if (index !== -1) {
@@ -477,8 +453,16 @@ class MevLoadBalancer {
       // Удаляем процесс из карты MEV процессов
       this.mevProcesses.delete(processId);
 
-      // Уведомляем React UI о процессах
-      this.notifyUIProcessesChanged();
+      // Отправляем уведомление в Telegram
+      if (this.settings.notifyTelegram) {
+        const message = `🛑 Процесс остановлен\n` +
+          `ID: ${processId}\n` +
+          (processData.config?.tokenAddress ? `Токен: ${processData.config.tokenAddress}\n` : '') +
+          (processData.config?.meteoraPool ? `Пул: ${processData.config.meteoraPool}\n` : '') +
+          `Время работы: ${Math.floor((Date.now() - processData.startTime) / 1000)}с`;
+
+        telegramBotService.sendSystemNotification(message);
+      }
 
       return {
         success: true,
@@ -519,7 +503,6 @@ class MevLoadBalancer {
 
       if (this.tokenProcessMap.has(tokenAddress)) {
         const tokenProcesses = this.tokenProcessMap.get(tokenAddress);
-
         const index = tokenProcesses.indexOf(processId);
 
         if (index !== -1) {
@@ -530,6 +513,18 @@ class MevLoadBalancer {
           }
         }
       }
+    }
+
+    // Отправляем уведомление в Telegram
+    if (this.settings.notifyTelegram) {
+      const runTime = Math.floor((processData.exitTime - processData.startTime) / 1000);
+      const message = `⚠️ Процесс завершился\n` +
+        `ID: ${processId}\n` +
+        (processData.config?.tokenAddress ? `Токен: ${processData.config.tokenAddress}\n` : '') +
+        `Код завершения: ${code}\n` +
+        `Время работы: ${runTime}с`;
+
+      telegramBotService.sendSystemNotification(message);
     }
 
     // Удаляем процесс из карты MEV процессов через 5 секунд (чтобы успеть получить логи)
@@ -550,19 +545,10 @@ class MevLoadBalancer {
         return;
       }
 
-      const { processId, message, level, config } = logData;
+      const { processId, message, level } = logData;
       if (!processId || !message) {
-        console.log('[MEV LoadBalancer] Получен некорректный лог без processId или message');
         return;
       }
-
-      // Проверяем, принадлежит ли лог модулю MEV Module и стратегии check_migration
-      if (config && (config.module_name !== 'MEV Module' || config.globalStrategy !== 'check_migration')) {
-        // Лог от другого модуля или стратегии, игнорируем
-        return;
-      }
-
-      console.log(`[MEV LoadBalancer] ПОЛУЧЕН ЛОГ от ${processId}: ${message.substring(0, 100)}...`);
 
       // Пропускаем логи от MEV процессов, чтобы избежать бесконечного цикла
       if (this.mevProcesses.has(processId)) {
@@ -571,30 +557,14 @@ class MevLoadBalancer {
         if (processData) {
           processData.lastActivity = Date.now();
         }
-        console.log(`[MEV LoadBalancer] Это лог от MEV процесса ${processId}, пропускаем`);
         return;
       }
 
-      // Автоматически регистрируем процессы, которые отправляют логи, как процессы токен-релиза,
-      // если сообщение содержит 'new-token-release' или другие ключевые слова
-      if (message.includes('new-token-release') || message.includes('token-release') ||
-        message.includes('token detection') || message.includes('[TOKEN]')) {
-        this.registerTokenReleaseProcess(processId);
-      }
-
-      // Обновляем время последней активности процесса токен-релиза
-      if (this.isTokenReleaseProcess(processId)) {
-        console.log(`[MEV LoadBalancer] Лог от процесса токен-релиза ${processId}: ${message.substring(0, 100)}...`);
-      }
-
       // Проверяем наличие MEV сигнала в логе
-      console.log(`[MEV LoadBalancer] Проверяем наличие MEV сигнала в логе: ${message.substring(0, 100)}...`);
       const signalData = this.parseLogForMevSignal(message);
       if (signalData) {
         console.log(`[MEV LoadBalancer] Обнаружен MEV сигнал в логе процесса ${processId}, данные:`, JSON.stringify(signalData));
         this.handleMevSignal(signalData, processId);
-      } else {
-        console.log(`[MEV LoadBalancer] MEV сигнал НЕ обнаружен в логе`);
       }
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при обработке лога процесса:', error);
@@ -609,22 +579,9 @@ class MevLoadBalancer {
   parseLogForMevSignal(logMessage) {
     try {
       // Проверяем, содержит ли сообщение MEV сигнал
-      console.log(`[MEV LoadBalancer] Проверка на наличие '[PERFORM_MEV_ACTION]' в логе`);
-
-      // Исследуем, какие строки вообще приходят
-      if (logMessage.includes('[')) {
-        const matches = logMessage.match(/\[(.*?)\]/g);
-        if (matches && matches.length > 0) {
-          console.log(`[MEV LoadBalancer] Найдены квадратные скобки в логе: ${JSON.stringify(matches)}`);
-        }
-      }
-
       if (!logMessage.includes('[PERFORM_MEV_ACTION]')) {
-        console.log(`[MEV LoadBalancer] Маркер '[PERFORM_MEV_ACTION]' не найден в логе`);
         return null;
       }
-
-      console.log(`[MEV LoadBalancer] Обнаружен возможный MEV сигнал: ${logMessage}`);
 
       // Извлекаем данные из сигнала
       return this.extractSignalDataFromText(logMessage);
@@ -645,28 +602,15 @@ class MevLoadBalancer {
       const startMarker = '[PERFORM_MEV_ACTION]';
       const endMarker = '[END]';
 
-      console.log(`[MEV LoadBalancer] Ищем маркеры в сообщении, длина: ${logMessage.length}`);
-      console.log(`[MEV LoadBalancer] Полный текст сообщения: ${logMessage}`);
-
-      // Проверяем наличие маркеров в любом порядке и положении
       let startIndex = logMessage.indexOf(startMarker);
       let endIndex = logMessage.indexOf(endMarker, startIndex);
 
-      // Если маркеры не найдены, пробуем искать без учёта регистра
-      if (startIndex === -1) {
-        console.log('[MEV LoadBalancer] Маркер PERFORM_MEV_ACTION не найден, пробуем искать без учёта регистра');
-        startIndex = logMessage.toLowerCase().indexOf(startMarker.toLowerCase());
-      }
-
+      // Если маркер конца не найден, ищем до конца сообщения
       if (endIndex === -1) {
-        console.log('[MEV LoadBalancer] Маркер END не найден, ищем до конца сообщения');
         endIndex = logMessage.length;
       }
 
-      console.log(`[MEV LoadBalancer] Индексы маркеров: startIndex=${startIndex}, endIndex=${endIndex}`);
-
       if (startIndex === -1) {
-        console.error('[MEV LoadBalancer] Не найден маркер начала сигнала в сообщении');
         return null;
       }
 
@@ -675,11 +619,8 @@ class MevLoadBalancer {
         .substring(startIndex + startMarker.length, endIndex)
         .trim();
 
-      console.log(`[MEV LoadBalancer] Извлечено содержимое: "${content}"`);
-
       // Разделяем по символу | 
       const parts = content.split('|').map(s => s.trim());
-      console.log(`[MEV LoadBalancer] Разделено по |: ${JSON.stringify(parts)}`);
 
       // Проверяем количество частей
       if (parts.length < 2) {
@@ -694,14 +635,10 @@ class MevLoadBalancer {
       // Извлекаем опциональный третий параметр (пул pumpSwap), если он есть
       const pumpSwapPool = parts.length > 2 ? parts[2] : null;
 
-      console.log(`[MEV LoadBalancer] После обработки: tokenAddress="${tokenAddress}", meteoraPool="${meteoraPool}", pumpSwapPool="${pumpSwapPool || 'не указан'}"`);
-
       if (!tokenAddress || !meteoraPool) {
         console.error('[MEV LoadBalancer] Не удалось извлечь токен или пул:', { tokenAddress, meteoraPool });
         return null;
       }
-
-      console.log(`[MEV LoadBalancer] Успешно извлечены данные: Токен=${tokenAddress}, Пул=${meteoraPool}, PumpSwap=${pumpSwapPool || 'не указан'}`);
 
       return {
         tokenAddress,
@@ -710,7 +647,7 @@ class MevLoadBalancer {
         timestamp: Date.now()
       };
     } catch (error) {
-      console.error('[MEV LoadBalancer] Ошибка при извлечении данных из сигнала:', error, error.stack);
+      console.error('[MEV LoadBalancer] Ошибка при извлечении данных из сигнала:', error);
       return null;
     }
   }
@@ -730,9 +667,7 @@ class MevLoadBalancer {
       // Увеличиваем счетчик обработанных сигналов
       this.stats.processedSignals++;
 
-      // Шаг 1: Получить сигнал - уже получен
-
-      // Шаг 2: Парсим 3 значения
+      // Шаг 1: Парсим данные сигнала
       const tokenAddress = signal.tokenAddress;
       const meteoraPool = signal.meteoraPool;
       const pumpSwapPool = signal.pumpSwapPool || null;
@@ -743,14 +678,11 @@ class MevLoadBalancer {
         return;
       }
 
-      console.log(`[MEV LoadBalancer] Обработка сигнала: token=${tokenAddress}, meteoraPool=${meteoraPool}, pumpSwapPool=${pumpSwapPool || 'не указан'}`);
-
-      // Шаг 3: Останавливаем все связанные процессы
-      // Собираем существующие конфигурации для последующего перезапуска
+      // Шаг 2: Получаем список существующих процессов для данного токена
       const existingProcesses = this.getProcessesForToken(tokenAddress);
       console.log(`[MEV LoadBalancer] Найдено ${existingProcesses.length} существующих процессов для токена ${tokenAddress}`);
 
-      // Сохраняем конфигурации существующих процессов
+      // Сохраняем конфигурации существующих процессов для последующего перезапуска
       const existingConfigs = [];
       for (const processId of existingProcesses) {
         if (this.mevProcesses.has(processId)) {
@@ -762,40 +694,38 @@ class MevLoadBalancer {
         }
       }
 
-      // Останавливаем все существующие процессы для этого токена
+      // Шаг 3: Останавливаем все существующие процессы для данного токена
       for (const processId of existingProcesses) {
         console.log(`[MEV LoadBalancer] Останавливаем существующий процесс ${processId} для токена ${tokenAddress}`);
         await this.stopProcess(processId);
       }
 
-      // Шаг 4: Пересчитываем параметр задержки
-      const maxRequestsPerSecond = 170; // Максимальное количество запросов в секунду для всех процессов вместе
+      // Шаг 4: Рассчитываем параметр задержки для новой конфигурации процессов
+      const maxRequestsPerSecond = this.settings.maxRequestsPerSecond; // 170 по умолчанию
+      const totalProcesses = existingConfigs.length + 1; // Существующие + новый процесс
+      const requestsPerProcess = Math.floor(maxRequestsPerSecond / totalProcesses);
 
-      // Общее количество процессов, которые будут запущены (существующие + новый)
-      const totalProcesses = existingConfigs.length + 1;
-
-      // Расчитываем запросы и задержку для каждого процесса
-      const requestsPerProcess = Math.ceil(maxRequestsPerSecond / totalProcesses);
+      // Рассчитываем задержку по формуле: round(1000/requestsPerProcess) + 1
       const processDelay = Math.ceil(1000 / requestsPerProcess) + 1;
 
       console.log(`[MEV LoadBalancer] Расчет задержки: totalProcesses=${totalProcesses}, requestsPerProcess=${requestsPerProcess}, processDelay=${processDelay}ms`);
 
-      // Базовая конфигурация для MEV процесса
+      // Шаг 5: Создаем базовую конфигурацию для MEV процессов
       const baseConfig = {
         tokenAddress: tokenAddress,
         main_rpc: this.userSettings?.rpcUrl || "https://api.mainnet-beta.solana.com",
-        useJito: true,
+        useJito: true, // Используем Jito по умолчанию
         jito_lower_bound: 100000,
         jito_upper_bound: 200000,
-        process_delay: processDelay
+        process_delay: processDelay // Используем рассчитанную задержку
       };
 
-      // Шаг 6: Создаем конфиг для НОВОГО процесса
+      // Шаг 6: Создаем новую конфигурацию для нового процесса с новым пулом
       const newConfig = {
         ...baseConfig,
         meteoraPool,
         pumpSwapPool,
-        task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
+        task_name: `MEV_${tokenAddress.substring(0, 6)}_${Date.now().toString().substring(8, 13)}`
       };
 
       // Шаг 7: Запускаем новый процесс
@@ -808,14 +738,14 @@ class MevLoadBalancer {
 
       console.log(`[MEV LoadBalancer] Успешно запущен новый MEV процесс: ${newProcessId}`);
 
-      // Шаг 5 и 7: Перезапускаем существующие процессы с обновленными конфигами
+      // Шаг 8: Перезапускаем существующие процессы с обновленными конфигами (обновленная задержка)
       const restartedProcessIds = [];
       for (const config of existingConfigs) {
-        // Меняем только параметр задержки, сохраняя все остальные настройки
+        // Обновляем только параметр задержки, сохраняя остальные настройки
         const restartConfig = {
           ...config,
           process_delay: processDelay,
-          task_name: `mev_restart_${Date.now().toString().substring(8, 13)}`
+          task_name: `MEV_${tokenAddress.substring(0, 6)}_restart_${Date.now().toString().substring(8, 13)}`
         };
 
         console.log(`[MEV LoadBalancer] Перезапускаем процесс с оригинальным пулом: ${restartConfig.meteoraPool}`);
@@ -828,8 +758,9 @@ class MevLoadBalancer {
         }
       }
 
-      // Статистика и уведомления
+      // Шаг 9: Обновляем статистику и отправляем уведомление в Telegram
       this.stats.totalMevActions += totalProcesses;
+      this.stats.successfulSignals++;
 
       if (this.settings.notifyTelegram) {
         // Информация о новом процессе
@@ -846,7 +777,7 @@ class MevLoadBalancer {
           }
         }
 
-        const message = `🚀 MEV сигнал обработан:\n` +
+        const message = `🚀 MEV сигнал обработан\n` +
           `Токен: ${tokenAddress}\n` +
           `\n⚖️ Параметры балансировки:\n` +
           `Всего процессов: ${totalProcesses}\n` +
@@ -857,10 +788,6 @@ class MevLoadBalancer {
         telegramBotService.sendSystemNotification(message);
       }
 
-      // Уведомляем React UI о процессах
-      this.notifyUIProcessesChanged();
-
-      this.stats.successfulSignals++;
       return {
         newProcessId,
         restartedProcessIds: restartedProcessIds.map(x => x.processId),
@@ -871,7 +798,7 @@ class MevLoadBalancer {
       this.stats.failedSignals++;
 
       // Отправляем уведомление об ошибке в Telegram
-      if (this.settings?.notifyTelegram) {
+      if (this.settings.notifyTelegram) {
         const errorMessage = `❌ Ошибка обработки MEV сигнала:\n` +
           `Ошибка: ${error.message}`;
 
@@ -881,84 +808,6 @@ class MevLoadBalancer {
       throw error;
     }
   }
-
-  /**
-   * Уведомляет React UI о списке активных MEV процессов
-   * Отправляет event 'process-started' для каждого активного процесса
-   */
-  notifyUIProcessesChanged() {
-    try {
-      const { BrowserWindow } = require('electron');
-      const mainWindow = BrowserWindow.getAllWindows()[0];
-
-      console.log(`[MEV LoadBalancer] -------- НАЧАЛО ОТПРАВКИ УВЕДОМЛЕНИЙ В UI --------`);
-      console.log(`[MEV LoadBalancer] Получено главное окно:`, mainWindow ? 'ДА' : 'НЕТ');
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        const processes = this.getProcesses();
-
-        console.log(`[MEV LoadBalancer] Всего процессов: ${processes.length}`);
-        console.log(`[MEV LoadBalancer] Детали процессов:`);
-        processes.forEach((p, idx) => {
-          console.log(`[MEV LoadBalancer] Процесс #${idx + 1}: ID=${p.id}, статус=${p.status}, token=${p.config?.tokenAddress || 'N/A'}`);
-        });
-
-        // Фильтруем только активные процессы
-        const activeProcesses = processes.filter(p => p.status === 'running');
-        console.log(`[MEV LoadBalancer] Активных процессов: ${activeProcesses.length}`);
-
-        // Отправляем уведомление для каждого активного процесса
-        activeProcesses.forEach((process, idx) => {
-          // Преобразуем ID процесса в числовой формат для React UI
-          let numericTaskId;
-
-          if (typeof process.id === 'string' && process.id.startsWith('mev_')) {
-            // Для строковых ID mev_ процессов генерируем уникальный числовой ID на основе timestamp
-            numericTaskId = Date.now() + idx; // Добавляем индекс для уникальности
-            console.log(`[MEV LoadBalancer] Преобразуем строковый ID ${process.id} в числовой ${numericTaskId}`);
-          } else if (typeof process.id === 'string') {
-            // Пробуем преобразовать строковый ID в число
-            numericTaskId = parseInt(process.id, 10);
-            // Если не удалось преобразовать, генерируем новый
-            if (isNaN(numericTaskId)) {
-              numericTaskId = Date.now() + idx;
-              console.log(`[MEV LoadBalancer] Невозможно преобразовать "${process.id}" в число, сгенерирован ${numericTaskId}`);
-            }
-          } else {
-            // Если ID уже числовой, используем его как есть
-            numericTaskId = process.id;
-          }
-
-          // Создаем конфиг для отправки
-          const configToSend = {
-            ...process.config,
-            originalId: process.id, // Сохраняем оригинальный ID для отладки
-            module_name: process.config?.module_name || "mev_subtask",
-            task_name: process.config?.task_name || `MEV Process ${process.id}`
-          };
-
-          console.log(`[MEV LoadBalancer] Отправка события process-started: taskId=${numericTaskId}`);
-          console.log(`[MEV LoadBalancer] Конфигурация процесса:`, JSON.stringify(configToSend, null, 2));
-
-          // Отправляем уведомление с числовым ID
-          mainWindow.webContents.send("process-started", {
-            taskId: numericTaskId,
-            config: configToSend
-          });
-
-          console.log(`[MEV LoadBalancer] ✅ Событие process-started успешно отправлено для ${process.id} с ID=${numericTaskId}`);
-        });
-      } else {
-        console.log(`[MEV LoadBalancer] ❌ Главное окно не найдено или уничтожено`);
-      }
-
-      console.log(`[MEV LoadBalancer] -------- ЗАВЕРШЕНИЕ ОТПРАВКИ УВЕДОМЛЕНИЙ --------`);
-    } catch (error) {
-      console.error(`[MEV LoadBalancer] ❌ ОШИБКА при отправке уведомлений в React UI:`, error);
-      console.error(`[MEV LoadBalancer] Стек ошибки:`, error.stack);
-    }
-  }
-
 }
 
 // Создаем и экспортируем экземпляр MEV LoadBalancer
