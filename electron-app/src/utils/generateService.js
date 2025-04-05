@@ -171,7 +171,7 @@ async function generateSimpleMevConfig(targetDir, config, tokenAddress, meteoraP
     const processDelay = config.process_delay || 300;
 
     // Формируем список пулов для закачки
-    let pumpPoolList = [pumpSwapPool];
+    let pumpPoolList = pumpSwapPool ? [pumpSwapPool] : [];
 
     // Формируем конфигурацию маршрутизации
     let mint_config_list = [
@@ -183,17 +183,17 @@ async function generateSimpleMevConfig(targetDir, config, tokenAddress, meteoraP
         }
     ];
 
-    // Формируем базовую структуру TOML файла
+    // Формируем базовую структуру TOML файла, полностью аналогично основной функции
     const mevConfig = {
         routing: {
             mint_config_list: mint_config_list
         },
         rpc: {
-            url: config.main_rpc
+            url: config.main_rpc || "https://api.mainnet-beta.solana.com"
         },
         spam: {
             enabled: !config.useJito,
-            sending_rpc_urls: [config.main_rpc],
+            sending_rpc_urls: [config.main_rpc ? [config.main_rpc] : ["https://api.mainnet-beta.solana.com"]],
             compute_unit_price: 105,
             max_retries: 0,
             enable_simple_send: false
@@ -234,10 +234,9 @@ async function generateSimpleMevConfig(targetDir, config, tokenAddress, meteoraP
 
     // Формируем имя файла и путь для сохранения
     const taskId = config.taskId || Date.now();
-    const poolSuffix = `_meteor_${meteoraPool.substring(0, 8)}`;
-    const pumpSuffix = pumpSwapPool ? `_pump_${pumpSwapPool.substring(0, 8)}` : '';
-    const delaySuffix = `_delay${processDelay}`;
-    const tomlFileName = `${tokenAddress}_simple_${config.useJito === true ? "jito" : "default"}_task${taskId}${poolSuffix}${pumpSuffix}${delaySuffix}.toml`;
+    const shortMeteora = meteoraPool.length > 8 ? meteoraPool.substring(0, 8) : meteoraPool;
+    const shortPump = pumpSwapPool && pumpSwapPool.length > 8 ? pumpSwapPool.substring(0, 8) : '';
+    const tomlFileName = `${tokenAddress}_simple_${config.useJito === true ? "jito" : "default"}_task${taskId}_meteor_${shortMeteora}${pumpSwapPool ? `_pump_${shortPump}` : ''}_delay${processDelay}.toml`;
     const tomlFilePath = path.join(targetDir, tomlFileName);
 
     try {

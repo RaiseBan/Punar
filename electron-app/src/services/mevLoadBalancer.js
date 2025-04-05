@@ -329,9 +329,9 @@ class MevLoadBalancer {
   }
 
   /**
-   * Запускает новый MEV процесс
+   * Запускает MEV процесс для указанного токена и пула
    * @param {Object} config - Конфигурация процесса
-   * @returns {Promise<string>} - Идентификатор запущенного процесса
+   * @returns {Promise<string>} - Идентификатор созданного процесса
    */
   async startMevProcess(config) {
     try {
@@ -339,103 +339,40 @@ class MevLoadBalancer {
 
       // Получаем данные токена и пула
       const tokenAddress = config.tokenAddress;
-
-      // Поддержка обратной совместимости (poolAddress -> meteoraPool)
-      const meteoraPool = config.meteoraPool || config.poolAddress;
+      const meteoraPool = config.meteoraPool || config.poolAddress; // Обратная совместимость
       const pumpSwapPool = config.pumpSwapPool;
 
       if (!tokenAddress || !meteoraPool) {
         throw new Error('Не указан адрес токена или пула Meteora в конфигурации');
       }
 
-      // Проверяем ограничение на количество процессов для одного токена
-      const existingProcesses = this.getProcessesForToken(tokenAddress);
-      const isRestart = config.isRestart || config.isRestarted;
-
-      // Проверяем, не превышено ли максимальное количество процессов для токена
-      const MAX_PROCESSES_PER_TOKEN = 10;
-      if (existingProcesses.length >= MAX_PROCESSES_PER_TOKEN && !isRestart) {
-        console.warn(`[MEV LoadBalancer] Достигнут лимит процессов (${MAX_PROCESSES_PER_TOKEN}) для токена ${tokenAddress}`);
-      }
-
       // Создаем уникальный ID для процесса
       const processId = `mev_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-
-      let mevConfig;
-      let tomlFilePath = config.tomlFilePath;
-
-      // Если предоставлен готовый TOML файл, используем его
-      if (tomlFilePath) {
-        console.log(`[MEV LoadBalancer] Используем предоставленный TOML файл: ${tomlFilePath}`);
-        mevConfig = {
-          tomlFilePath,
-          taskId: processId
-        };
-      } else {
-        // Иначе генерируем TOML файл с использованием новой или старой функции
-        console.log(`[MEV LoadBalancer] Генерируем новый TOML файл`);
-
-        // Определяем путь для сохранения TOML файла
-        const targetDir = path.join(app.getPath("userData"), "mev-configs");
-        if (!fs.existsSync(targetDir)) {
-          fs.mkdirSync(targetDir, { recursive: true });
-        }
-
-        // Определяем, какую функцию использовать для генерации конфига
-        if (config.meteoraPool !== undefined) {
-          // Если есть meteoraPool, используем новую функцию
-          const { generateSimpleMevConfig } = require('../utils/generateService');
-          tomlFilePath = await generateSimpleMevConfig(
-            targetDir,
-            config,
-            tokenAddress,
-            meteoraPool,
-            pumpSwapPool
-          );
-        } else {
-          // Иначе пытаемся использовать старую функцию (для совместимости)
-          const { generateMevConfig } = require('../utils/generateService');
-
-          // Проверяем, есть ли у нас необходимые данные для старой функции
-          // Если нет rowData, создаем заглушку
-          if (!config.rowData && config.poolAddress) {
-            console.log(`[MEV LoadBalancer] Используем совместимый режим для старой функции`);
-            // Заглушка для совместимости со старой функцией
-            config.tokensDirPath = config.tokensDirPath || path.join(app.getPath("userData"), "tokens");
-            if (!fs.existsSync(config.tokensDirPath)) {
-              fs.mkdirSync(config.tokensDirPath, { recursive: true });
-            }
-            throw new Error('Невозможно сгенерировать конфиг через старую функцию без rowData');
-          }
-
-          // Генерируем конфиг старым способом
-          tomlFilePath = await generateMevConfig(
-            targetDir,
-            config.tokensDirPath || path.join(app.getPath("userData"), "tokens"),
-            config,
-            config.poolAddress
-          );
-        }
-
-        if (!tomlFilePath) {
-          throw new Error('Не удалось сгенерировать TOML файл для MEV конфигурации');
-        }
-
-        mevConfig = {
-          tomlFilePath,
-          taskId: processId
-        };
-      }
-
-      // Запускаем MEV процесс с подготовленным конфигом
-      console.log(`[MEV LoadBalancer] Запуск MEV процесса ${processId} с конфигом: ${JSON.stringify(mevConfig)}`);
 
       // Проверяем наличие userSettings
       if (!this.userSettings) {
         this.userSettings = await getSettings();
       }
 
-      // Запускаем сам процесс
+      // Формируем rowData для совместимости с generateMevConfig
+      // rowData должен быть массивом, где первый элемент - токен, второй - название с ценой
+      const fakePrice = "10K";
+      if (!config.rowData) {
+        config.rowData = [tokenAddress, `$ -> $${fakePrice}`];
+      }
+
+      // Добавляем необходимые параметры для mev_subtask
+      const mevConfig = {
+        ...config,
+        module_name: "mev_subtask",
+        task_name: `mev_task_${processId.substring(0, 8)}`,
+        taskId: processId
+      };
+
+      // Запускаем MEV процесс с подготовленным конфигом
+      console.log(`[MEV LoadBalancer] Запуск MEV процесса ${processId} с конфигом:`, JSON.stringify(mevConfig));
+
+      // Запускаем сам процесс напрямую через spawnProcess
       const childProcess = await spawnProcess(mevConfig, this.userSettings);
 
       if (!childProcess) {
@@ -449,7 +386,6 @@ class MevLoadBalancer {
         process: childProcess,
         config: {
           ...config,
-          ...mevConfig,
           meteoraPool, // обеспечиваем стандартизованные свойства
           pumpSwapPool
         },
@@ -779,193 +715,94 @@ class MevLoadBalancer {
         return;
       }
 
-      // Проверяем, есть ли существующие процессы для этого токена и сохраняем их конфигурации
+      console.log(`[MEV LoadBalancer] Обработка сигнала: token=${tokenAddress}, meteoraPool=${meteoraPool}, pumpSwapPool=${pumpSwapPool || 'не указан'}`);
+
+      // Проверяем, есть ли существующие процессы для этого токена и останавливаем их
       const existingProcesses = this.getProcessesForToken(tokenAddress);
-      const savedConfigs = [];
+      console.log(`[MEV LoadBalancer] Найдено ${existingProcesses.length} существующих процессов для токена ${tokenAddress}`);
 
-      if (existingProcesses.length > 0) {
-        console.log(`[MEV LoadBalancer] Найдены существующие процессы для токена ${tokenAddress}: ${existingProcesses.length} процессов`);
-
-        for (const processId of existingProcesses) {
-          if (this.mevProcesses.has(processId)) {
-            const processData = this.mevProcesses.get(processId);
-
-            // Сохраняем конфигурацию процесса
-            savedConfigs.push({
-              ...processData.config,
-              originalProcessId: processId
-            });
-
-            // Останавливаем процесс
-            await this.stopProcess(processId);
-          }
-        }
-
-        console.log(`[MEV LoadBalancer] Остановлено ${savedConfigs.length} существующих процессов для токена ${tokenAddress}`);
-      } else {
-        console.log(`[MEV LoadBalancer] Не найдены существующие процессы для токена ${tokenAddress}`);
+      // Останавливаем все существующие процессы для этого токена
+      for (const processId of existingProcesses) {
+        console.log(`[MEV LoadBalancer] Останавливаем существующий процесс ${processId} для токена ${tokenAddress}`);
+        await this.stopProcess(processId);
       }
 
-      // Общее количество процессов, которые будут запущены
-      const totalProcesses = savedConfigs.length + 1; // +1 для нового процесса
+      // Рассчитываем задержку процесса на основе общих ограничений API
+      const maxRequestsPerSecond = 170; // Максимальное количество запросов в секунду для всех процессов вместе
 
-      // Расчет параметров балансировки нагрузки
-      const MAX_REQUESTS_PER_SECOND = 170; // Максимальное количество запросов в секунду
-      const requestsPerProcess = MAX_REQUESTS_PER_SECOND / totalProcesses;
+      // Каждый процесс будет запускать 1 процесс для нового сигнала
+      const totalProcesses = 1;
 
-      // Рассчитываем задержку для каждого процесса по формуле round(1000/requestsPerProcess) + 1
+      // Если processes больше total, нужно вычислить, сколько запросов может сделать каждый процесс
+      const requestsPerProcess = Math.ceil(maxRequestsPerSecond / totalProcesses);
+
+      // И на основе этого рассчитать задержку между запросами для каждого процесса
+      // Формула: 1000 мс / кол-во запросов в секунду + 1 мс (для гарантии)
       const processDelay = Math.ceil(1000 / requestsPerProcess) + 1;
 
-      console.log(`[MEV LoadBalancer] Расчет задержки: всего процессов ${totalProcesses}, запросов на процесс ${requestsPerProcess.toFixed(2)}, задержка ${processDelay}мс`);
+      console.log(`[MEV LoadBalancer] Расчет задержки: totalProcesses=${totalProcesses}, requestsPerProcess=${requestsPerProcess}, processDelay=${processDelay}ms`);
 
-      // Массив для хранения ID новых процессов
-      const newProcessesIds = [];
+      // Базовая конфигурация для MEV процесса
+      const baseConfig = {
+        tokenAddress: tokenAddress,
+        main_rpc: "https://api.mainnet-beta.solana.com",
+        useJito: true,
+        jito_lower_bound: 100000,
+        jito_upper_bound: 200000,
+        processSourceId: sourceProcessId
+      };
 
-      try {
-        // Создаем директорию для TOML-файлов, если она не существует
-        const targetDir = path.join(app.getPath("userData"), "mev-configs");
-        if (!fs.existsSync(targetDir)) {
-          fs.mkdirSync(targetDir, { recursive: true });
-        }
+      // Создаем новую конфигурацию процесса
+      const newConfig = {
+        ...baseConfig,
+        module_name: "mev_subtask",
+        task_name: `mev_task_${Date.now().toString().substring(8, 13)}`,
+        meteoraPool,
+        pumpSwapPool,
+        process_delay: processDelay
+      };
 
-        // Базовая конфигурация для MEV процесса
-        const baseConfig = {
-          tokenAddress,
-          process_delay: processDelay,
-          main_rpc: this.userSettings.rpcUrl || "http://rpc-lax-a.thornode.io/e711fbc80050bff888e8584d9e2521ca",
-          useJito: true,
-          jito_lower_bound: 100000,
-          jito_upper_bound: 300000,
-          taskId: Date.now() + "_" + Math.floor(Math.random() * 1000)
-        };
+      // Запускаем MEV процесс с новыми параметрами
+      console.log(`[MEV LoadBalancer] Запускаем новый MEV процесс с параметрами:`, JSON.stringify(newConfig));
+      const newProcessId = await this.startMevProcess(newConfig);
 
-        // Создаем новую конфигурацию процесса с НОВЫМ пулом и рассчитанной задержкой
-        const newConfig = {
-          ...baseConfig,
-          meteoraPool,  // используем пул Meteora из сигнала
-          pumpSwapPool, // используем пул PumpSwap из сигнала если он есть
-          process_delay: processDelay  // Устанавливаем рассчитанную задержку
-        };
-
-        // Используем новую функцию для генерации конфига
-        console.log(`[MEV LoadBalancer] Генерация конфига для нового процесса с пулами Meteora=${meteoraPool}, PumpSwap=${pumpSwapPool || 'не указан'}`);
-
-        // Используем generateSimpleMevConfig для генерации конфига
-        const { generateSimpleMevConfig } = require('../utils/generateService');
-        const tomlFilePath = await generateSimpleMevConfig(
-          targetDir,
-          newConfig,
-          tokenAddress,
-          meteoraPool,
-          pumpSwapPool
-        );
-
-        if (!tomlFilePath) {
-          throw new Error('Не удалось сгенерировать TOML файл для MEV конфигурации');
-        }
-
-        // Запускаем новый MEV процесс с сгенерированным конфигом
-        const newProcessId = await this.startMevProcess({
-          ...newConfig,
-          tomlFilePath
-        });
-
-        newProcessesIds.push(newProcessId);
-
-        console.log(`[MEV LoadBalancer] Создан новый процесс ${newProcessId} для токена ${tokenAddress} с пулом ${meteoraPool}, задержка ${processDelay}мс`);
-
-        // Перезапускаем существующие процессы с обновленной задержкой для балансировки нагрузки
-        for (let i = 0; i < savedConfigs.length; i++) {
-          const config = savedConfigs[i];
-
-          // Используем оригинальный пул, но обновляем задержку
-          const restartConfig = {
-            ...baseConfig,
-            meteoraPool: config.meteoraPool || config.poolAddress, // совместимость со старым форматом
-            pumpSwapPool: config.pumpSwapPool, // может быть undefined
-            process_delay: processDelay
-          };
-
-          console.log(`[MEV LoadBalancer] Генерация конфига для перезапуска процесса с оригинальным пулом: ${restartConfig.meteoraPool}`);
-
-          // Также используем generateSimpleMevConfig для перезапуска
-          const restartTomlFilePath = await generateSimpleMevConfig(
-            targetDir,
-            restartConfig,
-            tokenAddress,
-            restartConfig.meteoraPool,
-            restartConfig.pumpSwapPool
-          );
-
-          if (!restartTomlFilePath) {
-            console.error(`[MEV LoadBalancer] Не удалось сгенерировать TOML для перезапуска процесса`);
-            continue;
-          }
-
-          // Запускаем процесс с обновленной конфигурацией
-          const restartedProcessId = await this.startMevProcess({
-            ...restartConfig,
-            tomlFilePath: restartTomlFilePath
-          });
-
-          newProcessesIds.push(restartedProcessId);
-
-          console.log(`[MEV LoadBalancer] Перезапущен процесс ${restartedProcessId} для токена ${tokenAddress} с оригинальным пулом, задержка ${processDelay}мс`);
-        }
-
-        // Отправляем уведомление в Telegram о всех запущенных процессах
-        if (this.settings?.notifyTelegram) {
-          // Детальная информация о балансировке
-          const loadBalanceInfo =
-            `Всего ${totalProcesses} процессов\n` +
-            `Макс. запросов/сек: ${MAX_REQUESTS_PER_SECOND}\n` +
-            `Запросов на процесс: ${requestsPerProcess.toFixed(2)}/сек\n` +
-            `Задержка: ${processDelay}мс`;
-
-          // Формируем информацию о запущенных процессах
-          const newProcessInfo = `Создан новый процесс: ${newProcessesIds[0]}\n` +
-            `Пул Meteora: ${meteoraPool}\n` +
-            (pumpSwapPool ? `Пул PumpSwap: ${pumpSwapPool}\n` : '');
-
-          // Формируем информацию о перезапущенных процессах с их оригинальными пулами
-          let restartedProcessesInfo = '';
-          if (savedConfigs.length > 0) {
-            restartedProcessesInfo = `\nПерезапущены процессы с оригинальными пулами:\n`;
-            for (let i = 0; i < savedConfigs.length; i++) {
-              const processId = newProcessesIds[i + 1];
-              const originalPool = savedConfigs[i].meteoraPool || savedConfigs[i].poolAddress || 'неизвестный пул';
-              restartedProcessesInfo += `${processId} (пул: ${originalPool})\n`;
-            }
-          }
-
-          const message = `🚀 MEV сигнал обработан:\n` +
-            `Токен: ${tokenAddress}\n` +
-            `Пул Meteora: ${meteoraPool}\n` +
-            (pumpSwapPool ? `Пул PumpSwap: ${pumpSwapPool}\n` : '') +
-            `\n⚖️ Балансировка нагрузки:\n${loadBalanceInfo}\n\n` +
-            `🔄 Запущенные процессы:\n${newProcessInfo}${restartedProcessesInfo}`;
-
-          telegramBotService.sendSystemNotification(message);
-        }
-
-        this.stats.successfulSignals++;
-        this.stats.totalMevActions += totalProcesses;
-      } catch (error) {
-        console.error(`[MEV LoadBalancer] Ошибка при запуске процессов для токена ${tokenAddress}:`, error);
-        this.stats.failedSignals++;
-
-        // Отправляем уведомление об ошибке в Telegram
-        if (this.settings?.notifyTelegram) {
-          const errorMessage = `❌ Ошибка обработки MEV сигнала:\n` +
-            `Токен: ${tokenAddress}\n` +
-            `Ошибка: ${error.message}`;
-
-          telegramBotService.sendSystemNotification(errorMessage);
-        }
+      if (!newProcessId) {
+        throw new Error('Не удалось запустить новый MEV процесс');
       }
+
+      console.log(`[MEV LoadBalancer] Успешно запущен новый MEV процесс: ${newProcessId}`);
+
+      // Статистика и уведомления
+      this.stats.totalMevActions++;
+
+      if (this.settings.notifyTelegram) {
+        const message = `🚀 MEV сигнал обработан:\n` +
+          `Токен: ${tokenAddress}\n` +
+          `Пул Meteora: ${meteoraPool}\n` +
+          (pumpSwapPool ? `Пул PumpSwap: ${pumpSwapPool}\n` : '') +
+          `\n⚖️ Параметры:\n` +
+          `Задержка: ${processDelay}ms\n` +
+          `Запросы/сек: ${requestsPerProcess}\n` +
+          `\n📊 Процесс: ${newProcessId}`;
+
+        telegramBotService.sendSystemNotification(message);
+      }
+
+      this.stats.successfulSignals++;
+      return newProcessId;
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при обработке MEV сигнала:', error);
       this.stats.failedSignals++;
+
+      // Отправляем уведомление об ошибке в Telegram
+      if (this.settings?.notifyTelegram) {
+        const errorMessage = `❌ Ошибка обработки MEV сигнала:\n` +
+          `Ошибка: ${error.message}`;
+
+        telegramBotService.sendSystemNotification(errorMessage);
+      }
+
+      throw error;
     }
   }
 
