@@ -890,47 +890,71 @@ class MevLoadBalancer {
       const { BrowserWindow } = require('electron');
       const mainWindow = BrowserWindow.getAllWindows()[0];
 
+      console.log(`[MEV LoadBalancer] -------- НАЧАЛО ОТПРАВКИ УВЕДОМЛЕНИЙ В UI --------`);
+      console.log(`[MEV LoadBalancer] Получено главное окно:`, mainWindow ? 'ДА' : 'НЕТ');
+
       if (mainWindow && !mainWindow.isDestroyed()) {
         const processes = this.getProcesses();
 
-        console.log(`[MEV LoadBalancer] Отправка уведомлений для ${processes.length} процессов в React UI`);
+        console.log(`[MEV LoadBalancer] Всего процессов: ${processes.length}`);
+        console.log(`[MEV LoadBalancer] Детали процессов:`);
+        processes.forEach((p, idx) => {
+          console.log(`[MEV LoadBalancer] Процесс #${idx + 1}: ID=${p.id}, статус=${p.status}, token=${p.config?.tokenAddress || 'N/A'}`);
+        });
+
+        // Фильтруем только активные процессы
+        const activeProcesses = processes.filter(p => p.status === 'running');
+        console.log(`[MEV LoadBalancer] Активных процессов: ${activeProcesses.length}`);
 
         // Отправляем уведомление для каждого активного процесса
-        processes.forEach(process => {
-          if (process.status === 'running') {
-            // Преобразуем ID процесса в числовой формат для React UI
-            let numericTaskId;
+        activeProcesses.forEach((process, idx) => {
+          // Преобразуем ID процесса в числовой формат для React UI
+          let numericTaskId;
 
-            if (typeof process.id === 'string' && process.id.startsWith('mev_')) {
-              // Для строковых ID mev_ процессов генерируем уникальный числовой ID на основе timestamp
-              numericTaskId = Date.now() + Math.floor(Math.random() * 1000);
-              console.log(`[MEV LoadBalancer] Преобразуем строковый ID ${process.id} в числовой ${numericTaskId}`);
-            } else if (typeof process.id === 'string') {
-              // Пробуем преобразовать строковый ID в число
-              numericTaskId = parseInt(process.id, 10);
-              // Если не удалось преобразовать, генерируем новый
-              if (isNaN(numericTaskId)) {
-                numericTaskId = Date.now() + Math.floor(Math.random() * 1000);
-              }
-            } else {
-              // Если ID уже числовой, используем его как есть
-              numericTaskId = process.id;
+          if (typeof process.id === 'string' && process.id.startsWith('mev_')) {
+            // Для строковых ID mev_ процессов генерируем уникальный числовой ID на основе timestamp
+            numericTaskId = Date.now() + idx; // Добавляем индекс для уникальности
+            console.log(`[MEV LoadBalancer] Преобразуем строковый ID ${process.id} в числовой ${numericTaskId}`);
+          } else if (typeof process.id === 'string') {
+            // Пробуем преобразовать строковый ID в число
+            numericTaskId = parseInt(process.id, 10);
+            // Если не удалось преобразовать, генерируем новый
+            if (isNaN(numericTaskId)) {
+              numericTaskId = Date.now() + idx;
+              console.log(`[MEV LoadBalancer] Невозможно преобразовать "${process.id}" в число, сгенерирован ${numericTaskId}`);
             }
-
-            // Отправляем уведомление с числовым ID
-            mainWindow.webContents.send("process-started", {
-              taskId: numericTaskId,
-              config: {
-                ...process.config,
-                originalId: process.id // Сохраняем оригинальный ID для отладки
-              }
-            });
-            console.log(`[MEV LoadBalancer] Уведомление process-started отправлено для ${process.id} с числовым ID ${numericTaskId}`);
+          } else {
+            // Если ID уже числовой, используем его как есть
+            numericTaskId = process.id;
           }
+
+          // Создаем конфиг для отправки
+          const configToSend = {
+            ...process.config,
+            originalId: process.id, // Сохраняем оригинальный ID для отладки
+            module_name: process.config?.module_name || "mev_subtask",
+            task_name: process.config?.task_name || `MEV Process ${process.id}`
+          };
+
+          console.log(`[MEV LoadBalancer] Отправка события process-started: taskId=${numericTaskId}`);
+          console.log(`[MEV LoadBalancer] Конфигурация процесса:`, JSON.stringify(configToSend, null, 2));
+
+          // Отправляем уведомление с числовым ID
+          mainWindow.webContents.send("process-started", {
+            taskId: numericTaskId,
+            config: configToSend
+          });
+
+          console.log(`[MEV LoadBalancer] ✅ Событие process-started успешно отправлено для ${process.id} с ID=${numericTaskId}`);
         });
+      } else {
+        console.log(`[MEV LoadBalancer] ❌ Главное окно не найдено или уничтожено`);
       }
+
+      console.log(`[MEV LoadBalancer] -------- ЗАВЕРШЕНИЕ ОТПРАВКИ УВЕДОМЛЕНИЙ --------`);
     } catch (error) {
-      console.error(`[MEV LoadBalancer] Ошибка при отправке уведомлений в React UI:`, error);
+      console.error(`[MEV LoadBalancer] ❌ ОШИБКА при отправке уведомлений в React UI:`, error);
+      console.error(`[MEV LoadBalancer] Стек ошибки:`, error.stack);
     }
   }
 

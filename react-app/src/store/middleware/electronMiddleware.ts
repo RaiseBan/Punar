@@ -36,8 +36,31 @@ export const electronMiddleware: Middleware = (store) => {
             console.log("✅ Subscribing to Electron IPC events from middleware");
 
             window.electronAPI.onProcessStarted((event, data) => {
-                console.log(`Middleware: Process started for task ${data.taskId}`);
+                console.log(`⭐ Middleware: Получено событие process-started для taskId=${data.taskId}`, {
+                    taskId: data.taskId,
+                    moduleType: data.config?.module_name,
+                    taskName: data.config?.task_name,
+                    originalId: data.config?.originalId
+                });
+
+                // Проверяем валидность данных
+                if (!data.taskId) {
+                    console.error(`❌ Middleware: Получен некорректный taskId в событии process-started:`, data);
+                    return;
+                }
+
+                // Проверяем, есть ли уже такая задача в Redux
+                const state = store.getState() as RootState;
+                const existingTask = state.tasks.tasks.find(t => t.id === data.taskId);
+
+                if (existingTask) {
+                    console.log(`🔄 Middleware: Задача ${data.taskId} уже существует в Redux, обновляем`);
+                } else {
+                    console.log(`➕ Middleware: Создаем новую задачу ${data.taskId} в Redux`);
+                }
+
                 store.dispatch(updateTask({ id: data.taskId, status: "Running" }));
+                console.log(`✅ Middleware: Задача ${data.taskId} успешно обновлена в Redux`);
             });
 
             window.electronAPI.onProcessOutput((event, data) => {
