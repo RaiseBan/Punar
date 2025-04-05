@@ -42,12 +42,12 @@ interface StepConfigureMevModuleProps {
 }
 
 export default function StepConfigureMevModule({
-                                                   taskName,
-                                                   setTaskName,
-                                                   mevParams,
-                                                   setMevParams,
-                                                   wallets,
-                                               }: StepConfigureMevModuleProps) {
+    taskName,
+    setTaskName,
+    mevParams,
+    setMevParams,
+    wallets,
+}: StepConfigureMevModuleProps) {
     const handleParamChange = (key: string, value: string | number) => {
         setMevParams(prev => ({ ...prev, [key]: value }));
     };
@@ -121,11 +121,11 @@ export default function StepConfigureMevModule({
                 <InputLabel>Global strategy</InputLabel>
                 <Select
                     value={mevParams.globalStrategy}
-                    onChange={(e) => handleParamChange("globalStrategy", e.target.value as "jito_only" | "...")}
-                    label="Operation Mode"
+                    onChange={(e) => handleParamChange("globalStrategy", e.target.value as "jito_only" | "check_migration")}
+                    label="Global strategy"
                 >
                     <MenuItem value="jito_only">jito_only</MenuItem>
-                    <MenuItem value="automatic">Automatic</MenuItem>
+                    <MenuItem value="check_migration">check_migration</MenuItem>
                 </Select>
             </FormControl>
 
