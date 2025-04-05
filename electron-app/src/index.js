@@ -249,3 +249,13 @@ ipcMain.handle('mev-loadbalancer:get-status', async () => {
 ipcMain.handle('mev-loadbalancer:get-processes', async () => {
   return mevLoadBalancer.getProcesses();
 });
+
+// Тестирование обработки сигнала MEV при запуске приложения
+// Раскомментируйте этот блок кода для тестирования
+/*
+setTimeout(() => {
+  console.log("Тестирование обработки сигнала MEV...");
+  const testSignal = "[2025-04-05T14:36:24.872Z] [INFO] [PERFORM_MEV_ACTION] 8BtoThi2ZoXnF7QQK1Wjmh2JuBw9FjVvhnGMVZ2vpump | 4LEue1KFSHaWGarDR8hy5VG8MFXhiuWgvvHAQXceepAJ | ExtraPoolAddress12345678 [END]";
+  mevLoadBalancer.testProcessSignal(testSignal);
+}, 3000);
+*/

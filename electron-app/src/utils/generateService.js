@@ -155,4 +155,104 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
     }
 }
 
-module.exports = { generateMevConfig };
+/**
+ * Генерирует упрощенную конфигурацию для MEV процесса без зависимости от rowData
+ * @param {string} targetDir - Директория для сохранения конфига
+ * @param {Object} config - Базовая конфигурация задачи
+ * @param {string} tokenAddress - Адрес токена
+ * @param {string} meteoraPool - Пул Meteora
+ * @param {string} pumpSwapPool - Пул PumpSwap (опционально)
+ * @returns {Promise<string|undefined>} - Путь к сгенерированному файлу или undefined в случае ошибки
+ */
+async function generateSimpleMevConfig(targetDir, config, tokenAddress, meteoraPool, pumpSwapPool) {
+    console.log(`generateSimpleMevConfig: ${targetDir} | token=${tokenAddress} | meteoraPool=${meteoraPool} | pumpSwapPool=${pumpSwapPool || 'Not specified'}`);
+
+    // Используем переданный process_delay или значение по умолчанию (300 мс)
+    const processDelay = config.process_delay || 300;
+
+    // Формируем список пулов для закачки
+    let pumpPoolList = [pumpSwapPool];
+
+    // Формируем конфигурацию маршрутизации
+    let mint_config_list = [
+        {
+            mint: tokenAddress,
+            pump_pool_list: pumpPoolList,
+            meteora_dlmm_pool_list: [meteoraPool],
+            process_delay: processDelay
+        }
+    ];
+
+    // Формируем базовую структуру TOML файла
+    const mevConfig = {
+        routing: {
+            mint_config_list: mint_config_list
+        },
+        rpc: {
+            url: config.main_rpc
+        },
+        spam: {
+            enabled: !config.useJito,
+            sending_rpc_urls: [config.main_rpc],
+            compute_unit_price: 105,
+            max_retries: 0,
+            enable_simple_send: false
+        },
+        jito: {
+            enabled: config.useJito,
+            block_engine_urls: [
+                "http://localhost:8082/jitoNY/api/v1",
+                "http://localhost:8082/jitoTOKIO/api/v1",
+                "http://localhost:8082/jitoSLC/api/v1",
+                "http://localhost:8082/jitoAMSTERDAM/api/v1",
+                "http://localhost:8082/jitoFRANKFURT/api/v1",
+                "http://localhost:8082/jitoLONDON/api/v1"
+            ],
+            uuid: "",
+            ip_addresses: [PRIMARY_IP],
+            tip_config: {
+                strategy: "Random",
+                from: config.jito_lower_bound || 100000,
+                to: config.jito_upper_bound || 300000,
+                count: 1
+            }
+        },
+        kamino_flashloan: {
+            enabled: true
+        },
+        bot: {
+            compute_unit_limit: 650_000,
+            merge_mints: false
+        },
+        wallet: {}
+    };
+
+    // Создаем директорию, если она не существует
+    if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    // Формируем имя файла и путь для сохранения
+    const taskId = config.taskId || Date.now();
+    const poolSuffix = `_meteor_${meteoraPool.substring(0, 8)}`;
+    const pumpSuffix = pumpSwapPool ? `_pump_${pumpSwapPool.substring(0, 8)}` : '';
+    const delaySuffix = `_delay${processDelay}`;
+    const tomlFileName = `${tokenAddress}_simple_${config.useJito === true ? "jito" : "default"}_task${taskId}${poolSuffix}${pumpSuffix}${delaySuffix}.toml`;
+    const tomlFilePath = path.join(targetDir, tomlFileName);
+
+    try {
+        // Преобразуем конфигурацию в формат TOML
+        const tomlString = TOML.stringify(mevConfig);
+
+        // Записываем файл
+        fs.writeFileSync(tomlFilePath, tomlString);
+        console.log(`Файл конфигурации успешно создан: ${tomlFilePath}`);
+
+        return tomlFilePath;
+    } catch (error) {
+        console.error(`Ошибка при создании TOML файла: ${error.message}`);
+        return;
+    }
+}
+
+module.exports = { generateMevConfig, generateSimpleMevConfig };
