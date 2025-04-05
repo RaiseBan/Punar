@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import AddTaskIcon from "@mui/icons-material/AddTask";
 import Task from "./Task/Task";
@@ -18,60 +18,6 @@ export default function TasksPage() {
         window.electronAPI?.startProcess(taskId, config);
         setWizardOpen(false);
     }, [dispatch]);
-
-    // Функция для получения MEV процессов и добавления их в Redux
-    const fetchMevProcesses = useCallback(async () => {
-        if (window.electronAPI?.mevLoadBalancer) {
-            try {
-                // Получаем процессы MEV LoadBalancer
-                const mevProcesses = await window.electronAPI.mevLoadBalancer.getProcesses();
-                console.log(`Fetched ${mevProcesses.length} MEV processes`);
-
-                // Добавляем каждый MEV процесс в Redux, если его там еще нет
-                mevProcesses.forEach(process => {
-                    // Создаем числовой идентификатор
-                    const numericId = typeof process.id === 'string' ? parseInt(process.id, 10) : process.id;
-
-                    // Проверяем, существует ли уже такая задача в Redux
-                    const existingTask = tasks.find(task =>
-                        task.id === numericId ||
-                        (typeof process.id === 'string' && task.id === parseInt(process.id, 10))
-                    );
-
-                    if (!existingTask && !isNaN(numericId)) {
-                        console.log(`Adding MEV process ${process.id} to Redux store`);
-
-                        // Подготавливаем конфигурацию для процесса
-                        const taskConfig = {
-                            ...process.config,
-                            module_name: process.config?.module_name || "mev_subtask",
-                            task_name: process.config?.task_name || `MEV Process ${process.id}`
-                        };
-
-                        // Добавляем процесс в Redux
-                        dispatch(addOrUpdateTask({
-                            taskId: numericId || Date.now(),
-                            config: taskConfig
-                        }));
-                    }
-                });
-            } catch (error) {
-                console.error("Error fetching MEV processes:", error);
-            }
-        }
-    }, [dispatch, tasks]);
-
-    // Периодически обновляем список MEV процессов
-    useEffect(() => {
-        // Загружаем MEV процессы при загрузке компонента
-        fetchMevProcesses();
-
-        // Устанавливаем интервал для периодического обновления (каждые 10 секунд)
-        const intervalId = setInterval(fetchMevProcesses, 10000);
-
-        // Очищаем интервал при размонтировании компонента
-        return () => clearInterval(intervalId);
-    }, [fetchMevProcesses]);
 
     return (
         <Box sx={{ p: 2 }}>

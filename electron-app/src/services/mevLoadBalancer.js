@@ -120,36 +120,6 @@ class MevLoadBalancer {
   }
 
   /**
-   * Уведомляет React UI о списке активных MEV процессов
-   * Отправляет event 'process-started' для каждого активного процесса
-   */
-  notifyUIProcessesChanged() {
-    try {
-      const { BrowserWindow } = require('electron');
-      const mainWindow = BrowserWindow.getAllWindows()[0];
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        const processes = this.getProcesses();
-
-        console.log(`[MEV LoadBalancer] Отправка уведомлений для ${processes.length} процессов в React UI`);
-
-        // Отправляем уведомление для каждого активного процесса
-        processes.forEach(process => {
-          if (process.status === 'running') {
-            mainWindow.webContents.send("process-started", {
-              taskId: process.id,
-              config: process.config
-            });
-            console.log(`[MEV LoadBalancer] Уведомление process-started отправлено для ${process.id}`);
-          }
-        });
-      }
-    } catch (error) {
-      console.error(`[MEV LoadBalancer] Ошибка при отправке уведомлений в React UI:`, error);
-    }
-  }
-
-  /**
    * Запускает MEV LoadBalancer
    * @returns {Promise<Object>} - Результат запуска
    */
@@ -167,9 +137,12 @@ class MevLoadBalancer {
 
       this.isActive = true;
 
+      // Сбрасываем статистику
+      this.resetStats();
+
       // Уведомляем о запуске в Telegram
       if (this.settings.notifyTelegram) {
-        telegramBotService.sendSystemNotification('✅ MEV LoadBalancer активирован');
+        telegramBotService.sendSystemNotification('✅ MEV LoadBalancer запущен');
       }
 
       // Уведомляем React UI о процессах
@@ -177,11 +150,12 @@ class MevLoadBalancer {
 
       return {
         success: true,
-        status: 'started',
+        status: 'running',
         message: 'MEV LoadBalancer успешно запущен'
       };
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при запуске:', error);
+      this.isActive = false;
 
       return {
         success: false,
@@ -370,41 +344,28 @@ class MevLoadBalancer {
    */
   async startMevProcess(config) {
     try {
-      const { tokenAddress, meteoraPool, pumpSwapPool, process_delay = 300 } = config;
+      // Проверяем обязательные параметры
+      const tokenAddress = config.tokenAddress;
+      const meteoraPool = config.meteoraPool || config.poolAddress;
+      let pumpSwapPool = config.pumpSwapPool || null;
 
       if (!tokenAddress || !meteoraPool) {
-        console.error('[MEV LoadBalancer] Не указаны обязательные параметры для MEV процесса', { tokenAddress, meteoraPool });
+        console.error(`[MEV LoadBalancer] Не указаны обязательные параметры токена или пула.`);
+        console.error(`[MEV LoadBalancer] Токен: ${tokenAddress}, пул: ${meteoraPool}`);
         return null;
       }
 
-      // Создаем уникальный ID для процесса
-      const processId = `mev_${tokenAddress.substring(0, 8)}_${Date.now().toString().substring(8, 13)}`;
+      // Генерируем уникальный ID для процесса
+      const processId = `mev_${Math.random().toString(36).substring(2, 11)}_${Date.now().toString().substring(8, 13)}`;
 
-      console.log(`[MEV LoadBalancer] Инициализация MEV процесса ${processId} с задержкой ${process_delay}ms`);
-
-      // Проверяем наличие userSettings
-      if (!this.userSettings) {
-        console.log('[MEV LoadBalancer] Загружаем userSettings');
-        this.userSettings = await getSettings();
-      }
-
-      if (!this.userSettings) {
-        console.error('[MEV LoadBalancer] Не удалось загрузить настройки пользователя');
-        return null;
-      }
-
-      // Формируем конфигурацию для процесса
+      // Формируем конфигурацию процесса
       const processConfig = {
+        ...config,
         module_name: "mev_subtask",
-        task_name: config.task_name || `mev_task_${Date.now().toString().substring(8, 13)}`,
-        tokenAddress: tokenAddress,
-        meteoraPool: meteoraPool,
-        pumpSwapPool: pumpSwapPool,
-        process_delay: process_delay,
-        main_rpc: config.main_rpc || this.userSettings?.rpcUrl || "https://api.mainnet-beta.solana.com",
-        useJito: config.useJito !== undefined ? config.useJito : true,
-        jito_lower_bound: config.jito_lower_bound || 100000,
-        jito_upper_bound: config.jito_upper_bound || 200000
+        tokenAddress,
+        meteoraPool,
+        pumpSwapPool,
+        task_name: config.task_name || `MEV Process ${processId}`,
       };
 
       console.log(`[MEV LoadBalancer] Запуск MEV процесса с конфигурацией:`, JSON.stringify(processConfig));
@@ -441,16 +402,22 @@ class MevLoadBalancer {
       this.tokenProcessMap.get(tokenAddress).push(processId);
       console.log(`[MEV LoadBalancer] Процесс ${processId} добавлен в карту токенов для ${tokenAddress}`);
 
+      // Создаем числовой ID для React UI
+      const numericTaskId = Date.now() + Math.floor(Math.random() * 1000);
+
       // Если отслеживаем в окне, отправляем уведомление о запуске процесса
       try {
         const { BrowserWindow } = require('electron');
         const mainWindow = BrowserWindow.getAllWindows()[0];
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("process-started", {
-            taskId: processId,
-            config: processConfig
+            taskId: numericTaskId,
+            config: {
+              ...processConfig,
+              originalId: processId // Сохраняем оригинальный ID для отладки
+            }
           });
-          console.log(`[MEV LoadBalancer] Отправлено уведомление о запуске процесса ${processId} в окно приложения`);
+          console.log(`[MEV LoadBalancer] Отправлено уведомление о запуске процесса ${processId} с числовым ID ${numericTaskId} в окно приложения`);
         }
       } catch (notifyError) {
         console.error(`[MEV LoadBalancer] Ошибка при отправке уведомления:`, notifyError);
@@ -911,6 +878,59 @@ class MevLoadBalancer {
       }
 
       throw error;
+    }
+  }
+
+  /**
+   * Уведомляет React UI о списке активных MEV процессов
+   * Отправляет event 'process-started' для каждого активного процесса
+   */
+  notifyUIProcessesChanged() {
+    try {
+      const { BrowserWindow } = require('electron');
+      const mainWindow = BrowserWindow.getAllWindows()[0];
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const processes = this.getProcesses();
+
+        console.log(`[MEV LoadBalancer] Отправка уведомлений для ${processes.length} процессов в React UI`);
+
+        // Отправляем уведомление для каждого активного процесса
+        processes.forEach(process => {
+          if (process.status === 'running') {
+            // Преобразуем ID процесса в числовой формат для React UI
+            let numericTaskId;
+
+            if (typeof process.id === 'string' && process.id.startsWith('mev_')) {
+              // Для строковых ID mev_ процессов генерируем уникальный числовой ID на основе timestamp
+              numericTaskId = Date.now() + Math.floor(Math.random() * 1000);
+              console.log(`[MEV LoadBalancer] Преобразуем строковый ID ${process.id} в числовой ${numericTaskId}`);
+            } else if (typeof process.id === 'string') {
+              // Пробуем преобразовать строковый ID в число
+              numericTaskId = parseInt(process.id, 10);
+              // Если не удалось преобразовать, генерируем новый
+              if (isNaN(numericTaskId)) {
+                numericTaskId = Date.now() + Math.floor(Math.random() * 1000);
+              }
+            } else {
+              // Если ID уже числовой, используем его как есть
+              numericTaskId = process.id;
+            }
+
+            // Отправляем уведомление с числовым ID
+            mainWindow.webContents.send("process-started", {
+              taskId: numericTaskId,
+              config: {
+                ...process.config,
+                originalId: process.id // Сохраняем оригинальный ID для отладки
+              }
+            });
+            console.log(`[MEV LoadBalancer] Уведомление process-started отправлено для ${process.id} с числовым ID ${numericTaskId}`);
+          }
+        });
+      }
+    } catch (error) {
+      console.error(`[MEV LoadBalancer] Ошибка при отправке уведомлений в React UI:`, error);
     }
   }
 
