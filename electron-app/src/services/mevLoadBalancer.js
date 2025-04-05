@@ -120,6 +120,36 @@ class MevLoadBalancer {
   }
 
   /**
+   * Уведомляет React UI о списке активных MEV процессов
+   * Отправляет event 'process-started' для каждого активного процесса
+   */
+  notifyUIProcessesChanged() {
+    try {
+      const { BrowserWindow } = require('electron');
+      const mainWindow = BrowserWindow.getAllWindows()[0];
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const processes = this.getProcesses();
+
+        console.log(`[MEV LoadBalancer] Отправка уведомлений для ${processes.length} процессов в React UI`);
+
+        // Отправляем уведомление для каждого активного процесса
+        processes.forEach(process => {
+          if (process.status === 'running') {
+            mainWindow.webContents.send("process-started", {
+              taskId: process.id,
+              config: process.config
+            });
+            console.log(`[MEV LoadBalancer] Уведомление process-started отправлено для ${process.id}`);
+          }
+        });
+      }
+    } catch (error) {
+      console.error(`[MEV LoadBalancer] Ошибка при отправке уведомлений в React UI:`, error);
+    }
+  }
+
+  /**
    * Запускает MEV LoadBalancer
    * @returns {Promise<Object>} - Результат запуска
    */
@@ -132,24 +162,26 @@ class MevLoadBalancer {
 
       console.log('[MEV LoadBalancer] Запуск MEV LoadBalancer');
 
-      this.isActive = true;
+      // Получаем глобальные настройки пользователя
+      this.userSettings = await getSettings();
 
-      // Сбрасываем статистику
-      this.resetStats();
+      this.isActive = true;
 
       // Уведомляем о запуске в Telegram
       if (this.settings.notifyTelegram) {
-        telegramBotService.sendSystemNotification('✅ MEV LoadBalancer запущен');
+        telegramBotService.sendSystemNotification('✅ MEV LoadBalancer активирован');
       }
+
+      // Уведомляем React UI о процессах
+      this.notifyUIProcessesChanged();
 
       return {
         success: true,
-        status: 'running',
+        status: 'started',
         message: 'MEV LoadBalancer успешно запущен'
       };
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при запуске:', error);
-      this.isActive = false;
 
       return {
         success: false,
@@ -184,6 +216,9 @@ class MevLoadBalancer {
       if (this.settings.notifyTelegram) {
         telegramBotService.sendSystemNotification('❌ MEV LoadBalancer остановлен');
       }
+
+      // Уведомляем React UI о процессах
+      this.notifyUIProcessesChanged();
 
       return {
         success: true,
@@ -473,6 +508,9 @@ class MevLoadBalancer {
 
       // Удаляем процесс из карты MEV процессов
       this.mevProcesses.delete(processId);
+
+      // Уведомляем React UI о процессах
+      this.notifyUIProcessesChanged();
 
       return {
         success: true,
@@ -850,6 +888,9 @@ class MevLoadBalancer {
 
         telegramBotService.sendSystemNotification(message);
       }
+
+      // Уведомляем React UI о процессах
+      this.notifyUIProcessesChanged();
 
       this.stats.successfulSignals++;
       return {
