@@ -80,6 +80,7 @@ class MevLoadBalancer {
   initIpcHandlers() {
     // Обработчик для логов процессов
     ipcMain.on('process-log', async (event, data) => {
+      console.log(`FROM IPC HANDLER`)
       this.handleProcessLog(data);
     });
 
