@@ -15,10 +15,10 @@ const telegramBotService = require('./telegramBotService');
 class MevLoadBalancer {
   constructor() {
     // Карта для отслеживания MEV процессов
-    // key = processId, value = { process, config, signals, status }
+    // key = processId, value = { process, config, startTime, lastActivity, signals: [], status }
     this.mevProcesses = new Map();
 
-    // Карта для отслеживания процессов new-token-release
+    // Карта для отслеживания процессов токен-релиза
     // key = processId, value = true
     this.tokenReleaseProcesses = new Map();
 
@@ -26,11 +26,9 @@ class MevLoadBalancer {
     // key = tokenAddress, value = [processIds]
     this.tokenProcessMap = new Map();
 
-    // Регулярные выражения для обнаружения MEV сигналов
-    this.mevSignalRegex = /\[PERFORM_MEV_ACTION\]\s*(\{.*\})/;
-    this.tokenInfoRegex = /Token:\s*([^\s,]+).*Address:\s*([^\s,]+)/;
-    this.poolInfoRegex = /Pool:\s*([^\s,]+)/;
-    this.volumeRegex = /Volume:\s*([^\s,]+)/;
+    // Регулярное выражение для обнаружения MEV сигналов
+    // Формат: [PERFORM_MEV_ACTION] TOKEN | POOL [END]
+    this.mevSignalRegex = /\[PERFORM_MEV_ACTION\]\s+([^\s|]+)\s+\|\s+([^\s\]]+)(?:\s+\[END\])?/;
 
     // Флаг активации балансировщика
     this.isActive = false;
@@ -531,73 +529,58 @@ class MevLoadBalancer {
   }
 
   /**
-   * Обрабатывает лог процесса для поиска MEV сигналов
-   * @param {Object} logData - Данные лога
+   * Обрабатывает логи процессов, ищет MEV сигналы
+   * @param {Object} logData - Данные лога (processId, message, level)
    */
   handleProcessLog(logData) {
-    if (!this.isActive) return;
-
     try {
-      const { processId, level, message } = logData;
+      if (!this.isActive) return;
 
-      // Проверяем, является ли процесс процессом выпуска токенов
-      if (message && message.includes('new-token-release') &&
-        (message.includes('starting') || message.includes('Starting'))) {
-        this.registerTokenReleaseProcess(processId);
+      const { processId, message, level } = logData;
+      if (!processId || !message) return;
+
+      // Пропускаем логи от MEV процессов, чтобы избежать бесконечного цикла
+      if (this.mevProcesses.has(processId)) {
+        // Обновляем время последней активности процесса
+        const processData = this.mevProcesses.get(processId);
+        if (processData) {
+          processData.lastActivity = Date.now();
+        }
+        return;
       }
 
-      // Проверяем, является ли процесс процессом выпуска токенов
+      // Обновляем время последней активности процесса токен-релиза
       if (this.isTokenReleaseProcess(processId)) {
-        // Проверяем лог на наличие MEV сигнала
-        const signal = this.parseLogForMevSignal(message);
+        console.log(`[MEV LoadBalancer] Лог от процесса токен-релиза ${processId}: ${message.substring(0, 100)}...`);
+      }
 
-        if (signal) {
-          console.log(`[MEV LoadBalancer] Обнаружен MEV сигнал в логе процесса ${processId}`);
-          this.handleMevSignal(signal, processId);
-        }
+      // Проверяем наличие MEV сигнала в логе
+      const signalData = this.parseLogForMevSignal(message);
+      if (signalData) {
+        console.log(`[MEV LoadBalancer] Обнаружен MEV сигнал в логе процесса ${processId}`);
+        this.handleMevSignal(signalData, processId);
       }
     } catch (error) {
-      console.error('[MEV LoadBalancer] Ошибка при обработке лога:', error);
+      console.error('[MEV LoadBalancer] Ошибка при обработке лога процесса:', error);
     }
   }
 
   /**
-   * Парсит лог и ищет сигнал для MEV действия
+   * Анализирует лог на наличие MEV сигнала
    * @param {string} logMessage - Сообщение лога
-   * @returns {Object|null} - Объект с данными сигнала или null, если сигнал не найден
+   * @returns {Object|null} - Объект с данными о сигнале или null, если сигнал не обнаружен
    */
   parseLogForMevSignal(logMessage) {
-    if (!logMessage) return null;
-
     try {
-      // Проверяем, содержит ли лог сигнал MEV
-      const signalMatch = logMessage.match(this.mevSignalRegex);
-
-      if (signalMatch) {
-        console.log('[MEV LoadBalancer] Обнаружен MEV сигнал в логе');
-
-        try {
-          // Пытаемся распарсить JSON из сигнала
-          const jsonData = JSON.parse(signalMatch[1]);
-
-          // Если JSON успешно распарсен, возвращаем его
-          return {
-            tokenAddress: jsonData.tokenAddress,
-            poolAddress: jsonData.poolAddress,
-            tokenSymbol: jsonData.tokenSymbol,
-            volume: jsonData.volume,
-            timestamp: jsonData.timestamp || Date.now(),
-            rawData: jsonData
-          };
-        } catch (jsonError) {
-          console.warn('[MEV LoadBalancer] Не удалось распарсить JSON из сигнала MEV:', jsonError);
-
-          // Если JSON не распарсился, пытаемся извлечь данные через регулярные выражения
-          return this.extractSignalDataFromText(logMessage);
-        }
+      // Проверяем, содержит ли сообщение MEV сигнал
+      if (!logMessage.includes('[PERFORM_MEV_ACTION]')) {
+        return null;
       }
 
-      return null;
+      console.log(`[MEV LoadBalancer] Обнаружен возможный MEV сигнал: ${logMessage}`);
+
+      // Извлекаем данные из сигнала
+      return this.extractSignalDataFromText(logMessage);
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при парсинге лога:', error);
       return null;
@@ -605,37 +588,39 @@ class MevLoadBalancer {
   }
 
   /**
-   * Извлекает данные сигнала из текста, если JSON не распарсился
-   * @param {string} logMessage - Сообщение лога
-   * @returns {Object|null} - Объект с данными сигнала или null, если данные не найдены
+   * Извлекает данные о токене и пуле из текста сигнала
+   * @param {string} logMessage - Сообщение с сигналом
+   * @returns {Object|null} - Объект с данными сигнала или null при ошибке парсинга
    */
   extractSignalDataFromText(logMessage) {
     try {
-      // Извлекаем информацию о токене
-      const tokenMatch = logMessage.match(this.tokenInfoRegex);
-      if (!tokenMatch) return null;
+      // Применяем регулярное выражение для поиска токена и пула
+      const match = this.mevSignalRegex.exec(logMessage);
 
-      const tokenSymbol = tokenMatch[1];
-      const tokenAddress = tokenMatch[2];
+      if (!match || match.length < 3) {
+        console.error('[MEV LoadBalancer] Не удалось извлечь данные из сигнала:', logMessage);
+        return null;
+      }
 
-      // Извлекаем информацию о пуле
-      const poolMatch = logMessage.match(this.poolInfoRegex);
-      const poolAddress = poolMatch ? poolMatch[1] : '';
+      // Получаем токен и пул из результатов регулярного выражения
+      const tokenAddress = match[1].trim();
+      const poolAddress = match[2].trim();
 
-      // Извлекаем информацию об объеме
-      const volumeMatch = logMessage.match(this.volumeRegex);
-      const volume = volumeMatch ? volumeMatch[1] : '';
+      if (!tokenAddress || !poolAddress) {
+        console.error('[MEV LoadBalancer] Не удалось извлечь токен или пул:', { tokenAddress, poolAddress });
+        return null;
+      }
 
+      console.log(`[MEV LoadBalancer] Извлечены данные: Токен=${tokenAddress}, Пул=${poolAddress}`);
+
+      // Возвращаем объект с данными сигнала
       return {
         tokenAddress,
         poolAddress,
-        tokenSymbol,
-        volume,
-        timestamp: Date.now(),
-        rawText: logMessage
+        timestamp: Date.now()
       };
     } catch (error) {
-      console.error('[MEV LoadBalancer] Ошибка при извлечении данных из текста:', error);
+      console.error('[MEV LoadBalancer] Ошибка при извлечении данных из сигнала:', error);
       return null;
     }
   }
@@ -714,8 +699,6 @@ class MevLoadBalancer {
         const newConfig = {
           tokenAddress,
           poolAddress, // используем пул из сигнала
-          volume: signal.volume || 'unknown',
-          tokenSymbol: signal.tokenSymbol,
           process_delay: processDelay  // Устанавливаем рассчитанную задержку
         };
 
@@ -745,9 +728,6 @@ class MevLoadBalancer {
 
         // Отправляем уведомление в Telegram о всех запущенных процессах
         if (this.settings.notifyTelegram) {
-          const tokenSymbol = signal.tokenSymbol || 'Неизвестный токен';
-          const volume = signal.volume || 'не указан';
-
           // Детальная информация о балансировке
           const loadBalanceInfo =
             `Всего ${totalProcesses} процессов\n` +
@@ -770,9 +750,8 @@ class MevLoadBalancer {
           }
 
           const message = `🚀 MEV сигнал обработан:\n` +
-            `Токен: ${tokenSymbol} (${tokenAddress})\n` +
-            `Пул сигнала: ${poolAddress}\n` +
-            `Объем: ${volume}\n\n` +
+            `Токен: ${tokenAddress}\n` +
+            `Пул сигнала: ${poolAddress}\n\n` +
             `⚖️ Балансировка нагрузки:\n${loadBalanceInfo}\n\n` +
             `🔄 Запущенные процессы:\n${newProcessInfo}${restartedProcessesInfo}`;
 
