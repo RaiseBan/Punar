@@ -4,7 +4,7 @@ const path = require("path");
 const { app } = require("electron");
 const axios = require("axios");
 const { updateConfigCollectionId } = require("./updateService");
-const { generateMevConfig } = require("./generateService");
+const { generateMevConfig, generateSimpleMevConfig } = require("./generateService");
 const { convertWindowsPathToWSL } = require("./fsHelper");  // Получаем доступ к Electron API
 
 // Карта для отслеживания процессов mev_subtask
@@ -300,13 +300,13 @@ async function spawnProcess(taskConfig, userSettings) {
         } else if (updatedTaskConfig.module_name === "Meteora DLMM") {
             moduleDir = "meteora";
         } else if (updatedTaskConfig.module_name === "MEV Module") {
-            if (updatedTaskConfig.globalStrategy === "check_migration"){
+            if (updatedTaskConfig.globalStrategy === "check_migration") {
                 moduleDir = "new-token-release"
-            }else if (updatedTaskConfig.globalStrategy === "jito_only"){
+            } else if (updatedTaskConfig.globalStrategy === "jito_only") {
                 moduleDir = "mev";
                 fileToExecute = "index.ts"
             }
-            
+
         } else if (updatedTaskConfig.module_name === "mev_subtask") {
             moduleDir = "mev_subtask";
             fileToExecute = "smb-onchain"
@@ -348,7 +348,7 @@ async function spawnProcess(taskConfig, userSettings) {
                 cwd: pythonScriptPath,
                 env: env
             });
-        }else if(moduleDir === "new-token-release"){
+        } else if (moduleDir === "new-token-release") {
             child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
                 stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
                 shell: true, // Используем shell для корректного выполнения
@@ -356,17 +356,41 @@ async function spawnProcess(taskConfig, userSettings) {
                 cwd: userSettings.scriptDirectory, // Устанавливаем рабочую директорию для процесса
                 env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath } // Передаем CONFIG_PATH в переменные окружения
             });
-        
+
         } else if (moduleDir === "mev_subtask") {
             console.log(`start mev_subtask processing`)
             // const pythonScriptPath = "C:\\Users\\user\\PycharmProjects\\fuckCloudFlare" // test
             const pythonScriptPath = path.join(userSettings.scriptDirectory, "mev") // test
-            let configFilePath = await generateMevConfig(
-                userSettings.mevBotDirectory,
-                // path.join(userSettings.scriptDirectory, "mev", "tokens"),
-                path.join(pythonScriptPath, "tokens"),
-                updatedTaskConfig
-            );
+
+            let configFilePath;
+
+            // Если есть прямые параметры meteoraPool и tokenAddress, используем generateSimpleMevConfig
+            if (updatedTaskConfig.tokenAddress && (updatedTaskConfig.meteoraPool || updatedTaskConfig.poolAddress)) {
+                console.log(`Используем прямые параметры для генерации конфига mev_subtask`);
+                const { generateSimpleMevConfig } = require('./generateService');
+
+                configFilePath = await generateSimpleMevConfig(
+                    userSettings.mevBotDirectory,
+                    updatedTaskConfig,
+                    updatedTaskConfig.tokenAddress,
+                    updatedTaskConfig.meteoraPool || updatedTaskConfig.poolAddress,
+                    updatedTaskConfig.pumpSwapPool
+                );
+            } else {
+                // Иначе используем старый способ через rowData
+                configFilePath = await generateMevConfig(
+                    userSettings.mevBotDirectory,
+                    // path.join(userSettings.scriptDirectory, "mev", "tokens"),
+                    path.join(pythonScriptPath, "tokens"),
+                    updatedTaskConfig
+                );
+            }
+
+            if (!configFilePath) {
+                console.error(`Не удалось создать конфигурационный файл для mev_subtask`);
+                return null;
+            }
+
             console.log(`toml file path: ${configFilePath}`);
             const wslPath = convertWindowsPathToWSL(configFilePath);
             console.log(`wslPath: ${wslPath}`);
