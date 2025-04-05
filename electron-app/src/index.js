@@ -7,6 +7,7 @@ const { initializeWindowHandlers } = require("./ipcHandlers/windowHandler");
 const { initializeApiHandlers } = require("./ipcHandlers/tensorApiHandler");
 const { spawnProcess, stopMevProcess } = require("./utils/spawnProcess");
 const telegramBotService = require('./services/telegramBotService');
+const mevLoadBalancer = require('./services/mevLoadBalancer');
 
 let mainWindow;
 
@@ -164,4 +165,87 @@ app.commandLine.appendSwitch("ignore-certificate-errors");
 ipcMain.handle('get-active-tasks', (event) => {
   // Получаем активные задачи из рендерера
   return mainWindow.webContents.executeJavaScript('window.store.getState().tasks.tasks');
+});
+
+// Добавляем обработчики команд для MEV LoadBalancer в телеграм бот
+telegramBotService.registerCommand('mev_status', async (chatId, args) => {
+  const status = mevLoadBalancer.getStatus();
+  const statusText =
+    `📊 Статус MEV LoadBalancer:\n\n` +
+    `Активен: ${status.isActive ? '✅' : '❌'}\n` +
+    `MEV процессов: ${status.processCount}\n` +
+    `Обработано сигналов: ${status.stats.processedSignals}\n` +
+    `Успешно: ${status.stats.successfulSignals}\n` +
+    `С ошибками: ${status.stats.failedSignals}\n` +
+    `Активных токенов: ${status.stats.activeTokens || 0}`;
+
+  return telegramBotService.sendMessage(chatId, statusText);
+});
+
+telegramBotService.registerCommand('mev_start', async (chatId, args) => {
+  const result = await mevLoadBalancer.start();
+
+  const responseText = result.success
+    ? `✅ MEV LoadBalancer успешно запущен`
+    : `❌ Ошибка при запуске MEV LoadBalancer: ${result.error || 'неизвестная ошибка'}`;
+
+  return telegramBotService.sendMessage(chatId, responseText);
+});
+
+telegramBotService.registerCommand('mev_stop', async (chatId, args) => {
+  const result = await mevLoadBalancer.stop();
+
+  const responseText = result.success
+    ? `✅ MEV LoadBalancer успешно остановлен`
+    : `❌ Ошибка при остановке MEV LoadBalancer: ${result.error || 'неизвестная ошибка'}`;
+
+  return telegramBotService.sendMessage(chatId, responseText);
+});
+
+telegramBotService.registerCommand('mev_processes', async (chatId, args) => {
+  const processes = mevLoadBalancer.getProcesses();
+
+  if (!processes || processes.length === 0) {
+    return telegramBotService.sendMessage(chatId, '📝 Нет активных MEV процессов');
+  }
+
+  let responseText = `📝 Активные MEV процессы (${processes.length}):\n\n`;
+
+  processes.forEach((process, index) => {
+    const config = process.config || {};
+    const tokenSymbol = config.tokenSymbol || 'Неизвестный токен';
+    const tokenAddress = config.tokenAddress || 'Нет адреса';
+    const status = process.status || 'неизвестен';
+
+    responseText += `${index + 1}. ID: ${process.id}\n` +
+      `   Токен: ${tokenSymbol} (${tokenAddress.slice(0, 8)}...)\n` +
+      `   Статус: ${status}\n` +
+      `   Активность: ${new Date(process.lastActivity).toLocaleTimeString()}\n\n`;
+  });
+
+  return telegramBotService.sendMessage(chatId, responseText);
+});
+
+telegramBotService.registerCommand('mev_stop_process', async (chatId, args) => {
+  if (!args || args.length === 0) {
+    return telegramBotService.sendMessage(chatId, '❌ Ошибка: укажите ID процесса для остановки');
+  }
+
+  const processId = args[0];
+  const result = await mevLoadBalancer.stopProcess(processId);
+
+  const responseText = result.success
+    ? `✅ MEV процесс ${processId} успешно остановлен`
+    : `❌ Ошибка при остановке MEV процесса: ${result.error || 'неизвестная ошибка'}`;
+
+  return telegramBotService.sendMessage(chatId, responseText);
+});
+
+// Добавляем обработчики IPC для интеграции с renderer process
+ipcMain.handle('mev-loadbalancer:get-status', async () => {
+  return mevLoadBalancer.getStatus();
+});
+
+ipcMain.handle('mev-loadbalancer:get-processes', async () => {
+  return mevLoadBalancer.getProcesses();
 });

@@ -18,6 +18,7 @@ export interface AppSettings {
     bloxroute_api_token?: string;
     thor_streamer_address?: string,
     thor_streamer_token?: string;
+    mevBotDirectory?: string;  // Добавляем поле для директории MEV бота
 }
 
 export { };
@@ -176,6 +177,57 @@ declare global {
 
             // Метод для открытия файла логов
             openLogFile: (taskId: number) => Promise<{ success: boolean, filePath?: string, error?: string }>;
+
+            // MEV LoadBalancer API
+            mevLoadBalancer: {
+                getStatus: () => Promise<{
+                    isActive: boolean;
+                    processCount: number;
+                    tokenReleaseProcessCount: number;
+                    stats: {
+                        processedSignals: number;
+                        successfulSignals: number;
+                        failedSignals: number;
+                        totalMevActions: number;
+                        totalMevProcesses: number;
+                        totalTokenReleaseProcesses: number;
+                        activeTokens: number;
+                    };
+                    settings: {
+                        maxProcessesPerToken: number;
+                        maxSignalsPerProcess: number;
+                        notifyTelegram: boolean;
+                        autoStopIdleTime: number;
+                    };
+                }>;
+                start: () => Promise<{ success: boolean; status: string; message: string; error?: string }>;
+                stop: () => Promise<{ success: boolean; status: string; message: string; error?: string }>;
+                getProcesses: () => Promise<Array<{
+                    id: string;
+                    config: any;
+                    status: string;
+                    signals: any[];
+                    startTime: number;
+                    lastActivity: number;
+                }>>;
+                stopProcess: (processId: string) => Promise<{
+                    success: boolean;
+                    processId: string;
+                    message?: string;
+                    error?: string;
+                }>;
+                updateSettings: (settings: {
+                    maxProcessesPerToken?: number;
+                    maxSignalsPerProcess?: number;
+                    notifyTelegram?: boolean;
+                    autoStopIdleTime?: number;
+                }) => Promise<{
+                    success: boolean;
+                    settings: any;
+                    message: string;
+                    error?: string;
+                }>;
+            };
         };
     }
 }

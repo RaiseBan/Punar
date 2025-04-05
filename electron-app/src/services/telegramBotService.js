@@ -28,6 +28,9 @@ class TelegramBotService {
 
         // Флаги для отслеживания процессов, чтобы избежать дублирования уведомлений
         this.processStatusTracking = new Map();
+
+        // Добавляем хранилище для пользовательских команд
+        this.customCommands = new Map();
     }
 
     async startStream() {
@@ -509,22 +512,69 @@ class TelegramBotService {
         }
 
         if (message.text.startsWith('/')) {
-            const command = message.text.split(' ')[0].substring(1);
+            const parts = message.text.split(' ');
+            const command = parts[0].substring(1);
+            const args = parts.slice(1);
+
+            // Проверяем наличие пользовательской команды
+            if (this.customCommands.has(command)) {
+                console.log(`[TG Bot] Вызов пользовательской команды: /${command}`);
+                try {
+                    this.customCommands.get(command)(chatId, args);
+                } catch (error) {
+                    console.error(`[TG Bot] Ошибка при выполнении команды /${command}:`, error);
+                    this.sendMessage(chatId, `❌ Ошибка выполнения команды /${command}: ${error.message}`);
+                }
+                return;
+            }
+
+            // Стандартные команды
             switch (command) {
                 case 'start':
                     this.sendMessage(chatId, 'Добро пожаловать в MEV бот! Вы будете получать уведомления о новых MEV возможностях.');
                     break;
                 case 'help':
-                    this.sendMessage(chatId, 'Команды:\n/start - Запустить бота\n/help - Показать это сообщение\n/tasks - Показать активные задачи\n/status <taskId> - Показать статус задачи');
+                    // Формируем список всех доступных команд
+                    let helpText = 'Доступные команды:\n';
+                    helpText += '/start - Запустить бота\n';
+                    helpText += '/help - Показать это сообщение\n';
+                    helpText += '/tasks - Показать активные задачи\n';
+                    helpText += '/status <taskId> - Показать статус задачи\n';
+
+                    // Добавляем пользовательские команды в справку
+                    if (this.customCommands.size > 0) {
+                        helpText += '\nДополнительные команды:\n';
+                        for (const cmd of this.customCommands.keys()) {
+                            helpText += `/${cmd} - `;
+
+                            // Описания для известных команд
+                            if (cmd === 'mev_status') {
+                                helpText += 'Статус MEV LoadBalancer';
+                            } else if (cmd === 'mev_start') {
+                                helpText += 'Запустить MEV LoadBalancer';
+                            } else if (cmd === 'mev_stop') {
+                                helpText += 'Остановить MEV LoadBalancer';
+                            } else if (cmd === 'mev_processes') {
+                                helpText += 'Список активных MEV процессов';
+                            } else if (cmd === 'mev_stop_process') {
+                                helpText += 'Остановить MEV процесс по ID';
+                            } else {
+                                helpText += 'Пользовательская команда';
+                            }
+
+                            helpText += '\n';
+                        }
+                    }
+
+                    this.sendMessage(chatId, helpText);
                     break;
                 case 'tasks':
                     this.handleTasksCommand(chatId);
                     break;
                 case 'status':
                     // Проверяем, есть ли параметр taskId
-                    const parts = message.text.split(' ');
-                    if (parts.length > 1) {
-                        const taskId = parts[1].trim();
+                    if (args.length > 0) {
+                        const taskId = args[0].trim();
                         if (taskId && !isNaN(parseInt(taskId))) {
                             this.sendMessage(chatId, `Получение статуса задачи #${taskId}...`);
                             this.sendTaskStatus(taskId);
@@ -535,6 +585,8 @@ class TelegramBotService {
                         this.sendMessage(chatId, 'Пожалуйста, укажите ID задачи, например: /status 123');
                     }
                     break;
+                default:
+                    this.sendMessage(chatId, `Неизвестная команда: /${command}. Введите /help для получения списка команд.`);
             }
             return;
         }
@@ -1162,6 +1214,18 @@ class TelegramBotService {
             console.error('Ошибка при получении информации о боте:', error);
             return null;
         }
+    }
+
+    // Добавляем метод регистрации пользовательских команд
+    registerCommand(command, handler) {
+        if (!command || typeof handler !== 'function') {
+            console.error('[TG Bot] Ошибка регистрации команды: неверные параметры');
+            return false;
+        }
+
+        console.log(`[TG Bot] Регистрация новой команды: /${command}`);
+        this.customCommands.set(command, handler);
+        return true;
     }
 }
 

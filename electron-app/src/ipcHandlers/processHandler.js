@@ -3,6 +3,7 @@ const treeKill = require("tree-kill");
 const { getSettings } = require("../utils/fsHelper");
 const { spawnProcess, stopMevProcess, forceKillWindowsProcess } = require("../utils/spawnProcess");
 const telegramBotService = require("../services/telegramBotService");
+const mevLoadBalancer = require("../services/mevLoadBalancer");
 const fs = require("fs");
 const path = require("path");
 const { app, shell } = require("electron");
@@ -170,6 +171,17 @@ function addLogToQueue(taskId, logMessage, mainWindow, logType = 'stdout', isImp
         } catch (error) {
             console.error(`Ошибка при отправке лога в UI для задачи ${taskId}:`, error.message);
         }
+    }
+
+    // Передаем лог в MEV LoadBalancer для анализа
+    try {
+        mevLoadBalancer.handleProcessLog({
+            processId: taskId,
+            message: logMessage,
+            level: logType === 'stderr' || logMessage.includes("[ERROR]") || logMessage.includes("error") ? 'error' : 'info'
+        });
+    } catch (error) {
+        console.error(`Ошибка при передаче лога в MEV LoadBalancer для задачи ${taskId}:`, error.message);
     }
 
     // Добавляем лог в очередь для записи в файл

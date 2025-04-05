@@ -44,12 +44,15 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
         return;
     }
 
+    // Используем переданный process_delay или значение по умолчанию (300 мс)
+    const processDelay = config.process_delay || 300;
+
     let mint_config_list = [
         {
             mint: tokenConfig.token_address,
             pump_pool_list: [pumpPairs],
             meteora_dlmm_pool_list: [],
-            process_delay: 300
+            process_delay: processDelay // Используем индивидуальную задержку для процесса
         }
     ]
 
@@ -130,10 +133,11 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
     }
 
     // Формируем имя файла и путь для сохранения
-    // Добавляем taskId в имя файла для уникальности
+    // Добавляем taskId и delay в имя файла для уникальности
     const taskId = config.taskId || Date.now();
     const poolSuffix = specificMeteoraPool ? `_updated_${Date.now()}` : '';
-    const tomlFileName = `${tokenConfig.token_address}_${value}_${config.useJito === true ? "jito" : "default"}_task${taskId}${poolSuffix}.toml`;
+    const delaySuffix = `_delay${processDelay}`;
+    const tomlFileName = `${tokenConfig.token_address}_${value}_${config.useJito === true ? "jito" : "default"}_task${taskId}${poolSuffix}${delaySuffix}.toml`;
     const tomlFilePath = path.join(targetDir, tomlFileName);
 
     try {

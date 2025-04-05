@@ -167,6 +167,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
         console.log(`Opening log file for task ${taskId}`);
         return ipcRenderer.invoke('open-log-file', { taskId });
     },
+
+    // MEV LoadBalancer API
+    mevLoadBalancer: {
+        getStatus: () => ipcRenderer.invoke('mev-loadbalancer:get-status'),
+        start: () => ipcRenderer.invoke('mev-loadbalancer:start'),
+        stop: () => ipcRenderer.invoke('mev-loadbalancer:stop'),
+        getProcesses: () => ipcRenderer.invoke('mev-loadbalancer:get-processes'),
+        stopProcess: (processId) => ipcRenderer.invoke('mev-loadbalancer:stop-process', processId),
+        updateSettings: (settings) => ipcRenderer.invoke('mev-loadbalancer:update-settings', settings)
+    },
 });
 
 ipcRenderer.on('telegram-get-tasks', () => {
