@@ -63,6 +63,10 @@ class MevLoadBalancer {
       // Инициализируем обработчики IPC
       this.initIpcHandlers();
 
+      // Активируем балансировщик автоматически при запуске
+      this.isActive = true;
+      console.log('[MEV LoadBalancer] Балансировщик автоматически активирован при запуске');
+
       console.log('[MEV LoadBalancer] Инициализация завершена');
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при инициализации:', error);
@@ -106,6 +110,11 @@ class MevLoadBalancer {
     // Добавляем обработчик события завершения процесса
     ipcMain.on('mev-process-exit', (event, { processId, exitCode, config }) => {
       this.handleProcessExit(processId, exitCode);
+    });
+
+    // Тестовый обработчик для проверки обработки сигналов
+    ipcMain.handle('mev-loadbalancer:test-signal', async (event, testSignal) => {
+      return this.testProcessSignal(testSignal);
     });
   }
 
@@ -530,10 +539,18 @@ class MevLoadBalancer {
    */
   handleProcessLog(logData) {
     try {
-      if (!this.isActive) return;
+      if (!this.isActive) {
+        console.log('[MEV LoadBalancer] Балансировщик неактивен, пропускаем лог');
+        return;
+      }
 
       const { processId, message, level } = logData;
-      if (!processId || !message) return;
+      if (!processId || !message) {
+        console.log('[MEV LoadBalancer] Получен некорректный лог без processId или message');
+        return;
+      }
+
+      console.log(`[MEV LoadBalancer] ПОЛУЧЕН ЛОГ от ${processId}: ${message.substring(0, 100)}...`);
 
       // Пропускаем логи от MEV процессов, чтобы избежать бесконечного цикла
       if (this.mevProcesses.has(processId)) {
@@ -542,7 +559,15 @@ class MevLoadBalancer {
         if (processData) {
           processData.lastActivity = Date.now();
         }
+        console.log(`[MEV LoadBalancer] Это лог от MEV процесса ${processId}, пропускаем`);
         return;
+      }
+
+      // Автоматически регистрируем процессы, которые отправляют логи, как процессы токен-релиза,
+      // если сообщение содержит 'new-token-release' или другие ключевые слова
+      if (message.includes('new-token-release') || message.includes('token-release') ||
+        message.includes('token detection') || message.includes('[TOKEN]')) {
+        this.registerTokenReleaseProcess(processId);
       }
 
       // Обновляем время последней активности процесса токен-релиза
@@ -551,10 +576,13 @@ class MevLoadBalancer {
       }
 
       // Проверяем наличие MEV сигнала в логе
+      console.log(`[MEV LoadBalancer] Проверяем наличие MEV сигнала в логе: ${message.substring(0, 100)}...`);
       const signalData = this.parseLogForMevSignal(message);
       if (signalData) {
-        console.log(`[MEV LoadBalancer] Обнаружен MEV сигнал в логе процесса ${processId}`);
+        console.log(`[MEV LoadBalancer] Обнаружен MEV сигнал в логе процесса ${processId}, данные:`, JSON.stringify(signalData));
         this.handleMevSignal(signalData, processId);
+      } else {
+        console.log(`[MEV LoadBalancer] MEV сигнал НЕ обнаружен в логе`);
       }
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при обработке лога процесса:', error);
@@ -569,7 +597,18 @@ class MevLoadBalancer {
   parseLogForMevSignal(logMessage) {
     try {
       // Проверяем, содержит ли сообщение MEV сигнал
+      console.log(`[MEV LoadBalancer] Проверка на наличие '[PERFORM_MEV_ACTION]' в логе`);
+
+      // Исследуем, какие строки вообще приходят
+      if (logMessage.includes('[')) {
+        const matches = logMessage.match(/\[(.*?)\]/g);
+        if (matches && matches.length > 0) {
+          console.log(`[MEV LoadBalancer] Найдены квадратные скобки в логе: ${JSON.stringify(matches)}`);
+        }
+      }
+
       if (!logMessage.includes('[PERFORM_MEV_ACTION]')) {
+        console.log(`[MEV LoadBalancer] Маркер '[PERFORM_MEV_ACTION]' не найден в логе`);
         return null;
       }
 
@@ -594,28 +633,71 @@ class MevLoadBalancer {
       const startMarker = '[PERFORM_MEV_ACTION]';
       const endMarker = '[END]';
 
-      const startIndex = logMessage.indexOf(startMarker);
-      const endIndex = logMessage.indexOf(endMarker);
+      console.log(`[MEV LoadBalancer] Ищем маркеры в сообщении, длина: ${logMessage.length}`);
+      console.log(`[MEV LoadBalancer] Полный текст сообщения: ${logMessage}`);
 
-      if (startIndex === -1 || endIndex === -1) {
-        console.error('[MEV LoadBalancer] Не найдены маркеры сигнала в сообщении:', logMessage);
+      // Проверяем наличие маркеров в любом порядке и положении
+      let startIndex = logMessage.indexOf(startMarker);
+      let endIndex = logMessage.indexOf(endMarker, startIndex);
+
+      // Если маркеры не найдены, пробуем искать без учёта регистра
+      if (startIndex === -1) {
+        console.log('[MEV LoadBalancer] Маркер PERFORM_MEV_ACTION не найден, пробуем искать без учёта регистра');
+        startIndex = logMessage.toLowerCase().indexOf(startMarker.toLowerCase());
+      }
+
+      if (endIndex === -1) {
+        console.log('[MEV LoadBalancer] Маркер END не найден, ищем до конца сообщения');
+        endIndex = logMessage.length;
+      }
+
+      console.log(`[MEV LoadBalancer] Индексы маркеров: startIndex=${startIndex}, endIndex=${endIndex}`);
+
+      if (startIndex === -1) {
+        console.error('[MEV LoadBalancer] Не найден маркер начала сигнала в сообщении');
         return null;
       }
 
-      // Извлекаем содержимое между маркерами и удаляем лишние пробелы
+      // Извлекаем содержимое и удаляем лишние пробелы
       const content = logMessage
         .substring(startIndex + startMarker.length, endIndex)
         .trim();
 
-      // Разделяем по символу |
-      const [tokenAddress, poolAddress] = content.split('|').map(s => s.trim());
+      console.log(`[MEV LoadBalancer] Извлечено содержимое: "${content}"`);
+
+      // Разделяем по символу | и обрабатываем случай, когда | нет
+      let tokenAddress, poolAddress;
+
+      if (content.includes('|')) {
+        const parts = content.split('|');
+        console.log(`[MEV LoadBalancer] Разделено по |: ${JSON.stringify(parts)}`);
+
+        [tokenAddress, poolAddress] = parts.map(s => s.trim());
+      } else {
+        // Пытаемся выделить адреса по шаблону: два длинных токена (30+ символов)
+        console.log('[MEV LoadBalancer] Символ | не найден, пытаемся выделить адреса по другому шаблону');
+
+        // Ищем все последовательности из букв и цифр длиной более 30 символов
+        const addresses = content.match(/[a-zA-Z0-9]{30,}/g);
+
+        if (addresses && addresses.length >= 2) {
+          tokenAddress = addresses[0];
+          poolAddress = addresses[1];
+          console.log(`[MEV LoadBalancer] Найдены адреса: ${tokenAddress}, ${poolAddress}`);
+        } else {
+          console.error('[MEV LoadBalancer] Не удалось выделить адреса из содержимого');
+          return null;
+        }
+      }
+
+      console.log(`[MEV LoadBalancer] После обработки: tokenAddress="${tokenAddress}", poolAddress="${poolAddress}"`);
 
       if (!tokenAddress || !poolAddress) {
         console.error('[MEV LoadBalancer] Не удалось извлечь токен или пул:', { tokenAddress, poolAddress });
         return null;
       }
 
-      console.log(`[MEV LoadBalancer] Извлечены данные: Токен=${tokenAddress}, Пул=${poolAddress}`);
+      console.log(`[MEV LoadBalancer] Успешно извлечены данные: Токен=${tokenAddress}, Пул=${poolAddress}`);
 
       return {
         tokenAddress,
@@ -623,7 +705,7 @@ class MevLoadBalancer {
         timestamp: Date.now()
       };
     } catch (error) {
-      console.error('[MEV LoadBalancer] Ошибка при извлечении данных из сигнала:', error);
+      console.error('[MEV LoadBalancer] Ошибка при извлечении данных из сигнала:', error, error.stack);
       return null;
     }
   }
@@ -635,7 +717,10 @@ class MevLoadBalancer {
    */
   async handleMevSignal(signal, sourceProcessId) {
     try {
-      console.log(`[MEV LoadBalancer] Обработка MEV сигнала от процесса ${sourceProcessId}`);
+      console.log(`[MEV LoadBalancer] =====================================================`);
+      console.log(`[MEV LoadBalancer] НАЧАЛО ОБРАБОТКИ MEV сигнала от процесса ${sourceProcessId}`);
+      console.log(`[MEV LoadBalancer] Данные сигнала:`, JSON.stringify(signal));
+      console.log(`[MEV LoadBalancer] =====================================================`);
 
       // Увеличиваем счетчик обработанных сигналов
       this.stats.processedSignals++;
@@ -781,6 +866,7 @@ class MevLoadBalancer {
       this.stats.failedSignals++;
     }
   }
+
 }
 
 // Создаем и экспортируем экземпляр MEV LoadBalancer
