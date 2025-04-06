@@ -577,7 +577,7 @@ class TelegramBotService {
                         helpText += '/start - Запустить бота\n';
                         helpText += '/help - Показать это сообщение\n';
                         helpText += '/tasks - Показать активные задачи\n';
-                        helpText += '/status <taskId> - Показать статус задачи\n';
+                        helpText += '/status [taskId] - Показать статус задачи\n';
 
                         // Добавляем пользовательские команды в справку
                         if (this.customCommands.size > 0) {
@@ -586,9 +586,9 @@ class TelegramBotService {
                             helpText += '/mev_start - Запустить MEV LoadBalancer\n';
                             helpText += '/mev_stop - Остановить MEV LoadBalancer\n';
                             helpText += '/mev_processes - Список активных MEV процессов\n';
-                            helpText += '/mev_stop_process <processId> - Остановить MEV процесс по ID\n';
-                            helpText += '/mev_logs <processId> [lineCount] - Просмотр логов MEV процесса\n';
-                            helpText += '/mev_clear_logs <processId> - Очистить логи MEV процесса\n';
+                            helpText += '/mev_stop_process [processId] - Остановить MEV процесс по ID\n';
+                            helpText += '/mev_logs [processId] [lineCount] - Просмотр логов MEV процесса\n';
+                            helpText += '/mev_clear_logs [processId] - Очистить логи MEV процесса\n';
 
                             // Добавляем остальные пользовательские команды
                             const mevCommands = ['mev_status', 'mev_start', 'mev_stop', 'mev_processes', 'mev_stop_process', 'mev_logs', 'mev_clear_logs'];
@@ -622,7 +622,9 @@ class TelegramBotService {
                                 try {
                                     const chunkMessage = (i > 0 ? `Продолжение (${i + 1}/${chunks.length}):\n` : '') + chunks[i];
                                     console.log(`[TG Bot] Отправка части ${i + 1}/${chunks.length} длиной ${chunkMessage.length} символов`);
-                                    await this.sendMessage(chatId, chunkMessage);
+
+                                    // Отправляем в текстовом формате для избежания проблем с HTML-тегами
+                                    await this.sendMessage(chatId, chunkMessage, { parseMode: '' });
 
                                     // Небольшая задержка между отправкой сообщений, чтобы не превысить лимиты API
                                     if (i < chunks.length - 1) {
@@ -633,7 +635,8 @@ class TelegramBotService {
                                 }
                             }
                         } else {
-                            await this.sendMessage(chatId, helpText);
+                            // Отправляем в текстовом формате для избежания проблем с HTML-тегами
+                            await this.sendMessage(chatId, helpText, { parseMode: '' });
                         }
                         break;
                     case 'tasks':
