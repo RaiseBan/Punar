@@ -253,6 +253,9 @@ class TelegramBotService {
         if (!this.botToken) return;
 
         try {
+            // Логируем отправляемый текст для отладки
+            console.log(`[TG Bot] Отправка сообщения в чат ${chatId}, длина: ${text?.length || 0} символов`);
+
             const response = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
                 chat_id: chatId,
                 text,
@@ -261,7 +264,37 @@ class TelegramBotService {
             });
             return response.data;
         } catch (error) {
-            console.error('Ошибка отправки сообщения Telegram:', error.message);
+            // Расширенное логирование ошибок
+            console.error(`[TG Bot] Ошибка отправки сообщения Telegram: ${error.message}`);
+
+            if (error.response) {
+                console.error(`[TG Bot] Статус ошибки: ${error.response.status}`);
+                console.error(`[TG Bot] Ответ API Telegram: ${JSON.stringify(error.response.data)}`);
+
+                // Если проблема с форматированием HTML
+                if (error.response.data?.description?.includes('can\'t parse entities')) {
+                    // Пробуем отправить без HTML-форматирования
+                    try {
+                        console.log('[TG Bot] Пробуем отправить сообщение без HTML-разметки');
+                        const plainResponse = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
+                            chat_id: chatId,
+                            text,
+                            parse_mode: '',  // Без форматирования
+                            reply_markup: options.replyMarkup
+                        });
+                        console.log('[TG Bot] Сообщение успешно отправлено без HTML-разметки');
+                        return plainResponse.data;
+                    } catch (plainError) {
+                        console.error(`[TG Bot] Не удалось отправить даже без HTML-разметки: ${plainError.message}`);
+                    }
+                }
+            }
+
+            // Записываем текст сообщения, вызвавшего ошибку (первые 200 символов для понимания)
+            if (text) {
+                const preview = text.substring(0, 200) + (text.length > 200 ? '...' : '');
+                console.error(`[TG Bot] Содержимое сообщения, вызвавшего ошибку (первые 200 символов):\n${preview}`);
+            }
         }
     }
 
