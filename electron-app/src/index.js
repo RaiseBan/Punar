@@ -157,9 +157,6 @@ app.whenReady().then(() => {
   ipcMain.handle('telegram-tasks-response', async (event, tasks) => {
     return tasks;
   });
-
-  // Инициализация TelegramBot для работы с MEV LoadBalancer
-  telegramBotService.initMevCommands(mevLoadBalancer);
 });
 
 app.commandLine.appendSwitch("ignore-certificate-errors");
@@ -219,10 +216,8 @@ telegramBotService.registerCommand('mev_processes', async (chatId, args) => {
     const tokenSymbol = config.tokenSymbol || 'Неизвестный токен';
     const tokenAddress = config.tokenAddress || 'Нет адреса';
     const status = process.status || 'неизвестен';
-    const pid = process.pid || 'Неизвестен';
 
     responseText += `${index + 1}. ID: ${process.id}\n` +
-      `   PID: ${pid}\n` +
       `   Токен: ${tokenSymbol} (${tokenAddress.slice(0, 8)}...)\n` +
       `   Статус: ${status}\n` +
       `   Активность: ${new Date(process.lastActivity).toLocaleTimeString()}\n\n`;
@@ -254,10 +249,6 @@ ipcMain.handle('mev-loadbalancer:get-status', async () => {
 ipcMain.handle('mev-loadbalancer:get-processes', async () => {
   return mevLoadBalancer.getProcesses();
 });
-
-// Инициализация дополнительных команд MEV в Telegram для работы с логами
-telegramBotService.initMevCommands(mevLoadBalancer);
-
 // Тестирование обработки сигнала MEV при запуске приложения
 // Раскомментируйте этот блок кода для тестирования
 /*
