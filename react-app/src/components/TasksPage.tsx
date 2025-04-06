@@ -20,95 +20,95 @@ export default function TasksPage() {
     }, [dispatch]);
 
     // Функция для получения MEV процессов напрямую и логирования информации
-    const checkMevProcesses = useCallback(async () => {
-        if (window.electronAPI?.mevLoadBalancer) {
-            try {
-                console.log('🔍 Проверка MEV процессов напрямую через API...');
-                const processes = await window.electronAPI.mevLoadBalancer.getProcesses();
-                console.log(`📊 Получено ${processes.length} MEV процессов напрямую:`, processes);
+    // const checkMevProcesses = useCallback(async () => {
+    //     if (window.electronAPI?.mevLoadBalancer) {
+    //         try {
+    //             console.log('🔍 Проверка MEV процессов напрямую через API...');
+    //             const processes = await window.electronAPI.mevLoadBalancer.getProcesses();
+    //             console.log(`📊 Получено ${processes.length} MEV процессов напрямую:`, processes);
 
-                if (processes.length > 0) {
-                    console.log('📝 Детальная информация о MEV процессах:');
-                    processes.forEach((proc, idx) => {
-                        console.log(`MEV процесс #${idx + 1}:`, {
-                            id: proc.id,
-                            status: proc.status,
-                            token: proc.config?.tokenAddress,
-                            meteora: proc.config?.meteoraPool,
-                            startTime: new Date(proc.startTime).toLocaleTimeString()
-                        });
-                    });
+    //             if (processes.length > 0) {
+    //                 console.log('📝 Детальная информация о MEV процессах:');
+    //                 processes.forEach((proc, idx) => {
+    //                     console.log(`MEV процесс #${idx + 1}:`, {
+    //                         id: proc.id,
+    //                         status: proc.status,
+    //                         token: proc.config?.tokenAddress,
+    //                         meteora: proc.config?.meteoraPool,
+    //                         startTime: new Date(proc.startTime).toLocaleTimeString()
+    //                     });
+    //                 });
 
-                    // Проверяем, есть ли эти процессы в Redux
-                    console.log('🔄 Сверка с процессами в Redux:');
-                    const mevTasksInRedux = tasks.filter(task =>
-                        task.moduleName === 'mev_subtask' ||
-                        task.config?.module_name === 'mev_subtask');
+    //                 // Проверяем, есть ли эти процессы в Redux
+    //                 console.log('🔄 Сверка с процессами в Redux:');
+    //                 const mevTasksInRedux = tasks.filter(task =>
+    //                     task.moduleName === 'mev_subtask' ||
+    //                     task.config?.module_name === 'mev_subtask');
 
-                    console.log(`📋 В Redux найдено ${mevTasksInRedux.length} MEV задач`);
-                    if (mevTasksInRedux.length > 0) {
-                        mevTasksInRedux.forEach(task => {
-                            console.log(`Redux MEV задача:`, {
-                                id: task.id,
-                                name: task.name,
-                                module: task.moduleName,
-                                status: task.status
-                            });
-                        });
-                    }
+    //                 console.log(`📋 В Redux найдено ${mevTasksInRedux.length} MEV задач`);
+    //                 if (mevTasksInRedux.length > 0) {
+    //                     mevTasksInRedux.forEach(task => {
+    //                         console.log(`Redux MEV задача:`, {
+    //                             id: task.id,
+    //                             name: task.name,
+    //                             module: task.moduleName,
+    //                             status: task.status
+    //                         });
+    //                     });
+    //                 }
 
-                    // Добавляем каждый активный процесс в Redux, если его еще нет
-                    const activeProcesses = processes.filter(p => p.status === 'running');
-                    activeProcesses.forEach(process => {
-                        const numericId = Date.now() + Math.floor(Math.random() * 1000);
-                        const existingTask = tasks.find(t =>
-                            t.id === numericId ||
-                            (t.config?.originalId && t.config.originalId === process.id));
+    //                 // Добавляем каждый активный процесс в Redux, если его еще нет
+    //                 const activeProcesses = processes.filter(p => p.status === 'running');
+    //                 activeProcesses.forEach(process => {
+    //                     const numericId = Date.now() + Math.floor(Math.random() * 1000);
+    //                     const existingTask = tasks.find(t =>
+    //                         t.id === numericId ||
+    //                         (t.config?.originalId && t.config.originalId === process.id));
 
-                        if (!existingTask) {
-                            console.log(`➕ Добавляем MEV процесс ${process.id} в Redux с ID=${numericId}`);
+    //                     if (!existingTask) {
+    //                         console.log(`➕ Добавляем MEV процесс ${process.id} в Redux с ID=${numericId}`);
 
-                            dispatch(addOrUpdateTask({
-                                taskId: numericId,
-                                config: {
-                                    ...process.config,
-                                    originalId: process.id,
-                                    module_name: process.config?.module_name || "mev_subtask",
-                                    task_name: process.config?.task_name || `MEV Process ${process.id}`
-                                }
-                            }));
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error('❌ Ошибка при получении MEV процессов:', error);
-            }
-        }
-    }, [dispatch, tasks]);
+    //                         dispatch(addOrUpdateTask({
+    //                             taskId: numericId,
+    //                             config: {
+    //                                 ...process.config,
+    //                                 originalId: process.id,
+    //                                 module_name: process.config?.module_name || "mev_subtask",
+    //                                 task_name: process.config?.task_name || `MEV Process ${process.id}`
+    //                             }
+    //                         }));
+    //                     }
+    //                 });
+    //             }
+    //         } catch (error) {
+    //             console.error('❌ Ошибка при получении MEV процессов:', error);
+    //         }
+    //     }
+    // }, [dispatch, tasks]);
 
     // Запускаем периодическую проверку MEV процессов
-    useEffect(() => {
-        console.log('🚀 TasksPage: компонент смонтирован, запускаем периодическую проверку MEV процессов');
+    // useEffect(() => {
+    //     console.log('🚀 TasksPage: компонент смонтирован, запускаем периодическую проверку MEV процессов');
 
-        // Проверяем процессы сразу при монтировании
-        checkMevProcesses();
+    //     // Проверяем процессы сразу при монтировании
+    //     checkMevProcesses();
 
-        // Устанавливаем интервал для периодической проверки (каждые 5 секунд)
-        const intervalId = setInterval(() => {
-            console.log('⏰ Периодическая проверка MEV процессов...');
-            checkMevProcesses();
-        }, 5000);
+    //     // Устанавливаем интервал для периодической проверки (каждые 5 секунд)
+    //     const intervalId = setInterval(() => {
+    //         console.log('⏰ Периодическая проверка MEV процессов...');
+    //         checkMevProcesses();
+    //     }, 5000);
 
-        // Логируем текущие задачи при монтировании и изменении
-        console.log(`📋 Текущие задачи в Redux (${tasks.length}):`,
-            tasks.map(t => ({ id: t.id, name: t.name, module: t.moduleName, status: t.status })));
+    //     // Логируем текущие задачи при монтировании и изменении
+    //     console.log(`📋 Текущие задачи в Redux (${tasks.length}):`,
+    //         tasks.map(t => ({ id: t.id, name: t.name, module: t.moduleName, status: t.status })));
 
-        // Очищаем интервал при размонтировании компонента
-        return () => {
-            console.log('TasksPage: компонент размонтирован, очистка интервала');
-            clearInterval(intervalId);
-        };
-    }, [checkMevProcesses, tasks.length]);
+    //     // Очищаем интервал при размонтировании компонента
+    //     return () => {
+    //         console.log('TasksPage: компонент размонтирован, очистка интервала');
+    //         clearInterval(intervalId);
+    //     };
+    // }, [checkMevProcesses, tasks.length]);
 
     return (
         <Box sx={{ p: 2 }}>
