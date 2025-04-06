@@ -294,6 +294,7 @@ class MevLoadBalancer {
     for (const [processId, processData] of this.mevProcesses.entries()) {
       processes.push({
         id: processId,
+        pid: processData.pid || 'Неизвестен',
         config: processData.config,
         status: processData.status,
         startTime: processData.startTime,
@@ -337,6 +338,8 @@ class MevLoadBalancer {
       // Генерируем уникальный ID для процесса
       const processId = `mev_${Math.random().toString(36).substring(2, 11)}_${Date.now().toString().substring(8, 13)}`;
 
+      console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Создание нового процесса с ID: ${processId}`); // ПОТОМ УБРАТЬ
+
       // Формируем конфигурацию процесса
       const processConfig = {
         ...config,
@@ -348,9 +351,11 @@ class MevLoadBalancer {
       };
 
       console.log(`[MEV LoadBalancer] Запуск MEV процесса с конфигурацией:`, JSON.stringify(processConfig));
+      console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Конфигурация процесса: ${JSON.stringify(processConfig, null, 2)}`); // ПОТОМ УБРАТЬ
 
       // Путь к директории с MEV ботом
       const botDir = this.userSettings?.botDir || path.join(app.getPath('userData'), 'mev_bot');
+      console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Директория бота: ${botDir}`); // ПОТОМ УБРАТЬ
 
       // Создаем TOML конфиг для MEV процесса
       const configPath = await generateSimpleMevConfig(
@@ -367,8 +372,10 @@ class MevLoadBalancer {
       }
 
       console.log(`[MEV LoadBalancer] Создан конфигурационный файл: ${configPath}`);
+      console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Создан конфигурационный файл по пути: ${configPath}`); // ПОТОМ УБРАТЬ
 
       // Отправка процесса на запуск
+      console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Запускаем процесс через spawnProcess...`); // ПОТОМ УБРАТЬ
       const childProcess = await spawnProcess(processConfig, this.userSettings);
 
       if (!childProcess) {
@@ -377,6 +384,7 @@ class MevLoadBalancer {
       }
 
       console.log(`[MEV LoadBalancer] Успешно запущен MEV процесс ${processId}, PID: ${childProcess.pid}`);
+      console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Процесс создан с PID: ${childProcess.pid}`); // ПОТОМ УБРАТЬ
 
       // Сохраняем информацию о процессе
       this.mevProcesses.set(processId, {
@@ -396,10 +404,16 @@ class MevLoadBalancer {
       this.tokenProcessMap.get(tokenAddress).push(processId);
       console.log(`[MEV LoadBalancer] Процесс ${processId} добавлен в карту токенов для ${tokenAddress}`);
 
+      // Логируем первоначальную запись в файл логов
+      this.writeProcessLog(processId, `Процесс запущен. PID: ${childProcess.pid}. Конфигурация: Token=${tokenAddress}, MeteoraPoll=${meteoraPool}${pumpSwapPool ? ', PumpSwapPool=' + pumpSwapPool : ''}`, 'info');
+
+      console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Логи инициализированы, путь к файлу логов: ${path.join(LOG_DIR, `mev_${processId}.log`)}`); // ПОТОМ УБРАТЬ
+
       // Отправляем уведомление в Telegram
       if (this.settings.notifyTelegram) {
         const message = `🚀 Запущен MEV процесс\n` +
           `ID: ${processId}\n` +
+          `PID: ${childProcess.pid}\n` +
           `Токен: ${tokenAddress}\n` +
           `Пул Meteora: ${meteoraPool}\n` +
           (pumpSwapPool ? `Пул PumpSwap: ${pumpSwapPool}\n` : '') +
@@ -411,6 +425,7 @@ class MevLoadBalancer {
       return processId;
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при запуске MEV процесса:', error);
+      console.error(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Детали ошибки: ${error.stack}`); // ПОТОМ УБРАТЬ
 
       if (this.settings.notifyTelegram) {
         telegramBotService.sendSystemNotification(`❌ Ошибка запуска MEV процесса: ${error.message}`);

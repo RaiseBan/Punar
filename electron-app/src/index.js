@@ -219,8 +219,10 @@ telegramBotService.registerCommand('mev_processes', async (chatId, args) => {
     const tokenSymbol = config.tokenSymbol || 'Неизвестный токен';
     const tokenAddress = config.tokenAddress || 'Нет адреса';
     const status = process.status || 'неизвестен';
+    const pid = process.pid || 'Неизвестен';
 
     responseText += `${index + 1}. ID: ${process.id}\n` +
+      `   PID: ${pid}\n` +
       `   Токен: ${tokenSymbol} (${tokenAddress.slice(0, 8)}...)\n` +
       `   Статус: ${status}\n` +
       `   Активность: ${new Date(process.lastActivity).toLocaleTimeString()}\n\n`;

@@ -1350,18 +1350,36 @@ class TelegramBotService {
 
             const processId = args[0];
             const lineCount = args[1] ? parseInt(args[1]) : 20; // По умолчанию 20 строк
+            const logDir = path.join(app.getPath('userData'), 'logs');
+            const logFile = path.join(logDir, `mev_${processId}.log`);
 
             try {
+                console.log(`[TelegramBot] (ПОТОМ УБРАТЬ) Попытка чтения логов процесса ${processId} из файла: ${logFile}`); // ПОТОМ УБРАТЬ
+
+                if (!fs.existsSync(logDir)) {
+                    fs.mkdirSync(logDir, { recursive: true });
+                    console.log(`[TelegramBot] (ПОТОМ УБРАТЬ) Директория логов не существовала, создана: ${logDir}`); // ПОТОМ УБРАТЬ
+                    return this.sendMessage(chatId, `ℹ️ Логи для процесса ${processId} не найдены. Директория логов: ${logDir}`);
+                }
+
+                if (!fs.existsSync(logFile)) {
+                    console.log(`[TelegramBot] (ПОТОМ УБРАТЬ) Файл логов не найден: ${logFile}`); // ПОТОМ УБРАТЬ
+                    return this.sendMessage(chatId, `ℹ️ Логи для процесса ${processId} не найдены. Проверьте ID процесса.\nПуть к файлу логов: ${logFile}`);
+                }
+
                 const logs = await mevLoadBalancer.getProcessLogs(processId, lineCount);
 
                 if (logs.length === 0) {
-                    return this.sendMessage(chatId, `ℹ️ Логи для процесса ${processId} не найдены`);
+                    console.log(`[TelegramBot] (ПОТОМ УБРАТЬ) Файл логов существует, но пуст: ${logFile}`); // ПОТОМ УБРАТЬ
+                    return this.sendMessage(chatId, `ℹ️ Файл логов существует, но не содержит записей: ${logFile}`);
                 }
 
                 const logText = logs.join('\n');
 
                 // Разбиваем на части, если слишком длинное сообщение
                 const chunks = this.splitIntoChunks(logText, 4000);
+
+                console.log(`[TelegramBot] (ПОТОМ УБРАТЬ) Отправка ${chunks.length} блоков логов`); // ПОТОМ УБРАТЬ
 
                 // Отправляем каждую часть отдельным сообщением
                 for (const [index, chunk] of chunks.entries()) {
@@ -1375,7 +1393,8 @@ class TelegramBotService {
                 return true;
             } catch (error) {
                 console.error('[TelegramBot] Ошибка при чтении логов:', error);
-                return this.sendMessage(chatId, `❌ Ошибка чтения логов: ${error.message}`);
+                console.error(`[TelegramBot] (ПОТОМ УБРАТЬ) Подробности ошибки: ${error.stack}`); // ПОТОМ УБРАТЬ
+                return this.sendMessage(chatId, `❌ Ошибка чтения логов: ${error.message}\nПуть к файлу: ${logFile}`);
             }
         });
 
