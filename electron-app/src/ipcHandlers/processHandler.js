@@ -655,6 +655,35 @@ function initializeProcessHandlers(ipcMain, mainWindow) {
                                 } else {
                                     // Другая ошибка, логируем
                                     console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, err);
+
+                                    // Дополнительная попытка: проверяем, существует ли процесс и если да, пробуем второй раз убить
+                                    setTimeout(() => {
+                                        try {
+                                            const { execSync } = require('child_process');
+                                            // Проверяем, существует ли процесс с таким PID
+                                            const checkCmd = process.platform === 'win32'
+                                                ? `tasklist /fi "PID eq ${pid}" /fo csv /nh`
+                                                : `ps -p ${pid} -o pid=`;
+
+                                            const output = execSync(checkCmd, { encoding: 'utf8' });
+                                            const processExists = output.includes(pid.toString());
+
+                                            if (processExists) {
+                                                console.log(`ПРОЦЕСС: Процесс ${taskId} с PID ${pid} все еще существует, выполняем последнюю попытку завершения...`);
+                                                // Последняя попытка убить процесс - используем системную команду
+                                                const killCmd = process.platform === 'win32'
+                                                    ? `taskkill /F /PID ${pid} /T`
+                                                    : `kill -9 ${pid}`;
+
+                                                execSync(killCmd, { encoding: 'utf8' });
+                                                console.log(`ПРОЦЕСС: Выполнена системная команда для завершения процесса ${taskId}`);
+                                            } else {
+                                                console.log(`ПРОЦЕСС: Процесс ${taskId} с PID ${pid} не обнаружен в системе, считаем его завершенным`);
+                                            }
+                                        } catch (execError) {
+                                            console.error(`ПРОЦЕСС: Ошибка при последней попытке завершения процесса ${taskId}:`, execError);
+                                        }
+                                    }, 500); // Даем 500 мс на первую попытку завершения
                                 }
                             }
                         });

@@ -49,6 +49,9 @@ app.whenReady().then(() => {
   initializeWindowHandlers(ipcMain, mainWindow);
   initializeApiHandlers(ipcMain);
 
+  // Инициализируем команды MEV для Telegram бота
+  telegramBotService.initMevCommands(mevLoadBalancer);
+
   // Регистрируем обработчик события telegram-notify-pool-change после создания телеграм-бота
   // (после строки с initializeApiHandlers)
 

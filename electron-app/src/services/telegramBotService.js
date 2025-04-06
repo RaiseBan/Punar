@@ -501,7 +501,7 @@ class TelegramBotService {
     }
 
     // Функция для обработки входящих сообщений
-    handleIncomingMessage(chatId, message) {
+    async handleIncomingMessage(chatId, message) {
         // Проверка авторизации: теперь всегда проверяем, есть ли chatId в списке разрешенных
         const chatIdStr = chatId.toString();
         if (!this.chatIds.includes(chatIdStr)) {
@@ -555,18 +555,37 @@ class TelegramBotService {
                         // Добавляем остальные пользовательские команды
                         const mevCommands = ['mev_status', 'mev_start', 'mev_stop', 'mev_processes', 'mev_stop_process', 'mev_logs', 'mev_clear_logs'];
 
-                        helpText += '\nДругие пользовательские команды:\n';
+                        let otherCommands = '';
                         for (const cmd of this.customCommands.keys()) {
                             // Пропускаем команды MEV, которые мы уже добавили выше
                             if (mevCommands.includes(cmd)) continue;
 
-                            helpText += `/${cmd} - `;
-                            helpText += 'Пользовательская команда';
-                            helpText += '\n';
+                            otherCommands += `/${cmd} - `;
+                            otherCommands += 'Пользовательская команда';
+                            otherCommands += '\n';
+                        }
+
+                        // Добавляем другие команды только если они есть
+                        if (otherCommands) {
+                            helpText += '\nДругие пользовательские команды:\n';
+                            helpText += otherCommands;
                         }
                     }
 
-                    this.sendMessage(chatId, helpText);
+                    // Проверяем, что сообщение не превышает максимальную длину
+                    if (helpText.length > 4000) {
+                        console.log('[TG Bot] Сообщение /help слишком длинное, разбиваем на части');
+                        const chunks = this.splitIntoChunks(helpText);
+                        for (let i = 0; i < chunks.length; i++) {
+                            try {
+                                await this.sendMessage(chatId, (i > 0 ? `Продолжение (${i + 1}/${chunks.length}):\n` : '') + chunks[i]);
+                            } catch (error) {
+                                console.error(`[TG Bot] Ошибка при отправке части справки: ${error.message}`);
+                            }
+                        }
+                    } else {
+                        this.sendMessage(chatId, helpText);
+                    }
                     break;
                 case 'tasks':
                     this.handleTasksCommand(chatId);
