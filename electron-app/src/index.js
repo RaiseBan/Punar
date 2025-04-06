@@ -157,6 +157,9 @@ app.whenReady().then(() => {
   ipcMain.handle('telegram-tasks-response', async (event, tasks) => {
     return tasks;
   });
+
+  // Инициализация TelegramBot для работы с MEV LoadBalancer
+  telegramBotService.initMevCommands(mevLoadBalancer);
 });
 
 app.commandLine.appendSwitch("ignore-certificate-errors");
@@ -249,6 +252,10 @@ ipcMain.handle('mev-loadbalancer:get-status', async () => {
 ipcMain.handle('mev-loadbalancer:get-processes', async () => {
   return mevLoadBalancer.getProcesses();
 });
+
+// Инициализация дополнительных команд MEV в Telegram для работы с логами
+telegramBotService.initMevCommands(mevLoadBalancer);
+
 // Тестирование обработки сигнала MEV при запуске приложения
 // Раскомментируйте этот блок кода для тестирования
 /*

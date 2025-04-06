@@ -14,6 +14,14 @@ const { getSettings } = require('../utils/fsHelper');
 const telegramBotService = require('./telegramBotService');
 const fs = require('fs');
 
+// Директория для хранения логов
+const LOG_DIR = path.join(app.getPath('userData'), 'logs');
+
+// Создаем директорию для логов, если она не существует
+if (!fs.existsSync(LOG_DIR)) {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
 class MevLoadBalancer {
   constructor() {
     // Карта для отслеживания MEV процессов
@@ -39,7 +47,9 @@ class MevLoadBalancer {
     this.settings = {
       maxRequestsPerSecond: 170,  // Максимальное количество запросов в секунду
       notifyTelegram: true,        // Отправлять уведомления в Telegram
-      autoStopIdleTime: 30 * 60 * 1000  // 30 минут неактивности до остановки процесса
+      autoStopIdleTime: 30 * 60 * 1000,  // 30 минут неактивности до остановки процесса
+      logEnabled: true,            // Включить запись логов в файлы
+      maxLogSizeInMB: 10           // Максимальный размер файла логов в МБ
     };
 
     // Настройки пользователя
@@ -535,6 +545,77 @@ class MevLoadBalancer {
   }
 
   /**
+   * Записывает лог процесса в файл
+   * @param {string} processId - ID процесса
+   * @param {string} message - Сообщение лога
+   * @param {string} level - Уровень лога (info, error, warning)
+   */
+  writeProcessLog(processId, message, level = 'info') {
+    try {
+      // Если логирование отключено, выходим
+      if (!this.settings.logEnabled) return;
+
+      // Формируем имя файла логов
+      const logFile = path.join(LOG_DIR, `mev_${processId}.log`);
+
+      // Проверяем размер файла логов, чтобы предотвратить слишком большие файлы
+      if (fs.existsSync(logFile)) {
+        const stats = fs.statSync(logFile);
+        const fileSizeInMB = stats.size / (1024 * 1024);
+
+        // Если файл больше установленного лимита, обрезаем его или создаем новый
+        if (fileSizeInMB > this.settings.maxLogSizeInMB) {
+          // Создаем архивный файл с временной меткой
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '_');
+          const archiveFile = path.join(LOG_DIR, `mev_${processId}_${timestamp}.log.bak`);
+
+          // Перемещаем текущий файл в архив
+          fs.renameSync(logFile, archiveFile);
+
+          // Запись о ротации логов
+          const rotationMessage = `[${new Date().toISOString()}] [SYSTEM] Предыдущий файл логов превысил ${this.settings.maxLogSizeInMB}MB и был перемещен в ${archiveFile}\n`;
+          fs.writeFileSync(logFile, rotationMessage, 'utf8');
+        }
+      }
+
+      // Формируем строку лога с временной меткой
+      const timestamp = new Date().toISOString();
+      const logEntry = `[${timestamp}] [${level.toUpperCase()}] ${message}\n`;
+
+      // Записываем в файл
+      fs.appendFileSync(logFile, logEntry);
+    } catch (error) {
+      console.error(`[MEV LoadBalancer] Ошибка при записи лога процесса ${processId}:`, error);
+    }
+  }
+
+  /**
+   * Возвращает последние N строк логов процесса
+   * @param {string} processId - ID процесса
+   * @param {number} lineCount - Количество строк для чтения (по умолчанию 100)
+   * @returns {Promise<string[]>} Массив строк логов
+   */
+  async getProcessLogs(processId, lineCount = 100) {
+    try {
+      const logFile = path.join(LOG_DIR, `mev_${processId}.log`);
+
+      if (!fs.existsSync(logFile)) {
+        return [];
+      }
+
+      // Читаем весь файл и разбиваем на строки
+      const content = fs.readFileSync(logFile, 'utf8');
+      const lines = content.split('\n').filter(line => line.trim());
+
+      // Возвращаем последние N строк
+      return lines.slice(-lineCount);
+    } catch (error) {
+      console.error(`[MEV LoadBalancer] Ошибка при чтении логов процесса ${processId}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Обрабатывает логи процессов, ищет MEV сигналы
    * @param {Object} logData - Данные лога (processId, message, level)
    */
@@ -550,12 +631,28 @@ class MevLoadBalancer {
         return;
       }
 
+      // Записываем лог в файл
+      this.writeProcessLog(processId, message, level || 'info');
+
       // Пропускаем логи от MEV процессов, чтобы избежать бесконечного цикла
       if (this.mevProcesses.has(processId)) {
         // Обновляем время последней активности процесса
         const processData = this.mevProcesses.get(processId);
         if (processData) {
           processData.lastActivity = Date.now();
+
+          // Если в логе есть ошибка, записываем её отдельно и уведомляем
+          if (level === 'error' || message.includes('ERROR') || message.includes('error')) {
+            this.writeProcessLog(processId, message, 'error');
+
+            // Уведомляем об ошибке в Telegram, если это важно
+            if (this.settings.notifyTelegram &&
+              (message.includes('CRITICAL') || message.includes('FATAL'))) {
+              telegramBotService.sendSystemNotification(
+                `⚠️ Ошибка в процессе ${processId}:\n${message.substring(0, 200)}...`
+              );
+            }
+          }
         }
         return;
       }

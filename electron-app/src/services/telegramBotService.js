@@ -31,6 +31,9 @@ class TelegramBotService {
 
         // Добавляем хранилище для пользовательских команд
         this.customCommands = new Map();
+
+        // Добавляем хранилище для команд
+        this.commandHandlers = {};
     }
 
     async startStream() {
@@ -1227,6 +1230,239 @@ class TelegramBotService {
         this.customCommands.set(command, handler);
         return true;
     }
+
+    // Добавление команд для работы с логами MEV процессов
+
+    /**
+     * Разбивает текст на части подходящего размера для Telegram
+     * @param {string} text - Исходный текст
+     * @param {number} maxLength - Максимальная длина части
+     * @returns {string[]} Массив частей текста
+     */
+    splitIntoChunks(text, maxLength = 4000) {
+        const chunks = [];
+        let currentChunk = '';
+
+        const lines = text.split('\n');
+
+        for (const line of lines) {
+            if ((currentChunk + line + '\n').length > maxLength) {
+                chunks.push(currentChunk);
+                currentChunk = line + '\n';
+            } else {
+                currentChunk += line + '\n';
+            }
+        }
+
+        if (currentChunk) {
+            chunks.push(currentChunk);
+        }
+
+        return chunks;
+    }
+
+    /**
+     * Инициализирует команды для работы с MEV процессами и логами
+     * @param {Object} mevLoadBalancer - Экземпляр MevLoadBalancer
+     */
+    initMevCommands(mevLoadBalancer) {
+        // Команда для получения списка всех MEV процессов
+        this.registerCommand('mev_processes', async (chatId) => {
+            try {
+                const processes = mevLoadBalancer.getProcesses();
+
+                if (processes.length === 0) {
+                    return this.sendMessage(chatId, '🔍 Активные MEV процессы не найдены');
+                }
+
+                let message = '📋 Список MEV процессов:\n\n';
+
+                processes.forEach((proc, index) => {
+                    const runTime = Math.floor((Date.now() - proc.startTime) / 1000);
+                    const status = proc.status === 'running' ? '🟢' : '🔴';
+
+                    message += `${status} #${index + 1}. ID: \`${proc.id}\`\n`;
+                    message += `   Токен: \`${proc.tokenAddress || 'н/д'}\`\n`;
+                    message += `   Пул: \`${proc.meteoraPool || 'н/д'}\`\n`;
+                    message += `   Время работы: ${formatSeconds(runTime)}\n\n`;
+                });
+
+                return this.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+            } catch (error) {
+                console.error('[TelegramBot] Ошибка при получении списка процессов:', error);
+                return this.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+            }
+        });
+
+        // Команда для остановки MEV процесса
+        this.registerCommand('mev_stop_process', async (chatId, args) => {
+            if (!args || args.length === 0) {
+                return this.sendMessage(chatId, '❌ Ошибка: укажите ID процесса для остановки');
+            }
+
+            const processId = args[0];
+
+            try {
+                const result = await mevLoadBalancer.stopProcess(processId);
+
+                if (result.success) {
+                    return this.sendMessage(chatId, `✅ MEV процесс ${processId} успешно остановлен`);
+                } else {
+                    return this.sendMessage(chatId, `❌ Ошибка при остановке процесса: ${result.error}`);
+                }
+            } catch (error) {
+                return this.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+            }
+        });
+
+        // Команда для получения статуса MEV балансировщика
+        this.registerCommand('mev_status', async (chatId) => {
+            try {
+                const status = mevLoadBalancer.getStatus();
+
+                let message = '📊 Статус MEV LoadBalancer:\n\n';
+                message += `Активен: ${status.isActive ? '✅' : '❌'}\n`;
+                message += `Активных процессов: ${status.processCount}\n`;
+                message += `Отслеживаемых токенов: ${status.activeTokens}\n\n`;
+
+                message += '📈 Статистика:\n';
+                message += `Обработано сигналов: ${status.stats.processedSignals}\n`;
+                message += `Успешных сигналов: ${status.stats.successfulSignals}\n`;
+                message += `Неудачных сигналов: ${status.stats.failedSignals}\n`;
+                message += `Всего MEV действий: ${status.stats.totalMevActions}\n\n`;
+
+                message += '⚙️ Настройки:\n';
+                message += `Макс. запросов/сек: ${status.settings.maxRequestsPerSecond}\n`;
+                message += `Уведомления: ${status.settings.notifyTelegram ? 'Включены' : 'Отключены'}\n`;
+                message += `Логирование: ${status.settings.logEnabled ? 'Включено' : 'Отключено'}\n`;
+
+                return this.sendMessage(chatId, message);
+            } catch (error) {
+                return this.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+            }
+        });
+
+        // Команда для просмотра логов MEV процесса
+        this.registerCommand('mev_logs', async (chatId, args) => {
+            if (!args || args.length === 0) {
+                return this.sendMessage(chatId, '❌ Ошибка: укажите ID процесса для просмотра логов');
+            }
+
+            const processId = args[0];
+            const lineCount = args[1] ? parseInt(args[1]) : 20; // По умолчанию 20 строк
+
+            try {
+                const logs = await mevLoadBalancer.getProcessLogs(processId, lineCount);
+
+                if (logs.length === 0) {
+                    return this.sendMessage(chatId, `ℹ️ Логи для процесса ${processId} не найдены`);
+                }
+
+                const logText = logs.join('\n');
+
+                // Разбиваем на части, если слишком длинное сообщение
+                const chunks = this.splitIntoChunks(logText, 4000);
+
+                // Отправляем каждую часть отдельным сообщением
+                for (const [index, chunk] of chunks.entries()) {
+                    await this.sendMessage(
+                        chatId,
+                        `📋 Логи для процесса ${processId} (${index + 1}/${chunks.length}):\n\n${chunk}`,
+                        { disable_web_page_preview: true }
+                    );
+                }
+
+                return true;
+            } catch (error) {
+                console.error('[TelegramBot] Ошибка при чтении логов:', error);
+                return this.sendMessage(chatId, `❌ Ошибка чтения логов: ${error.message}`);
+            }
+        });
+
+        // Команда для очистки логов MEV процесса
+        this.registerCommand('mev_clear_logs', async (chatId, args) => {
+            if (!args || args.length === 0) {
+                return this.sendMessage(chatId, '❌ Ошибка: укажите ID процесса для очистки логов');
+            }
+
+            const processId = args[0];
+            const logFile = path.join(app.getPath('userData'), 'logs', `mev_${processId}.log`);
+
+            try {
+                if (!fs.existsSync(logFile)) {
+                    return this.sendMessage(chatId, `ℹ️ Файл логов для процесса ${processId} не найден`);
+                }
+
+                // Очищаем файл логов
+                fs.writeFileSync(logFile, `[${new Date().toISOString()}] [SYSTEM] Логи очищены командой пользователя\n`, 'utf8');
+                return this.sendMessage(chatId, `✅ Логи процесса ${processId} успешно очищены`);
+            } catch (error) {
+                console.error('[TelegramBot] Ошибка при очистке логов:', error);
+                return this.sendMessage(chatId, `❌ Ошибка при очистке логов: ${error.message}`);
+            }
+        });
+
+        // Команда для остановки всех MEV процессов для указанного токена
+        this.registerCommand('mev_stop_token', async (chatId, args) => {
+            if (!args || args.length === 0) {
+                return this.sendMessage(chatId, '❌ Ошибка: укажите адрес токена для остановки всех связанных процессов');
+            }
+
+            const tokenAddress = args[0];
+
+            try {
+                const processes = mevLoadBalancer.getProcessesForToken(tokenAddress);
+
+                if (processes.length === 0) {
+                    return this.sendMessage(chatId, `ℹ️ Активные процессы для токена ${tokenAddress} не найдены`);
+                }
+
+                let stoppedCount = 0;
+                const errors = [];
+
+                // Останавливаем все процессы для токена
+                for (const processId of processes) {
+                    try {
+                        const result = await mevLoadBalancer.stopProcess(processId);
+                        if (result.success) {
+                            stoppedCount++;
+                        } else {
+                            errors.push(`${processId}: ${result.error}`);
+                        }
+                    } catch (processError) {
+                        errors.push(`${processId}: ${processError.message}`);
+                    }
+                }
+
+                let message = `✅ Остановлено процессов: ${stoppedCount}/${processes.length} для токена ${tokenAddress}`;
+
+                if (errors.length > 0) {
+                    message += `\n\n❌ Ошибки при остановке:\n${errors.join('\n')}`;
+                }
+
+                return this.sendMessage(chatId, message);
+            } catch (error) {
+                return this.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+            }
+        });
+
+        console.log('[TelegramBot] Команды MEV успешно инициализированы');
+    }
+}
+
+/**
+ * Форматирует количество секунд в читаемый формат времени
+ * @param {number} seconds - Количество секунд
+ * @returns {string} Форматированное время
+ */
+function formatSeconds(seconds) {
+    if (seconds < 60) return `${seconds}с`;
+
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}м ${seconds % 60}с`;
+
+    const hours = Math.floor(minutes / 60);
+    return `${hours}ч ${minutes % 60}м ${seconds % 60}с`;
 }
 
 // Создаем и экспортируем экземпляр
