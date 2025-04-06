@@ -12,6 +12,7 @@ const { generateMevConfig } = require('../utils/generateService');
 const { getSettings } = require('../utils/fsHelper');
 const telegramBotService = require('./telegramBotService');
 const fs = require('fs');
+const { sleep } = require('../utils/solanaUtils');
 
 class MevLoadBalancer {
   constructor() {
@@ -362,7 +363,7 @@ class MevLoadBalancer {
       childProcess.stdout.on("data", (data) => {
         const output = data.toString().trim();
         if (output) {
-          // Временно выводим в консоль для отладки (ПОТОМ УБРАТЬ)
+          // // Временно выводим в консоль для отладки (ПОТОМ УБРАТЬ)
           console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) STDOUT: ${output}`);
 
           // Записываем лог в файл
@@ -374,8 +375,8 @@ class MevLoadBalancer {
       childProcess.stderr.on("data", (data) => {
         const output = data.toString().trim();
         if (output) {
-          // Временно выводим в консоль для отладки (ПОТОМ УБРАТЬ)
-          console.error(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) STDERR: ${output}`);
+          // // Временно выводим в консоль для отладки (ПОТОМ УБРАТЬ)
+          // console.error(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) STDERR: ${output}`);
 
           // Записываем лог в файл
           this.writeProcessLog(processId, output, 'error');
@@ -858,6 +859,7 @@ class MevLoadBalancer {
         // Останавливаем текущий процесс
         console.log(`[MEV LoadBalancer] Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
         await this.stopProcess(processId);
+        await sleep(10000);
       }
 
       // Шаг 5: Базовая конфигурация для нового MEV процесса
