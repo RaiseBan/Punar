@@ -23,10 +23,6 @@ class MevLoadBalancer {
     // key = processId, value = true
     this.tokenReleaseProcesses = new Map();
 
-    // Карта для отслеживания связи между токенами и процессами
-    // key = tokenAddress, value = [processIds]
-    this.tokenProcessMap = new Map();
-
     // Флаг активации балансировщика
     this.isActive = false;
 
@@ -307,8 +303,8 @@ class MevLoadBalancer {
   }
 
   /**
-   * Возвращает список всех MEV процессов
-   * @returns {Array} - Массив информации о процессах
+   * Получает информацию о процессах
+   * @returns {Array} - Список MEV процессов
    */
   getProcesses() {
     const processes = [];
@@ -316,26 +312,18 @@ class MevLoadBalancer {
     for (const [processId, processData] of this.mevProcesses.entries()) {
       processes.push({
         id: processId,
-        config: processData.config,
+        pid: processData.process ? processData.process.pid : null,
+        tokenAddress: processData.config ? processData.config.tokenAddress : 'unknown',
+        meteoraPool: processData.config ? processData.config.meteoraPool : null,
+        pumpSwapPool: processData.config ? processData.config.pumpSwapPool : null,
         status: processData.status,
-        signals: processData.signals || [],
         startTime: processData.startTime,
-        lastActivity: processData.lastActivity || processData.startTime
+        lastActivity: processData.lastActivity,
+        signals: processData.signals ? processData.signals.length : 0
       });
     }
 
     return processes;
-  }
-
-  /**
-   * Возвращает список MEV процессов для указанного токена
-   * @param {string} tokenAddress - Адрес токена
-   * @returns {Array} - Массив идентификаторов процессов
-   */
-  getProcessesForToken(tokenAddress) {
-    if (!tokenAddress) return [];
-
-    return this.tokenProcessMap.get(tokenAddress) || [];
   }
 
   /**
@@ -433,34 +421,8 @@ class MevLoadBalancer {
         config: processConfig
       });
 
-      // Добавляем процесс в карту токенов
-      if (!this.tokenProcessMap.has(tokenAddress)) {
-        this.tokenProcessMap.set(tokenAddress, []);
-      }
-
-      this.tokenProcessMap.get(tokenAddress).push(processId);
-      console.log(`[MEV LoadBalancer] Процесс ${processId} добавлен в карту токенов для ${tokenAddress}`);
-
       // Создаем числовой ID для React UI
       const numericTaskId = Date.now() + Math.floor(Math.random() * 1000);
-
-      // Если отслеживаем в окне, отправляем уведомление о запуске процесса
-      try {
-        const { BrowserWindow } = require('electron');
-        const mainWindow = BrowserWindow.getAllWindows()[0];
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("process-started", {
-            taskId: numericTaskId,
-            config: {
-              ...processConfig,
-              originalId: processId // Сохраняем оригинальный ID для отладки
-            }
-          });
-          console.log(`[MEV LoadBalancer] Отправлено уведомление о запуске процесса ${processId} с числовым ID ${numericTaskId} в окно приложения`);
-        }
-      } catch (notifyError) {
-        console.error(`[MEV LoadBalancer] Ошибка при отправке уведомления:`, notifyError);
-      }
 
       this.stats.totalProcesses++;
 
@@ -489,34 +451,45 @@ class MevLoadBalancer {
       const processData = this.mevProcesses.get(processId);
 
       console.log(`[MEV LoadBalancer] Остановка MEV процесса ${processId}`);
+      console.log(`STOP::: ${JSON.stringify(processData, null, 2)}`)
 
-      // Останавливаем процесс
-      await stopMevProcess(processId, processData.process);
+      // Останавливаем процесс и ждем результат
+      const stopResult = await new Promise((resolve) => {
+        // Вызываем stopMevProcess и ожидаем завершения
+        const stopPromise = stopMevProcess(processId, processData.process);
 
-      // Удаляем процесс из карты токенов
-      if (processData.config && processData.config.tokenAddress) {
-        const tokenAddress = processData.config.tokenAddress;
+        // Устанавливаем таймаут на 10 секунд
+        const timeoutId = setTimeout(() => {
+          resolve({ success: false, error: 'Тайм-аут при остановке процесса' });
+        }, 10000);
 
-        if (this.tokenProcessMap.has(tokenAddress)) {
-          const tokenProcesses = this.tokenProcessMap.get(tokenAddress);
+        // Ожидаем завершения остановки
+        stopPromise
+          .then(result => {
+            clearTimeout(timeoutId);
+            resolve({ success: true, result });
+          })
+          .catch(error => {
+            clearTimeout(timeoutId);
+            resolve({ success: false, error: error.message || 'Неизвестная ошибка при остановке процесса' });
+          });
+      });
 
-          const index = tokenProcesses.indexOf(processId);
-
-          if (index !== -1) {
-            tokenProcesses.splice(index, 1);
-
-            if (tokenProcesses.length === 0) {
-              this.tokenProcessMap.delete(tokenAddress);
-            }
-          }
-        }
+      // Если процесс не удалось остановить, возвращаем ошибку
+      if (!stopResult.success) {
+        console.error(`[MEV LoadBalancer] Ошибка при остановке процесса ${processId}: ${stopResult.error}`);
+        return {
+          success: false,
+          error: stopResult.error,
+          processId
+        };
       }
+
+      // Если процесс успешно остановлен, удаляем его из списка процессов
+      console.log(`[MEV LoadBalancer] Процесс ${processId} успешно остановлен, удаляем из карты процессов`);
 
       // Удаляем процесс из карты MEV процессов
       this.mevProcesses.delete(processId);
-
-      // Уведомляем React UI о процессах
-      this.notifyUIProcessesChanged();
 
       return {
         success: true,
@@ -550,25 +523,6 @@ class MevLoadBalancer {
     processData.status = 'stopped';
     processData.exitCode = code;
     processData.exitTime = Date.now();
-
-    // Удаляем процесс из карты токенов
-    if (processData.config && processData.config.tokenAddress) {
-      const tokenAddress = processData.config.tokenAddress;
-
-      if (this.tokenProcessMap.has(tokenAddress)) {
-        const tokenProcesses = this.tokenProcessMap.get(tokenAddress);
-
-        const index = tokenProcesses.indexOf(processId);
-
-        if (index !== -1) {
-          tokenProcesses.splice(index, 1);
-
-          if (tokenProcesses.length === 0) {
-            this.tokenProcessMap.delete(tokenAddress);
-          }
-        }
-      }
-    }
 
     // Удаляем процесс из карты MEV процессов через 5 секунд (чтобы успеть получить логи)
     setTimeout(() => {
@@ -1002,7 +956,7 @@ class MevLoadBalancer {
         console.log(`[MEV LoadBalancer] Всего процессов: ${processes.length}`);
         console.log(`[MEV LoadBalancer] Детали процессов:`);
         processes.forEach((p, idx) => {
-          console.log(`[MEV LoadBalancer] Процесс #${idx + 1}: ID=${p.id}, статус=${p.status}, token=${p.config?.tokenAddress || 'N/A'}`);
+          console.log(`[MEV LoadBalancer] Процесс #${idx + 1}: ID=${p.id}, статус=${p.status}, token=${p.tokenAddress || 'N/A'}`);
         });
 
         // Фильтруем только активные процессы
@@ -1033,10 +987,10 @@ class MevLoadBalancer {
 
           // Создаем конфиг для отправки
           const configToSend = {
-            ...process.config,
+            ...process,
             originalId: process.id, // Сохраняем оригинальный ID для отладки
-            module_name: process.config?.module_name || "mev_subtask",
-            task_name: process.config?.task_name || `MEV Process ${process.id}`
+            module_name: process.module_name || "mev_subtask",
+            task_name: process.task_name || `MEV Process ${process.id}`
           };
 
           console.log(`[MEV LoadBalancer] Отправка события process-started: taskId=${numericTaskId}`);

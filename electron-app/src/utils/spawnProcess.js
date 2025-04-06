@@ -182,44 +182,59 @@ async function findBestMeteoraPool(tokenAddress, currentPairAddress) {
 function stopMevProcess(taskId) {
     if (!taskId) {
         console.warn(`МОНИТОРИНГ: Вызов stopMevProcess без taskId!`);
-        return;
+        return Promise.resolve({ success: false, error: 'Не указан ID процесса' });
     }
 
-    // Получаем PID из карты отслеживания и пытаемся завершить процесс
-    const pid = wslProcessTracking.getProcessPid(taskId);
-    if (pid) {
-        console.log(`МОНИТОРИНГ: Останавливаем WSL-процесс для задачи ${taskId}, PID: ${pid}`);
-        forceKillWindowsProcess(pid)
-            .then(success => {
-                console.log(`МОНИТОРИНГ: Результат остановки процесса ${taskId}: ${success ? 'успешно' : 'не удалось'}`);
-            })
-            .catch(err => {
-                console.error(`МОНИТОРИНГ: Ошибка при остановке процесса ${taskId}:`, err);
-            });
-    }
+    return new Promise(async (resolve) => {
+        try {
+            // Получаем PID из карты отслеживания и пытаемся завершить процесс
+            const pid = wslProcessTracking.getProcessPid(taskId);
+            if (pid) {
+                console.log(`МОНИТОРИНГ: Останавливаем WSL-процесс для задачи ${taskId}, PID: ${pid}`);
+                try {
+                    const killResult = await forceKillWindowsProcess(pid);
+                    console.log(`МОНИТОРИНГ: Результат остановки процесса ${taskId}: ${killResult ? 'успешно' : 'не удалось'}`);
 
-    // Удаляем процесс из отслеживания WSL
-    wslProcessTracking.removeProcess(taskId);
+                    if (!killResult) {
+                        resolve({ success: false, error: `Не удалось завершить процесс с PID ${pid}` });
+                        return;
+                    }
+                } catch (err) {
+                    console.error(`МОНИТОРИНГ: Ошибка при остановке процесса ${taskId}:`, err);
+                    resolve({ success: false, error: err.message || 'Ошибка при завершении процесса' });
+                    return;
+                }
+            } else {
+                console.log(`МОНИТОРИНГ: Для задачи ${taskId} не найден PID в wslProcessTracking`);
+            }
 
-    if (mevSubtaskProcesses.has(taskId)) {
-        const processInfo = mevSubtaskProcesses.get(taskId);
-        console.log(`МОНИТОРИНГ: Останавливаем мониторинг для задачи ${taskId}...`);
+            // Удаляем процесс из отслеживания WSL
+            wslProcessTracking.removeProcess(taskId);
 
-        // Останавливаем мониторинг
-        if (processInfo.intervalId) {
-            console.log(`МОНИТОРИНГ: Остановка интервала проверки для задачи ${taskId}`);
-            clearInterval(processInfo.intervalId);
+            if (mevSubtaskProcesses.has(taskId)) {
+                const processInfo = mevSubtaskProcesses.get(taskId);
+                console.log(`МОНИТОРИНГ: Останавливаем мониторинг для задачи ${taskId}...`);
+
+                // Останавливаем мониторинг
+                if (processInfo.intervalId) {
+                    console.log(`МОНИТОРИНГ: Остановка интервала проверки для задачи ${taskId}`);
+                    clearInterval(processInfo.intervalId);
+                }
+
+                // Удаляем из карты отслеживания
+                mevSubtaskProcesses.delete(taskId);
+
+                console.log(`МОНИТОРИНГ: Мониторинг для задачи ${taskId} остановлен полностью`);
+                resolve({ success: true, message: `Процесс ${taskId} успешно остановлен` });
+            } else {
+                console.log(`МОНИТОРИНГ: Процесс ${taskId} не найден в карте мониторинга, но останавливаем по PID`);
+                resolve({ success: true, message: `Процесс ${taskId} остановлен по PID` });
+            }
+        } catch (error) {
+            console.error(`МОНИТОРИНГ: Общая ошибка при остановке процесса ${taskId}:`, error);
+            resolve({ success: false, error: error.message || 'Неизвестная ошибка при остановке процесса' });
         }
-
-        // Удаляем из карты отслеживания
-        mevSubtaskProcesses.delete(taskId);
-
-        console.log(`МОНИТОРИНГ: Мониторинг для задачи ${taskId} остановлен полностью`);
-        return true;
-    } else {
-        console.log(`МОНИТОРИНГ: Процесс ${taskId} не найден в карте мониторинга`);
-        return false;
-    }
+    });
 }
 
 // Добавим логирование входных параметров для диагностики

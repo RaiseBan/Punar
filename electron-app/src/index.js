@@ -232,6 +232,7 @@ telegramBotService.registerCommand('mev_stop_process', async (chatId, args) => {
   }
 
   const processId = args[0];
+  console.log()
   const result = await mevLoadBalancer.stopProcess(processId);
 
   const responseText = result.success
@@ -249,6 +250,14 @@ ipcMain.handle('mev-loadbalancer:get-status', async () => {
 ipcMain.handle('mev-loadbalancer:get-processes', async () => {
   return mevLoadBalancer.getProcesses();
 });
+
+// Регистрация команды /mev_help
+telegramBotService.registerCommand('mev_help', (chatId) => {
+  // Вызываем стандартную команду help
+  const helpMessage = { text: '/help' };
+  telegramBotService.handleIncomingMessage(chatId, helpMessage);
+});
+
 // Тестирование обработки сигнала MEV при запуске приложения
 // Раскомментируйте этот блок кода для тестирования
 /*
