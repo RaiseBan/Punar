@@ -439,6 +439,31 @@ class MevLoadBalancer {
       console.log(`[MEV LoadBalancer] Остановка MEV процесса ${processId}`);
       console.log(`STOP::: ${JSON.stringify(processData, null, 2)}`)
 
+      // Перед остановкой удаляем все слушатели событий
+      if (processData.process) {
+        try {
+          // Удаляем слушатели stdout
+          if (processData.process.stdout) {
+            console.log(`[MEV LoadBalancer] Удаляем слушатели stdout для процесса ${processId}`);
+            processData.process.stdout.removeAllListeners('data');
+          }
+
+          // Удаляем слушатели stderr
+          if (processData.process.stderr) {
+            console.log(`[MEV LoadBalancer] Удаляем слушатели stderr для процесса ${processId}`);
+            processData.process.stderr.removeAllListeners('data');
+          }
+
+          // Удаляем слушатели exit
+          console.log(`[MEV LoadBalancer] Удаляем слушатели exit для процесса ${processId}`);
+          processData.process.removeAllListeners('exit');
+
+          console.log(`[MEV LoadBalancer] Все слушатели событий удалены для процесса ${processId}`);
+        } catch (listenerError) {
+          console.error(`[MEV LoadBalancer] Ошибка при удалении слушателей для процесса ${processId}:`, listenerError);
+        }
+      }
+
       // Останавливаем процесс и ждем результат
       const stopResult = await new Promise((resolve) => {
         // Вызываем stopMevProcess и ожидаем завершения
@@ -474,7 +499,7 @@ class MevLoadBalancer {
       // Если процесс успешно остановлен, удаляем его из списка процессов
       console.log(`[MEV LoadBalancer] Процесс ${processId} успешно остановлен, удаляем из карты процессов`);
 
-      // Удаляем процесс из карты MEV процессов
+      // Удаляем процесс из карты MEV процессов сразу
       this.mevProcesses.delete(processId);
 
       return {
@@ -505,16 +530,36 @@ class MevLoadBalancer {
 
     const processData = this.mevProcesses.get(processId);
 
+    // Удаляем все слушатели событий
+    if (processData.process) {
+      try {
+        // Удаляем слушатели stdout
+        if (processData.process.stdout) {
+          processData.process.stdout.removeAllListeners('data');
+        }
+
+        // Удаляем слушатели stderr
+        if (processData.process.stderr) {
+          processData.process.stderr.removeAllListeners('data');
+        }
+
+        // Удаляем слушатели exit
+        processData.process.removeAllListeners('exit');
+
+        console.log(`[MEV LoadBalancer] Все слушатели событий удалены для процесса ${processId} после завершения`);
+      } catch (listenerError) {
+        console.error(`[MEV LoadBalancer] Ошибка при удалении слушателей для процесса ${processId}:`, listenerError);
+      }
+    }
+
     // Обновляем статус процесса
     processData.status = 'stopped';
     processData.exitCode = code;
     processData.exitTime = Date.now();
 
-    // Удаляем процесс из карты MEV процессов через 5 секунд (чтобы успеть получить логи)
-    setTimeout(() => {
-      this.mevProcesses.delete(processId);
-      console.log(`[MEV LoadBalancer] Информация о MEV процессе ${processId} удалена`);
-    }, 5000);
+    // Удаляем процесс из карты MEV процессов сразу
+    this.mevProcesses.delete(processId);
+    console.log(`[MEV LoadBalancer] Информация о MEV процессе ${processId} удалена`);
   }
 
   /**
