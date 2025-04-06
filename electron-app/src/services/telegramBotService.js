@@ -500,114 +500,138 @@ class TelegramBotService {
         }
     }
 
-    // Функция для обработки входящих сообщений
+    /**
+     * Обрабатывает входящее сообщение
+     * @param {number} chatId - ID чата
+     * @param {Object} message - Объект сообщения
+     */
     async handleIncomingMessage(chatId, message) {
-        // Проверка авторизации: теперь всегда проверяем, есть ли chatId в списке разрешенных
-        const chatIdStr = chatId.toString();
-        if (!this.chatIds.includes(chatIdStr)) {
-            // Если ID не в списке разрешенных, отправляем сообщение о запрете доступа
-            this.sendMessage(chatId, '⛔ Доступ запрещен. Ваш ID не авторизован для использования бота.');
-            console.log(`Попытка неавторизованного доступа к боту с ID ${chatIdStr}`);
-            return;
-        }
-
-        if (message.text.startsWith('/')) {
-            const parts = message.text.split(' ');
-            const command = parts[0].substring(1);
-            const args = parts.slice(1);
-
-            // Проверяем наличие пользовательской команды
-            if (this.customCommands.has(command)) {
-                console.log(`[TG Bot] Вызов пользовательской команды: /${command}`);
-                try {
-                    this.customCommands.get(command)(chatId, args);
-                } catch (error) {
-                    console.error(`[TG Bot] Ошибка при выполнении команды /${command}:`, error);
-                    this.sendMessage(chatId, `❌ Ошибка выполнения команды /${command}: ${error.message}`);
-                }
+        try {
+            // Проверка авторизации: теперь всегда проверяем, есть ли chatId в списке разрешенных
+            const chatIdStr = chatId.toString();
+            if (!this.chatIds.includes(chatIdStr)) {
+                // Если ID не в списке разрешенных, отправляем сообщение о запрете доступа
+                await this.sendMessage(chatId, '⛔ Доступ запрещен. Ваш ID не авторизован для использования бота.');
+                console.log(`Попытка неавторизованного доступа к боту с ID ${chatIdStr}`);
                 return;
             }
 
-            // Стандартные команды
-            switch (command) {
-                case 'start':
-                    this.sendMessage(chatId, 'Добро пожаловать в MEV бот! Вы будете получать уведомления о новых MEV возможностях.');
-                    break;
-                case 'help':
-                    // Формируем список всех доступных команд
-                    let helpText = 'Доступные команды:\n';
-                    helpText += '/start - Запустить бота\n';
-                    helpText += '/help - Показать это сообщение\n';
-                    helpText += '/tasks - Показать активные задачи\n';
-                    helpText += '/status <taskId> - Показать статус задачи\n';
+            if (message.text.startsWith('/')) {
+                const parts = message.text.split(' ');
+                const command = parts[0].substring(1);
+                const args = parts.slice(1);
 
-                    // Добавляем пользовательские команды в справку
-                    if (this.customCommands.size > 0) {
-                        helpText += '\nКоманды MEV LoadBalancer:\n';
-                        helpText += '/mev_status - Статус MEV LoadBalancer\n';
-                        helpText += '/mev_start - Запустить MEV LoadBalancer\n';
-                        helpText += '/mev_stop - Остановить MEV LoadBalancer\n';
-                        helpText += '/mev_processes - Список активных MEV процессов\n';
-                        helpText += '/mev_stop_process <processId> - Остановить MEV процесс по ID\n';
-                        helpText += '/mev_logs <processId> [lineCount] - Просмотр логов MEV процесса\n';
-                        helpText += '/mev_clear_logs <processId> - Очистить логи MEV процесса\n';
-
-                        // Добавляем остальные пользовательские команды
-                        const mevCommands = ['mev_status', 'mev_start', 'mev_stop', 'mev_processes', 'mev_stop_process', 'mev_logs', 'mev_clear_logs'];
-
-                        let otherCommands = '';
-                        for (const cmd of this.customCommands.keys()) {
-                            // Пропускаем команды MEV, которые мы уже добавили выше
-                            if (mevCommands.includes(cmd)) continue;
-
-                            otherCommands += `/${cmd} - `;
-                            otherCommands += 'Пользовательская команда';
-                            otherCommands += '\n';
-                        }
-
-                        // Добавляем другие команды только если они есть
-                        if (otherCommands) {
-                            helpText += '\nДругие пользовательские команды:\n';
-                            helpText += otherCommands;
-                        }
+                // Проверяем наличие пользовательской команды
+                if (this.customCommands.has(command)) {
+                    console.log(`[TG Bot] Вызов пользовательской команды: /${command}`);
+                    try {
+                        await this.customCommands.get(command)(chatId, args);
+                    } catch (error) {
+                        console.error(`[TG Bot] Ошибка при выполнении команды /${command}:`, error);
+                        await this.sendMessage(chatId, `❌ Ошибка выполнения команды /${command}: ${error.message}`);
                     }
+                    return;
+                }
 
-                    // Проверяем, что сообщение не превышает максимальную длину
-                    if (helpText.length > 4000) {
-                        console.log('[TG Bot] Сообщение /help слишком длинное, разбиваем на части');
-                        const chunks = this.splitIntoChunks(helpText);
-                        for (let i = 0; i < chunks.length; i++) {
-                            try {
-                                await this.sendMessage(chatId, (i > 0 ? `Продолжение (${i + 1}/${chunks.length}):\n` : '') + chunks[i]);
-                            } catch (error) {
-                                console.error(`[TG Bot] Ошибка при отправке части справки: ${error.message}`);
+                // Стандартные команды
+                switch (command) {
+                    case 'start':
+                        await this.sendMessage(chatId, 'Добро пожаловать в MEV бот! Вы будете получать уведомления о новых MEV возможностях.');
+                        break;
+                    case 'help':
+                        // Формируем список всех доступных команд
+                        let helpText = 'Доступные команды:\n';
+                        helpText += '/start - Запустить бота\n';
+                        helpText += '/help - Показать это сообщение\n';
+                        helpText += '/tasks - Показать активные задачи\n';
+                        helpText += '/status <taskId> - Показать статус задачи\n';
+
+                        // Добавляем пользовательские команды в справку
+                        if (this.customCommands.size > 0) {
+                            helpText += '\nКоманды MEV LoadBalancer:\n';
+                            helpText += '/mev_status - Статус MEV LoadBalancer\n';
+                            helpText += '/mev_start - Запустить MEV LoadBalancer\n';
+                            helpText += '/mev_stop - Остановить MEV LoadBalancer\n';
+                            helpText += '/mev_processes - Список активных MEV процессов\n';
+                            helpText += '/mev_stop_process <processId> - Остановить MEV процесс по ID\n';
+                            helpText += '/mev_logs <processId> [lineCount] - Просмотр логов MEV процесса\n';
+                            helpText += '/mev_clear_logs <processId> - Очистить логи MEV процесса\n';
+
+                            // Добавляем остальные пользовательские команды
+                            const mevCommands = ['mev_status', 'mev_start', 'mev_stop', 'mev_processes', 'mev_stop_process', 'mev_logs', 'mev_clear_logs'];
+
+                            let otherCommands = '';
+                            for (const cmd of this.customCommands.keys()) {
+                                // Пропускаем команды MEV, которые мы уже добавили выше
+                                if (mevCommands.includes(cmd)) continue;
+
+                                otherCommands += `/${cmd} - `;
+                                otherCommands += 'Пользовательская команда';
+                                otherCommands += '\n';
+                            }
+
+                            // Добавляем другие команды только если они есть
+                            if (otherCommands) {
+                                helpText += '\nДругие пользовательские команды:\n';
+                                helpText += otherCommands;
                             }
                         }
-                    } else {
-                        this.sendMessage(chatId, helpText);
-                    }
-                    break;
-                case 'tasks':
-                    this.handleTasksCommand(chatId);
-                    break;
-                case 'status':
-                    // Проверяем, есть ли параметр taskId
-                    if (args.length > 0) {
-                        const taskId = args[0].trim();
-                        if (taskId && !isNaN(parseInt(taskId))) {
-                            this.sendMessage(chatId, `Получение статуса задачи #${taskId}...`);
-                            this.sendTaskStatus(taskId);
+
+                        console.log(`[TG Bot] Сформирован текст справки длиной ${helpText.length} символов`);
+
+                        // Проверяем, что сообщение не превышает максимальную длину
+                        if (helpText.length > 3000) {
+                            console.log('[TG Bot] Сообщение /help слишком длинное, разбиваем на части');
+                            const chunks = this.splitIntoChunks(helpText, 3000);
+                            console.log(`[TG Bot] Сообщение разбито на ${chunks.length} частей`);
+
+                            for (let i = 0; i < chunks.length; i++) {
+                                try {
+                                    const chunkMessage = (i > 0 ? `Продолжение (${i + 1}/${chunks.length}):\n` : '') + chunks[i];
+                                    console.log(`[TG Bot] Отправка части ${i + 1}/${chunks.length} длиной ${chunkMessage.length} символов`);
+                                    await this.sendMessage(chatId, chunkMessage);
+
+                                    // Небольшая задержка между отправкой сообщений, чтобы не превысить лимиты API
+                                    if (i < chunks.length - 1) {
+                                        await new Promise(resolve => setTimeout(resolve, 100));
+                                    }
+                                } catch (error) {
+                                    console.error(`[TG Bot] Ошибка при отправке части ${i + 1} справки: ${error.message}`);
+                                }
+                            }
                         } else {
-                            this.sendMessage(chatId, 'Пожалуйста, укажите корректный ID задачи, например: /status 123');
+                            await this.sendMessage(chatId, helpText);
                         }
-                    } else {
-                        this.sendMessage(chatId, 'Пожалуйста, укажите ID задачи, например: /status 123');
-                    }
-                    break;
-                default:
-                    this.sendMessage(chatId, `Неизвестная команда: /${command}. Введите /help для получения списка команд.`);
+                        break;
+                    case 'tasks':
+                        await this.handleTasksCommand(chatId);
+                        break;
+                    case 'status':
+                        // Проверяем, есть ли параметр taskId
+                        if (args.length > 0) {
+                            const taskId = args[0].trim();
+                            if (taskId && !isNaN(parseInt(taskId))) {
+                                await this.sendMessage(chatId, `Получение статуса задачи #${taskId}...`);
+                                await this.sendTaskStatus(taskId);
+                            } else {
+                                await this.sendMessage(chatId, 'Пожалуйста, укажите корректный ID задачи, например: /status 123');
+                            }
+                        } else {
+                            await this.sendMessage(chatId, 'Пожалуйста, укажите ID задачи, например: /status 123');
+                        }
+                        break;
+                    default:
+                        await this.sendMessage(chatId, `Неизвестная команда: /${command}. Введите /help для получения списка команд.`);
+                }
+                return;
             }
-            return;
+        } catch (error) {
+            console.error(`[TG Bot] Ошибка при обработке сообщения: ${error.message}`);
+            try {
+                await this.sendMessage(chatId, `❌ Произошла ошибка при обработке вашего сообщения: ${error.message}`);
+            } catch (sendError) {
+                console.error(`[TG Bot] Не удалось отправить сообщение об ошибке: ${sendError.message}`);
+            }
         }
     }
 
@@ -672,7 +696,7 @@ class TelegramBotService {
     // Теперь используем этот метод в handleTasksCommand
     async handleTasksCommand(chatId) {
         try {
-            this.sendMessage(chatId, 'Получение списка задач...');
+            await this.sendMessage(chatId, 'Получение списка задач...');
 
             const tasks = await this.getTasks();
 
@@ -680,7 +704,7 @@ class TelegramBotService {
 
             if (!tasks || tasks.length === 0) {
                 console.log('[TG Bot Tasks] No tasks found');
-                this.sendMessage(chatId, 'В данный момент нет активных задач.');
+                await this.sendMessage(chatId, 'В данный момент нет активных задач.');
                 return;
             }
 
@@ -816,7 +840,7 @@ class TelegramBotService {
             }
         } catch (error) {
             console.error('[TG Bot Service] Ошибка при получении списка задач:', error);
-            this.sendMessage(chatId, 'Произошла ошибка при получении списка задач: ' + error.message);
+            await this.sendMessage(chatId, 'Произошла ошибка при получении списка задач: ' + error.message);
         }
     }
 
@@ -1247,14 +1271,57 @@ class TelegramBotService {
         return true;
     }
 
-    // Метод для разделения длинных сообщений на части по 4000 символов
-    splitIntoChunks(text, maxSize = 4000) {
+    /**
+     * Разбивает текст на части с учетом ограничений Telegram
+     * @param {string} text - Текст для разбиения
+     * @param {number} maxLength - Максимальная длина части (по умолчанию 3000)
+     * @returns {string[]} - Массив частей текста
+     */
+    splitIntoChunks(text, maxLength = 3000) {
+        if (!text) return [];
+        if (text.length <= maxLength) return [text];
+
         const chunks = [];
-        let i = 0;
-        while (i < text.length) {
-            chunks.push(text.slice(i, i + maxSize));
-            i += maxSize;
+        let currentChunk = '';
+
+        // Разбиваем по строкам для сохранения целостности команд
+        const lines = text.split('\n');
+
+        for (const line of lines) {
+            // Если текущая строка слишком длинная, разбиваем её дополнительно
+            if (line.length > maxLength) {
+                // Если в текущем куске уже что-то есть, завершаем его
+                if (currentChunk) {
+                    chunks.push(currentChunk);
+                    currentChunk = '';
+                }
+
+                // Разбиваем длинную строку на части
+                let remainingLine = line;
+                while (remainingLine.length > 0) {
+                    const chunkSize = Math.min(maxLength, remainingLine.length);
+                    chunks.push(remainingLine.substring(0, chunkSize));
+                    remainingLine = remainingLine.substring(chunkSize);
+                }
+                continue;
+            }
+
+            // Если добавление строки превысит лимит, начинаем новый кусок
+            if (currentChunk.length + line.length + 1 > maxLength) {
+                chunks.push(currentChunk);
+                currentChunk = line;
+            } else {
+                // Иначе добавляем к текущему куску
+                if (currentChunk) currentChunk += '\n';
+                currentChunk += line;
+            }
         }
+
+        // Добавляем последний кусок, если он есть
+        if (currentChunk) {
+            chunks.push(currentChunk);
+        }
+
         return chunks;
     }
 
