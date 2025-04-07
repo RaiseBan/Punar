@@ -27,6 +27,11 @@ class MevLoadBalancer {
     // Флаг активации балансировщика
     this.isActive = false;
 
+    // Буфер для MEV сигналов
+    this.signalBuffer = [];
+    this.processingSignals = false;
+    this.processingTimer = null;
+
     // Статистика
     this.stats = {
       processedSignals: 0,
@@ -40,7 +45,8 @@ class MevLoadBalancer {
       maxProcessesPerToken: 3,     // Максимальное количество процессов на токен
       maxSignalsPerProcess: 50,    // Максимальное количество сигналов на процесс
       notifyTelegram: true,        // Отправлять уведомления в Telegram
-      autoStopIdleTime: 30 * 60 * 1000  // 30 минут неактивности до остановки процесса
+      autoStopIdleTime: 30 * 60 * 1000,  // 30 минут неактивности до остановки процесса
+      processingInterval: 10000     // Интервал обработки буфера сигналов (5 секунд)
     };
 
     // Настройки пользователя
@@ -65,6 +71,9 @@ class MevLoadBalancer {
       this.isActive = true;
       console.log('[MEV LoadBalancer] Балансировщик автоматически активирован при запуске');
 
+      // Запускаем таймер обработки сигналов
+      this.startProcessingTimer();
+
       console.log('[MEV LoadBalancer] Инициализация завершена');
     } catch (error) {
       console.error('[MEV LoadBalancer] Ошибка при инициализации:', error);
@@ -72,49 +81,140 @@ class MevLoadBalancer {
   }
 
   /**
-   * Инициализирует обработчики IPC событий
+   * Запускает таймер обработки сигналов
    */
-  initIpcHandlers() {
-    // Обработчик для логов процессов
-    ipcMain.on('process-log', async (event, data) => {
-      console.log(`FROM IPC HANDLER`)
-      this.handleProcessLog(data);
-    });
+  startProcessingTimer() {
+    if (this.processingTimer) {
+      clearInterval(this.processingTimer);
+    }
 
-    // Обработчики для управления балансировщиком
-    ipcMain.handle('mev-loadbalancer:start', async () => {
-      return this.start();
-    });
+    console.log(`[MEV LoadBalancer] Запуск таймера обработки сигналов (интервал: ${this.settings.processingInterval}мс)`);
 
-    ipcMain.handle('mev-loadbalancer:stop', async () => {
-      return this.stop();
-    });
+    this.processingTimer = setInterval(() => {
+      this.processSignalBuffer();
+    }, this.settings.processingInterval);
+  }
 
-    ipcMain.handle('mev-loadbalancer:status', async () => {
-      return this.getStatus();
-    });
+  /**
+   * Останавливает таймер обработки сигналов
+   */
+  stopProcessingTimer() {
+    if (this.processingTimer) {
+      clearInterval(this.processingTimer);
+      this.processingTimer = null;
+      console.log('[MEV LoadBalancer] Таймер обработки сигналов остановлен');
+    }
+  }
 
-    ipcMain.handle('mev-loadbalancer:processes', async () => {
-      return this.getProcesses();
-    });
+  /**
+   * Добавляет MEV сигнал в буфер для последующей обработки
+   * @param {Object} signal - Данные сигнала (tokenAddress, meteoraPool, pumpSwapPool)
+   * @param {string} sourceProcessId - ID процесса, от которого получен сигнал
+   * @returns {Object} - Результат добавления в буфер
+   */
+  addSignalToBuffer(signal, sourceProcessId) {
+    try {
+      if (!this.isActive) {
+        console.log('[MEV LoadBalancer] Балансировщик неактивен, сигнал игнорируется');
+        return {
+          success: false,
+          error: 'Балансировщик неактивен'
+        };
+      }
 
-    ipcMain.handle('mev-loadbalancer:stop-process', async (event, processId) => {
-      return this.stopProcess(processId);
-    });
+      console.log(`[MEV LoadBalancer] Добавление сигнала в буфер от процесса ${sourceProcessId}`);
 
-    ipcMain.handle('mev-loadbalancer:update-settings', async (event, settings) => {
-      return this.updateSettings(settings);
-    });
+      // Добавляем сигнал в буфер с метаданными
+      this.signalBuffer.push({
+        ...signal,
+        sourceProcessId,
+        addedTime: Date.now()
+      });
 
-    // Добавляем обработчик события завершения процесса
-    ipcMain.on('mev-process-exit', (event, { processId, exitCode, config }) => {
-      this.handleProcessExit(processId, exitCode);
-    });
+      console.log(`[MEV LoadBalancer] Сигнал добавлен в буфер (всего в буфере: ${this.signalBuffer.length})`);
 
-    // Тестовый обработчик для проверки обработки сигналов
-    ipcMain.handle('mev-loadbalancer:test-signal', async (event, testSignal) => {
-      return this.testProcessSignal(testSignal);
-    });
+      return {
+        success: true,
+        bufferSize: this.signalBuffer.length
+      };
+    } catch (error) {
+      console.error('[MEV LoadBalancer] Ошибка при добавлении сигнала в буфер:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Обрабатывает буфер MEV сигналов
+   */
+  async processSignalBuffer() {
+    // Если уже обрабатываем сигналы или буфер пуст, выходим
+    if (this.processingSignals || this.signalBuffer.length === 0) {
+      return;
+    }
+
+    try {
+      // Устанавливаем флаг обработки
+      this.processingSignals = true;
+
+      console.log(`[MEV LoadBalancer] Начало обработки буфера сигналов (${this.signalBuffer.length} сигналов)`);
+
+      // Копируем буфер и очищаем его
+      const signalsToProcess = [...this.signalBuffer];
+      this.signalBuffer = [];
+
+      // Отправляем уведомление о начале обработки
+      if (this.settings.notifyTelegram) {
+        telegramBotService.sendSystemNotification(
+          `🔄 Начало обработки ${signalsToProcess.length} MEV сигналов из буфера`
+        );
+      }
+
+      // Обрабатываем каждый сигнал
+      let processedCount = 0;
+      let successCount = 0;
+
+      for (const signal of signalsToProcess) {
+        try {
+          console.log(`[MEV LoadBalancer] Обработка сигнала ${processedCount + 1} из ${signalsToProcess.length}`);
+
+          // Используем существующий метод обработки сигнала
+          const result = await this.handleMevSignal(signal, signal.sourceProcessId);
+
+          if (result.success) {
+            successCount++;
+          }
+
+          processedCount++;
+
+          // Добавляем небольшую паузу между обработкой сигналов
+          if (processedCount < signalsToProcess.length) {
+            await sleep(1000);
+          }
+        } catch (error) {
+          console.error(`[MEV LoadBalancer] Ошибка при обработке сигнала:`, error);
+        }
+      }
+
+      console.log(`[MEV LoadBalancer] Завершена обработка буфера: ${processedCount} обработано, ${successCount} успешно`);
+
+      // Отправляем уведомление о результатах
+      if (this.settings.notifyTelegram) {
+        telegramBotService.sendSystemNotification(
+          `✅ Обработка MEV сигналов завершена\n` +
+          `- Всего: ${processedCount}\n` +
+          `- Успешно: ${successCount}\n` +
+          `- С ошибками: ${processedCount - successCount}`
+        );
+      }
+    } catch (error) {
+      console.error('[MEV LoadBalancer] Ошибка при обработке буфера сигналов:', error);
+    } finally {
+      // Сбрасываем флаг обработки
+      this.processingSignals = false;
+    }
   }
 
   /**
@@ -137,6 +237,9 @@ class MevLoadBalancer {
 
       // Сбрасываем статистику
       this.resetStats();
+
+      // Запускаем таймер обработки сигналов
+      this.startProcessingTimer();
 
       // Уведомляем о запуске в Telegram
       if (this.settings.notifyTelegram) {
@@ -172,6 +275,12 @@ class MevLoadBalancer {
       }
 
       console.log('[MEV LoadBalancer] Остановка MEV LoadBalancer');
+
+      // Останавливаем таймер обработки сигналов
+      this.stopProcessingTimer();
+
+      // Очищаем буфер сигналов
+      this.signalBuffer = [];
 
       // Останавливаем все MEV процессы
       const processes = this.getProcesses();
@@ -607,6 +716,66 @@ class MevLoadBalancer {
   }
 
   /**
+   * Инициализирует обработчики IPC событий
+   */
+  initIpcHandlers() {
+    // Обработчик для логов процессов
+    ipcMain.on('process-log', async (event, data) => {
+      console.log(`FROM IPC HANDLER`)
+      this.handleProcessLog(data);
+    });
+
+    // Обработчики для управления балансировщиком
+    ipcMain.handle('mev-loadbalancer:start', async () => {
+      return this.start();
+    });
+
+    ipcMain.handle('mev-loadbalancer:stop', async () => {
+      return this.stop();
+    });
+
+    ipcMain.handle('mev-loadbalancer:status', async () => {
+      return this.getStatus();
+    });
+
+    ipcMain.handle('mev-loadbalancer:processes', async () => {
+      return this.getProcesses();
+    });
+
+    ipcMain.handle('mev-loadbalancer:stop-process', async (event, processId) => {
+      return this.stopProcess(processId);
+    });
+
+    ipcMain.handle('mev-loadbalancer:update-settings', async (event, settings) => {
+      return this.updateSettings(settings);
+    });
+
+    // Добавляем обработчик события завершения процесса
+    ipcMain.on('mev-process-exit', (event, { processId, exitCode, config }) => {
+      this.handleProcessExit(processId, exitCode);
+    });
+
+    // Тестовый обработчик для проверки обработки сигналов
+    ipcMain.handle('mev-loadbalancer:test-signal', async (event, testSignal) => {
+      return this.testProcessSignal(testSignal);
+    });
+
+    // Новый обработчик для ручного запуска обработки буфера сигналов
+    ipcMain.handle('mev-loadbalancer:process-buffer', async () => {
+      if (!this.isActive) {
+        return { success: false, message: 'Балансировщик неактивен' };
+      }
+
+      if (this.signalBuffer.length === 0) {
+        return { success: true, message: 'Буфер сигналов пуст' };
+      }
+
+      await this.processSignalBuffer();
+      return { success: true, message: 'Запущена обработка буфера сигналов' };
+    });
+  }
+
+  /**
    * Обрабатывает логи процессов, ищет MEV сигналы
    * @param {Object} logData - Данные лога (processId, message, level)
    */
@@ -659,7 +828,9 @@ class MevLoadBalancer {
       const signalData = this.parseLogForMevSignal(message);
       if (signalData) {
         console.log(`[MEV LoadBalancer] Обнаружен MEV сигнал в логе процесса ${processId}, данные:`, JSON.stringify(signalData));
-        this.handleMevSignal(signalData, processId);
+
+        // Вместо непосредственной обработки, добавляем сигнал в буфер
+        this.addSignalToBuffer(signalData, processId);
       } else {
         console.log(`[MEV LoadBalancer] MEV сигнал НЕ обнаружен в логе`);
       }
@@ -859,7 +1030,7 @@ class MevLoadBalancer {
         // Останавливаем текущий процесс
         console.log(`[MEV LoadBalancer] Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
         await this.stopProcess(processId);
-        await sleep(10000);
+        // await sleep(10000);
       }
 
       // Шаг 5: Базовая конфигурация для нового MEV процесса
