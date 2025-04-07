@@ -648,7 +648,7 @@ class MevLoadBalancer {
       fs.appendFileSync(logFilePath, logEntry);
 
       // Для отладки (ПОТОМ УБРАТЬ)
-      console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Записана запись в лог ${processId}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
+      // console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Записана запись в лог ${processId}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
     } catch (error) {
       console.error(`[MEV LoadBalancer] Ошибка при записи лога для процесса ${processId}:`, error);
     }
@@ -935,7 +935,7 @@ class MevLoadBalancer {
     }
 
     // Общая нагрузка - 170 запросов в секунду
-    const TOTAL_REQUESTS_PER_SECOND = 170;
+    const TOTAL_REQUESTS_PER_SECOND = 50;
 
     // Расчет запросов в секунду на процесс
     const requestsPerProcess = TOTAL_REQUESTS_PER_SECOND / processCount;
