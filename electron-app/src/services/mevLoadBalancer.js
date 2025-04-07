@@ -1006,7 +1006,7 @@ class MevLoadBalancer {
           tokenAddress,
           meteoraPool,
           pumpSwapPool,
-          main_rpc: this.userSettings?.rpcUrl || "https://api.mainnet-beta.solana.com",
+          main_rpc: this.userSettings?.mainRpc || "https://api.mainnet-beta.solana.com",
           useJito: true,
           jito_lower_bound: 100000,
           jito_upper_bound: 200000,
