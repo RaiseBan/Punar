@@ -415,7 +415,7 @@ async function spawnProcess(taskConfig, userSettings) {
             console.log(`full command: wsl ${program} ${configFilePathWSL}`);
             child = spawn('wsl.exe', ['-e', program, "run", configFilePathWSL], {
                 stdio: 'pipe',
-                shell: false,
+                shell: true,
                 detached: false,
                 cwd: userSettings.mevBotDirectory,
             });
