@@ -1026,6 +1026,7 @@ class MevLoadBalancer {
         if (processId) {
           newProcesses.push(processId);
         }
+        await sleep(1000);
       }
 
       // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
@@ -1036,6 +1037,7 @@ class MevLoadBalancer {
         if (restartedProcessId) {
           restartedProcesses.push(restartedProcessId);
         }
+        await sleep(1000);
       }
 
       console.log(`[MEV LoadBalancer] Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
