@@ -941,10 +941,13 @@ class MevLoadBalancer {
     const requestsPerProcess = TOTAL_REQUESTS_PER_SECOND / processCount;
 
     // Расчет задержки по формуле: Math.ceil(1000 / requestsPerProcess) + 1
-    const delay = Math.ceil(1000 / requestsPerProcess) + 1;
+    let delay = Math.ceil(1000 / requestsPerProcess) + 1;
 
     console.log(`[MEV LoadBalancer] Расчет задержки: ${TOTAL_REQUESTS_PER_SECOND} req/s / ${processCount} процессов = ${requestsPerProcess} req/s на процесс`);
     console.log(`[MEV LoadBalancer] Итоговая задержка: ${delay}ms`);
+
+    //ПОТОМ УБРАТЬ
+    delay = 300;
 
     return delay;
   }
