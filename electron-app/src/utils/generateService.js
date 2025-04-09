@@ -218,12 +218,12 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
             jito: {
                 enabled: useJito,
                 block_engine_urls: [
-                    "http://localhost:8082/jitoNY/api/v1",
-                    "http://localhost:8082/jitoTOKIO/api/v1",
-                    "http://localhost:8082/jitoSLC/api/v1",
-                    "http://localhost:8082/jitoAMSTERDAM/api/v1",
-                    "http://localhost:8082/jitoFRANKFURT/api/v1",
-                    "http://localhost:8082/jitoLONDON/api/v1"
+                    "http://localhost:8080/jitoNY/api/v1",
+                    "http://localhost:8080/jitoTOKIO/api/v1",
+                    "http://localhost:8080/jitoSLC/api/v1",
+                    "http://localhost:8080/jitoAMSTERDAM/api/v1",
+                    "http://localhost:8080/jitoFRANKFURT/api/v1",
+                    "http://localhost:8080/jitoLONDON/api/v1"
                 ],
                 uuid: "",
                 ip_addresses: [PRIMARY_IP],
