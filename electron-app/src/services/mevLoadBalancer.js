@@ -405,6 +405,8 @@ class MevLoadBalancer {
    */
   async startMevProcess(config) {
     try {
+      console.log(JSON.stringify(this.userSettings, null, 2));
+      console.log(bs58.default.decode(this.userSettings.migration_wallet));
       const USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(this.userSettings.migration_wallet)));
       await createTokenAccountIfNotExists(this.userSettings.mainRpc, USER, config.tokenAddress);
 
