@@ -661,7 +661,7 @@ async function getDetailedTokenAccounts(ownerPubkey, rpcUrl) {
 }
 
 async function hasTokenAccount(rpc, publicKey, mintAddress){
-    if (!this.userSettings.mainRpc){
+    if (!rpc){
         console.log(`RPC not specified. set it in settings!`);
         return;
     }
@@ -694,6 +694,7 @@ async function createTokenAccount(rpc, mint, USER){
 }
 
 async function createTokenAccountIfNotExists(rpc, USER, mintAddress){
+    console.log(rpc)
     const res = await hasTokenAccount(rpc, USER.publicKey.toBase58(), mintAddress);
     if (res === undefined){
         return;
