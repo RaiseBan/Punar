@@ -1,3 +1,4 @@
+const { getAccount, createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddress} = require("@solana/spl-token");
 const {retrieveDASAssetFields} = require("./heliusDasApi");
 const {Connection, clusterApiUrl, AddressLookupTableProgram, Keypair, PublicKey, Transaction, ComputeBudgetProgram,
     SendTransactionError
@@ -637,30 +638,82 @@ async function sortPairsByParameter(rpcUrl, pairs, sortConfig) {
 //     }
 // }
 
+async function getDetailedTokenAccounts(ownerPubkey, rpcUrl) {
+    const connection = new Connection(rpcUrl, "confirmed");
+    const tokenProgramId = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
+    const response = await connection.getTokenAccountsByOwner(new PublicKey(ownerPubkey), {
+        programId: tokenProgramId,
+    });
+
+    const detailedAccounts = await Promise.all(
+        response.value.map(async ({ pubkey }) => {
+            const accountInfo = await getAccount(connection, pubkey);
+            return {
+                address: pubkey.toBase58(),
+                mint: accountInfo.mint.toBase58(),
+                amount: accountInfo.amount.toString(),
+            };
+        })
+    );
+    console.log(JSON.stringify(detailedAccounts, null, 2));
+    return detailedAccounts;
+}
+
+async function hasTokenAccount(rpc, publicKey, mintAddress){
+    if (!this.userSettings.mainRpc){
+        console.log(`RPC not specified. set it in settings!`);
+        return;
+    }
+
+    const tokenObjectsByUser = await getDetailedTokenAccounts(publicKey, rpc);
+    if (this.userTokens.has(publicKey)) {
+        const tokens = this.userTokens.get(publicKey);
+        if (!tokens){
+            return false;
+        }
+
+        for (const token of tokenObjectsByUser){
+            if (token.mint === mintAddress){
+                return true;
+            }
+        }
+    }
+    return false;
+}
+async function createTokenAccount(rpc, mint, USER){
+    const ata = await getAssociatedTokenAddress(new PublicKey(mint), USER.publicKey);
+    const idempotentInstruction = createAssociatedTokenAccountIdempotentInstruction(
+        USER.publicKey,
+        ata,
+        USER.publicKey,
+        new PublicKey(mint)
+    )
+    const connection = new Connection(rpc);
+    await sendTx(connection, idempotentInstruction, USER);
+}
+
+async function createTokenAccountIfNotExists(rpc, USER, mintAddress){
+    const res = await hasTokenAccount(rpc, USER.publicKey.toBase58(), mintAddress);
+    if (res === undefined){
+        return;
+    }
+    if (res === false) {
+        console.log(`CREATING TOKEN ACCOUNT...`)
+        await createTokenAccount(rpc, mintAddress, USER);
+        console.log(`TOKEN ACCOUNT CREATED`)
+    }
+    console.log(`TOKEN ACCOUNT ALREADY EXISTS`)
+}
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 (async() => {
-    // const res = await updateIfNotExistsAndGet(
-    //     clusterApiUrl("mainnet-beta"),
-    // [
-    //     "85vNnKPMM4aHCJ9a6ebMFjqgzNL9jFXF7zW22vjeXziT",
-    //     "6qDWicht82dYXj7ModFfdti9f8pfWFDTKt9itvnvCoDH",
-    //     "3yLApRRweajdW5U1xtzoRvJrqC5mWCcBkFHccSATgMLG",
-    //     "7qt1qBnQ5CNNpMH1no6jYAzuyazP5QWXsUZB7dot5kga"
-    // ],
-    //  "7wXu1a3WDJ8fCM69YzQzW4hnaoU6HCTA1WCHMUCmu4D4Qcksvc6jPDu8VWzkomN9GwpSQ26Nuy2GRXfR42Bb9iN");
-    // console.log(res);
-
-    // let connection = new Connection(clusterApiUrl("mainnet-beta"));
-
-    // let res = await connection.getAccountInfo(new PublicKey("HKuJrP5tYQLbEUdjKwjgnHs2957QKjR2iWhJKTtMa1xs"));
-    // console.log(res);
+    const res = await getDetailedTokenAccounts("DkU5wMFvq2jMTYgQ4yMFFWJtT9J177BPVSKYY8BAHJxo", "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f");
 
 })()
 
 
-module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getFilteredPairs, sortPairsByParameter, sendTx}
+module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getFilteredPairs, sortPairsByParameter, sendTx, getDetailedTokenAccounts, createTokenAccountIfNotExists}

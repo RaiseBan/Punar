@@ -12,6 +12,7 @@ interface AppSettings {
     heliusRpcs?: string[];
     tensor_api_token?: string;
     bloxroute_api_token?: string;
+    migration_wallet?:string;
     thor_streamer_address?: string;
     thor_streamer_token?: string;
 }
@@ -116,6 +117,22 @@ export default function Settings() {
 
                 </Typography>
 
+
+            </Box>
+
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                    Wallets
+
+                    <TextField
+                        label="Migration wallet"
+                        fullWidth
+                        value={settings.migration_wallet || ""}
+                        onChange={handleChange('migration_wallet')}
+                        margin="normal"
+                    />
+
+                </Typography>
 
             </Box>
 

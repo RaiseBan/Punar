@@ -12,7 +12,9 @@ const { generateMevConfig } = require('../utils/generateService');
 const { getSettings } = require('../utils/fsHelper');
 const telegramBotService = require('./telegramBotService');
 const fs = require('fs');
-const { sleep } = require('../utils/solanaUtils');
+const bs58 = require("bs58");
+const { sleep, getDetailedTokenAccounts, createTokenAccountIfNotExists } = require('../utils/solanaUtils');
+const { Keypair } = require("@solana/web3.js");
 
 class MevLoadBalancer {
   constructor() {
@@ -23,6 +25,10 @@ class MevLoadBalancer {
     // Карта для отслеживания процессов токен-релиза
     // key = processId, value = true
     this.tokenReleaseProcesses = new Map();
+
+    this.userTokens = new Map();
+
+
 
     // Флаг активации балансировщика
     this.isActive = false;
@@ -399,6 +405,9 @@ class MevLoadBalancer {
    */
   async startMevProcess(config) {
     try {
+      const USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(this.userSettings.migration_wallet)));
+      await createTokenAccountIfNotExists(this.userSettings.mainRpc, USER, config.tokenAddress);
+
       // Проверяем обязательные параметры
       const tokenAddress = config.tokenAddress;
       const meteoraPool = config.meteoraPool || config.poolAddress;
