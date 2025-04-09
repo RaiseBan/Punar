@@ -681,6 +681,14 @@ async function hasTokenAccount(rpc, publicKey, mintAddress) {
 }
 
 async function createTokenAccount(rpc, mint, USER) {
+    const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({
+        units: 30_000,
+    });
+
+    const priorityFee = ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: 30_000,
+    });
+
     const ata = await getAssociatedTokenAddress(new PublicKey(mint), USER.publicKey);
     const idempotentInstruction = createAssociatedTokenAccountIdempotentInstruction(
         USER.publicKey,
@@ -689,7 +697,7 @@ async function createTokenAccount(rpc, mint, USER) {
         new PublicKey(mint)
     )
     const connection = new Connection(rpc);
-    await sendTx(connection, [idempotentInstruction], USER);
+    await sendTx(connection, [idempotentInstruction, priorityFee, modifyComputeUnits], USER);
 }
 
 async function createTokenAccountIfNotExists(rpc, USER, mintAddress) {
