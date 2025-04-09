@@ -935,7 +935,7 @@ class MevLoadBalancer {
     }
 
     // Общая нагрузка - 170 запросов в секунду
-    const TOTAL_REQUESTS_PER_SECOND = 50;
+    const TOTAL_REQUESTS_PER_SECOND = 100;
 
     // Расчет запросов в секунду на процесс
     const requestsPerProcess = TOTAL_REQUESTS_PER_SECOND / processCount;
@@ -945,10 +945,6 @@ class MevLoadBalancer {
 
     console.log(`[MEV LoadBalancer] Расчет задержки: ${TOTAL_REQUESTS_PER_SECOND} req/s / ${processCount} процессов = ${requestsPerProcess} req/s на процесс`);
     console.log(`[MEV LoadBalancer] Итоговая задержка: ${delay}ms`);
-
-    //ПОТОМ УБРАТЬ
-    delay = 75;
-
     return delay;
   }
 
