@@ -1,6 +1,11 @@
-const { getAccount, createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddress} = require("@solana/spl-token");
+const {
+    getAccount,
+    createAssociatedTokenAccountIdempotentInstruction,
+    getAssociatedTokenAddress
+} = require("@solana/spl-token");
 const {retrieveDASAssetFields} = require("./heliusDasApi");
-const {Connection, clusterApiUrl, AddressLookupTableProgram, Keypair, PublicKey, Transaction, ComputeBudgetProgram,
+const {
+    Connection, clusterApiUrl, AddressLookupTableProgram, Keypair, PublicKey, Transaction, ComputeBudgetProgram,
     SendTransactionError
 } = require("@solana/web3.js");
 const bs58 = require("bs58");
@@ -8,7 +13,7 @@ const {saveLookupTables, getLookupTables} = require("./fsHelper");
 const {RAYDIUM_OWNER} = require("./constants");
 
 
-async function getCollectionAddress(mint){
+async function getCollectionAddress(mint) {
     const asset = await retrieveDASAssetFields(mint);
     let groups = asset.grouping;
     if (!groups) {
@@ -48,7 +53,7 @@ async function createLookupTable(rpcUrl, privateKey) {
         });
 
     const sig = await sendTx(connection, [lookupTableInst], USER);
-    if (!sig){
+    if (!sig) {
         console.error(`Transaction on create ALT failed`);
         return;
     }
@@ -56,15 +61,15 @@ async function createLookupTable(rpcUrl, privateKey) {
 
     const tables = await getLookupTables();
     console.log(`Current tables:`, tables);
-    
+
     // Преобразуем tables в массив, если это строка
     const tablesArray = Array.isArray(tables) ? tables : (tables ? [tables] : []);
-    
+
     // Добавляем новый адрес в массив
     const newTables = [...tablesArray, lookupTableAddress.toBase58()];
     console.log(`New tables array:`, newTables);
-    
-    if (await saveLookupTables(newTables) === false){
+
+    if (await saveLookupTables(newTables) === false) {
         console.error(`Failed to save lookup tables`);
         return;
     }
@@ -79,7 +84,7 @@ async function createLookupTable(rpcUrl, privateKey) {
  * @param {string} lookupTableAddress - Address of the lookup table
  * @returns {Promise<string>} - The address of the lookup table used
  */
-async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddress){
+async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddress) {
     console.log(`appendLookupTable params: ${accounts}, ${rpcUrl}, ${privateKey}, ${lookupTableAddress}`);
     // Check if the accounts can fit in the specified table
     const MAX_ACCOUNTS_PER_TABLE = 256;
@@ -101,7 +106,7 @@ async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddres
                     return lookupTableAccount;
                 }
 
-                console.log(`Attempt ${attempt}/${MAX_RETRIES}: Lookup table not found yet, waiting ${RETRY_DELAY/1000} seconds...`);
+                console.log(`Attempt ${attempt}/${MAX_RETRIES}: Lookup table not found yet, waiting ${RETRY_DELAY / 1000} seconds...`);
                 await sleep(RETRY_DELAY);
             } catch (error) {
                 console.error(`Attempt ${attempt}/${MAX_RETRIES} failed:`, error);
@@ -123,7 +128,7 @@ async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddres
         return;
     }
 
-    if (lookupTableAccount.state.authority.toBase58() !== USER.publicKey.toBase58()){
+    if (lookupTableAccount.state.authority.toBase58() !== USER.publicKey.toBase58()) {
         console.error("Lookup table authority does not match");
         return;
     }
@@ -162,7 +167,7 @@ async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddres
     }
 
     // If we reach here, there's enough space in the specified table
-    
+
 
     const extendInstruction = AddressLookupTableProgram.extendLookupTable({
         payer: USER.publicKey,
@@ -173,7 +178,7 @@ async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddres
 
     const sig = await sendTx(connection, [extendInstruction], USER);
 
-    if (!sig){
+    if (!sig) {
         console.error(`Transaction on append ALT failed`);
         return;
     }
@@ -184,11 +189,11 @@ async function appendLookupTable(accounts, rpcUrl, privateKey, lookupTableAddres
 // Функция для преобразования объекта с BigInt в обычный объект
 function convertBigIntToString(obj) {
     if (typeof obj !== 'object' || obj === null) return obj;
-    
+
     if (Array.isArray(obj)) {
         return obj.map(item => convertBigIntToString(item));
     }
-    
+
     const result = {};
     for (const [key, value] of Object.entries(obj)) {
         if (typeof value === 'bigint') {
@@ -203,15 +208,15 @@ function convertBigIntToString(obj) {
 }
 
 // return array of addresses, type string
-async function getAllAddressesFromLookupTable(rpcUrl, lookupTableAddress){
+async function getAllAddressesFromLookupTable(rpcUrl, lookupTableAddress) {
     const connection = new Connection(rpcUrl);
     console.log(`getAllAddressesFromLookupTable params: ${rpcUrl}, ${lookupTableAddress}`);
-    
+
     const lookupTableAccount = await connection.getAddressLookupTable(new PublicKey(lookupTableAddress));
-    
+
 
     // console.log(`lookupTableAccount: ${JSON.stringify(convertBigIntToString(lookupTableAccount), null, 2)}`);
-    
+
     if (!lookupTableAccount?.value) {
         console.error("Lookup table not found");
         return [];
@@ -227,15 +232,15 @@ async function getAllAddressesFromLookupTable(rpcUrl, lookupTableAddress){
  * @param {string} private_key - Private key in base58 format
  * @returns {Promise<string[] | undefined>} - The addresses of the lookup table used
  */
-async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
+async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key) {
     console.log(`start updateIfNotExistsAndGet`)
     const tables = await getLookupTables();
     console.log(`tables: ${tables}`);
-    
-    if (!tables || tables.length === 0){
+
+    if (!tables || tables.length === 0) {
         console.log(`No tables found. Creating...`);
         const tableAddress = await createLookupTable(rpcUrl, private_key);
-        if (!tableAddress){
+        if (!tableAddress) {
             console.error("Failed to create initial lookup table");
             return;
         }
@@ -253,10 +258,10 @@ async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
         let existingTableAddresses = new Map(); // Map to track which accounts exist in which tables
 
         // Check all tables for existing accounts
-        for (const table of tables){
+        for (const table of tables) {
             const tableAddresses = await getAllAddressesFromLookupTable(rpcUrl, table);
             // console.log(`Table ${table} addresses:`, tableAddresses);
-            
+
             // Update accountsToAppend to only include accounts not found in any table
             accountsToAppend = accountsToAppend.filter(account => {
                 const exists = tableAddresses.includes(account);
@@ -273,13 +278,13 @@ async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
         // If there are accounts to append
         if (accountsToAppend.length > 0) {
             console.log(`Found ${accountsToAppend.length} accounts to append`);
-            
+
             // Try to use an existing table that has space
             for (const table of tables) {
                 const tableAddresses = await getAllAddressesFromLookupTable(rpcUrl, table);
                 const currentCount = tableAddresses.length;
                 console.log(`Table ${table} current count: ${currentCount}`);
-                
+
                 if (currentCount + accountsToAppend.length <= 256) {
                     console.log(`Table ${table} has enough space`);
                     const res = await appendLookupTable(accountsToAppend, rpcUrl, private_key, table);
@@ -325,28 +330,28 @@ async function updateIfNotExistsAndGet(rpcUrl, accounts, private_key){
     }
 }
 
-async function sendTx(connection, ixs, signer, simulate = false){
+async function sendTx(connection, ixs, signer, simulate = false) {
     const transaction = new Transaction();
     transaction.add(...ixs);
     transaction.feePayer = signer.publicKey;
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     transaction.sign(signer);
-    
-    for (let i = 0; i < 5; i++){
+
+    for (let i = 0; i < 5; i++) {
         try {
             if (simulate) {
                 // Режим симуляции
                 console.log(`Simulating transaction...`);
                 const result = await connection.simulateTransaction(transaction);
-                
+
                 if (result.value.err) {
                     throw new Error(`Simulation error: ${result.value.err}`);
                 }
-                
+
                 console.log(`Simulation successful!`);
                 console.log(`Logs: ${result.value.logs}`);
                 console.log(`Units consumed: ${result.value.unitsConsumed}`);
-                
+
                 return {
                     simulation: true,
                     result: result.value
@@ -369,7 +374,7 @@ async function sendTx(connection, ixs, signer, simulate = false){
             }
         } catch (e) {
             console.error(`Attempt_${i}: error while ${simulate ? 'simulating' : 'sending'} transaction: ${e}}`);
-            if (e instanceof SendTransactionError){
+            if (e instanceof SendTransactionError) {
                 console.log(`logs: ${await e.getLogs(connection)}`);
             }
         }
@@ -413,11 +418,11 @@ async function sendTx(connection, ixs, signer, simulate = false){
  * @param {string} filter - Адрес владельца для фильтрации
  * @param {DexScreenerFilter} [dexScreenerFilter] - Дополнительные фильтры из DexScreener
  * @returns {Promise<string[]>} - Массив отфильтрованных адресов пар
- * 
+ *
  * @example
  * // Базовый вызов без дополнительных фильтров
  * await getFilteredPairs(rpcUrl, pairs, ownerAddress);
- * 
+ *
  * @example
  * // Фильтрация по объему
  * await getFilteredPairs(rpcUrl, pairs, ownerAddress, {
@@ -427,7 +432,7 @@ async function sendTx(connection, ixs, signer, simulate = false){
  *         h1: 1000     // Минимум 1k объема за 1 час
  *     }
  * });
- * 
+ *
  * @example
  * // Фильтрация по изменению цены
  * await getFilteredPairs(rpcUrl, pairs, ownerAddress, {
@@ -437,7 +442,7 @@ async function sendTx(connection, ixs, signer, simulate = false){
  *         h1: -1       // Максимальное падение цены 1% за 1 час
  *     }
  * });
- * 
+ *
  * @example
  * // Фильтрация по ликвидности
  * await getFilteredPairs(rpcUrl, pairs, ownerAddress, {
@@ -447,7 +452,7 @@ async function sendTx(connection, ixs, signer, simulate = false){
  *         quote: 100    // Минимум 100 котируемого токена
  *     }
  * });
- * 
+ *
  * @example
  * // Комбинированная фильтрация
  * await getFilteredPairs(rpcUrl, pairs, ownerAddress, {
@@ -467,12 +472,12 @@ async function sendTx(connection, ixs, signer, simulate = false){
 async function getFilteredPairs(rpcUrl, pairs, filter, dexScreenerFilter = {}) {
     let filteredPairs = [];
     const connection = new Connection(rpcUrl);
-    
+
     // Фильтрация по владельцу
     for (const pair of pairs) {
         const res = await connection.getAccountInfo(new PublicKey(pair));
         if (!res) continue;
-        
+
         const owner = res.owner;
         if (owner.toString() === filter) {
             filteredPairs.push(pair);
@@ -490,9 +495,9 @@ async function getFilteredPairs(rpcUrl, pairs, filter, dexScreenerFilter = {}) {
         try {
             const response = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`);
             const data = await response.json();
-            
+
             if (!data.pair) continue;
-            
+
             const pairData = data.pair;
             let matchesFilters = true;
 
@@ -551,7 +556,7 @@ async function getFilteredPairs(rpcUrl, pairs, filter, dexScreenerFilter = {}) {
  * @param {string[]} pairs - Массив адресов пар для сортировки
  * @param {SortConfig} sortConfig - Конфигурация сортировки
  * @returns {Promise<{pair: string, value: number}[]>} - Отсортированный массив пар с их значениями
- * 
+ *
  * @example
  * // Сортировка по объему за 24 часа по убыванию
  * await sortPairsByParameter(rpcUrl, pairs, {
@@ -559,7 +564,7 @@ async function getFilteredPairs(rpcUrl, pairs, filter, dexScreenerFilter = {}) {
  *     timeFrame: 'h24',
  *     order: 'desc'
  * });
- * 
+ *
  * @example
  * // Сортировка по изменению цены за 1 час по возрастанию
  * await sortPairsByParameter(rpcUrl, pairs, {
@@ -567,7 +572,7 @@ async function getFilteredPairs(rpcUrl, pairs, filter, dexScreenerFilter = {}) {
  *     timeFrame: 'h1',
  *     order: 'asc'
  * });
- * 
+ *
  * @example
  * // Сортировка по ликвидности в USD по убыванию
  * await sortPairsByParameter(rpcUrl, pairs, {
@@ -578,14 +583,14 @@ async function getFilteredPairs(rpcUrl, pairs, filter, dexScreenerFilter = {}) {
  */
 async function sortPairsByParameter(rpcUrl, pairs, sortConfig) {
     const pairsWithValues = [];
-    
+
     for (const pair of pairs) {
         try {
             const response = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`);
             const data = await response.json();
-            
+
             if (!data.pair) continue;
-            
+
             const pairData = data.pair;
             let value;
 
@@ -647,7 +652,7 @@ async function getDetailedTokenAccounts(ownerPubkey, rpcUrl) {
     });
 
     const detailedAccounts = await Promise.all(
-        response.value.map(async ({ pubkey }) => {
+        response.value.map(async ({pubkey}) => {
             const accountInfo = await getAccount(connection, pubkey);
             return {
                 address: pubkey.toBase58(),
@@ -660,28 +665,22 @@ async function getDetailedTokenAccounts(ownerPubkey, rpcUrl) {
     return detailedAccounts;
 }
 
-async function hasTokenAccount(rpc, publicKey, mintAddress){
-    if (!rpc){
+async function hasTokenAccount(rpc, publicKey, mintAddress) {
+    if (!rpc) {
         console.log(`RPC not specified. set it in settings!`);
         return;
     }
 
     const tokenObjectsByUser = await getDetailedTokenAccounts(publicKey, rpc);
-    if (this.userTokens.has(publicKey)) {
-        const tokens = this.userTokens.get(publicKey);
-        if (!tokens){
-            return false;
-        }
-
-        for (const token of tokenObjectsByUser){
-            if (token.mint === mintAddress){
-                return true;
-            }
+    for (const token of tokenObjectsByUser) {
+        if (token.mint === mintAddress) {
+            return true;
         }
     }
     return false;
 }
-async function createTokenAccount(rpc, mint, USER){
+
+async function createTokenAccount(rpc, mint, USER) {
     const ata = await getAssociatedTokenAddress(new PublicKey(mint), USER.publicKey);
     const idempotentInstruction = createAssociatedTokenAccountIdempotentInstruction(
         USER.publicKey,
@@ -693,10 +692,10 @@ async function createTokenAccount(rpc, mint, USER){
     await sendTx(connection, idempotentInstruction, USER);
 }
 
-async function createTokenAccountIfNotExists(rpc, USER, mintAddress){
+async function createTokenAccountIfNotExists(rpc, USER, mintAddress) {
     console.log(rpc)
     const res = await hasTokenAccount(rpc, USER.publicKey.toBase58(), mintAddress);
-    if (res === undefined){
+    if (res === undefined) {
         return;
     }
     if (res === false) {
@@ -711,10 +710,19 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-(async() => {
+(async () => {
     const res = await getDetailedTokenAccounts("DkU5wMFvq2jMTYgQ4yMFFWJtT9J177BPVSKYY8BAHJxo", "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f");
 
 })()
 
 
-module.exports = {getCollectionAddress, sleep, updateIfNotExistsAndGet, getFilteredPairs, sortPairsByParameter, sendTx, getDetailedTokenAccounts, createTokenAccountIfNotExists}
+module.exports = {
+    getCollectionAddress,
+    sleep,
+    updateIfNotExistsAndGet,
+    getFilteredPairs,
+    sortPairsByParameter,
+    sendTx,
+    getDetailedTokenAccounts,
+    createTokenAccountIfNotExists
+}
