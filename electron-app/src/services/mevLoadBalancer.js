@@ -947,7 +947,7 @@ class MevLoadBalancer {
     console.log(`[MEV LoadBalancer] Итоговая задержка: ${delay}ms`);
 
     //ПОТОМ УБРАТЬ
-    delay = 300;
+    delay = 75;
 
     return delay;
   }
