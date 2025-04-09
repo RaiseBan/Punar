@@ -689,7 +689,7 @@ async function createTokenAccount(rpc, mint, USER) {
         new PublicKey(mint)
     )
     const connection = new Connection(rpc);
-    await sendTx(connection, idempotentInstruction, USER);
+    await sendTx(connection, [idempotentInstruction], USER);
 }
 
 async function createTokenAccountIfNotExists(rpc, USER, mintAddress) {
@@ -710,10 +710,10 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-(async () => {
-    const res = await getDetailedTokenAccounts("DkU5wMFvq2jMTYgQ4yMFFWJtT9J177BPVSKYY8BAHJxo", "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f");
-
-})()
+// (async () => {
+//     const res = await getDetailedTokenAccounts("DkU5wMFvq2jMTYgQ4yMFFWJtT9J177BPVSKYY8BAHJxo", "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f");
+//
+// })()
 
 
 module.exports = {
