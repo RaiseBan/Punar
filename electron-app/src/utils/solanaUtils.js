@@ -710,7 +710,7 @@ async function createTokenAccountIfNotExists(rpc, USER, mintAddress) {
         console.log(`CREATING TOKEN ACCOUNT...`)
         await createTokenAccount(rpc, mintAddress, USER);
         console.log(`TOKEN ACCOUNT CREATED`)
-        await sleep(5000);
+        await sleep(10000);
     }
     console.log(`TOKEN ACCOUNT ALREADY EXISTS`)
 }
