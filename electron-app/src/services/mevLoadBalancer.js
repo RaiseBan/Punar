@@ -13,7 +13,7 @@ const {getSettings} = require('../utils/fsHelper');
 const telegramBotService = require('./telegramBotService');
 const fs = require('fs');
 const bs58 = require("bs58");
-const {sleep, getDetailedTokenAccounts, createTokenAccountIfNotExists} = require('../utils/solanaUtils');
+const {sleep, getDetailedTokenAccounts, createTokenAccount} = require('../utils/solanaUtils');
 const {Keypair} = require("@solana/web3.js");
 
 class MevLoadBalancer {
@@ -27,6 +27,7 @@ class MevLoadBalancer {
         this.tokenReleaseProcesses = new Map();
 
         this.userTokens = new Map();
+        this.USER;
 
 
         // Флаг активации балансировщика
@@ -76,6 +77,14 @@ class MevLoadBalancer {
             this.isActive = true;
             console.log('[MEV LoadBalancer] Балансировщик автоматически активирован при запуске');
 
+            this.USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(this.userSettings.migration_wallet)));
+            // кешируем токен аккаунты
+            const tokenObjects = await getDetailedTokenAccounts(this.USER.publicKey, this.userSettings.mainRpc);
+
+            tokenObjects.forEach(tokenFields => {
+                this.userTokens.set(tokenFields.mint, tokenFields.address);
+            })
+
             // Запускаем таймер обработки сигналов
             this.startProcessingTimer();
 
@@ -110,6 +119,9 @@ class MevLoadBalancer {
             console.log('[MEV LoadBalancer] Таймер обработки сигналов остановлен');
         }
     }
+
+
+
 
     /**
      * Добавляет MEV сигнал в буфер для последующей обработки
@@ -404,10 +416,10 @@ class MevLoadBalancer {
      */
     async startMevProcess(config) {
         try {
-            console.log(JSON.stringify(this.userSettings, null, 2));
-            console.log(bs58.default.decode(this.userSettings.migration_wallet));
-            const USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(this.userSettings.migration_wallet)));
-            await createTokenAccountIfNotExists(this.userSettings.mainRpc, USER, config.tokenAddress);
+            if (!this.userTokens.has(config.tokenAddress.trim())){
+                this.userTokens.set(config.tokenAddress(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
+            }
+
 
             // Проверяем обязательные параметры
             const tokenAddress = config.tokenAddress;
@@ -987,16 +999,16 @@ class MevLoadBalancer {
                 throw new Error('Нет валидных сигналов для обработки');
             }
 
-          const jitoValues = [
-            {
-              jito_lower_bound: 100_000,
-              jito_upper_bound: 200_000,
-            },
-            {
-              jito_lower_bound: 4_000_000,
-              jito_upper_bound: 5_000_000
-            }
-          ]
+            const jitoValues = [
+                {
+                    jito_lower_bound: 100_000,
+                    jito_upper_bound: 200_000,
+                },
+                {
+                    jito_lower_bound: 4_000_000,
+                    jito_upper_bound: 4_200_000
+                }
+            ]
 
             // Шаг 2: Сохраняем текущие процессы для последующего перезапуска
             const currentProcesses = Array.from(this.mevProcesses.entries());
@@ -1062,7 +1074,7 @@ class MevLoadBalancer {
                 if (processId) {
                     newProcesses.push(processId);
                 }
-                // await sleep(3000);
+                await sleep(1000);
             }
 
             // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
@@ -1073,7 +1085,7 @@ class MevLoadBalancer {
                 if (restartedProcessId) {
                     restartedProcesses.push(restartedProcessId);
                 }
-                // await sleep(3000);
+                // await sleep(1000);
             }
 
             console.log(`[MEV LoadBalancer] Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);

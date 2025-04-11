@@ -11,6 +11,7 @@ const {
 const bs58 = require("bs58");
 const {saveLookupTables, getLookupTables} = require("./fsHelper");
 const {RAYDIUM_OWNER} = require("./constants");
+const {sendJitoTransaction} = require("../services/jito_api");
 
 
 async function getCollectionAddress(mint) {
@@ -665,10 +666,14 @@ async function getDetailedTokenAccounts(ownerPubkey, rpcUrl) {
     return detailedAccounts;
 }
 
-async function hasTokenAccount(rpc, publicKey, mintAddress) {
+async function hasTokenAccount(rpc, publicKey, mintAddress, tokens) {
     if (!rpc) {
         console.log(`RPC not specified. set it in settings!`);
         return;
+    }
+
+    if (tokens.has(mintAddress.trim())){
+        return true;
     }
 
     const tokenObjectsByUser = await getDetailedTokenAccounts(publicKey, rpc);
@@ -680,14 +685,14 @@ async function hasTokenAccount(rpc, publicKey, mintAddress) {
     return false;
 }
 
-async function createTokenAccount(rpc, mint, USER) {
+async function createTokenAccount(rpc, mint, USER, tokens) {
     const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({
         units: 30_000,
     });
 
-    const priorityFee = ComputeBudgetProgram.setComputeUnitPrice({
-        microLamports: 30_000,
-    });
+    // const priorityFee = ComputeBudgetProgram.setComputeUnitPrice({
+    //     microLamports: 30_000,
+    // });
 
     const ata = await getAssociatedTokenAddress(new PublicKey(mint), USER.publicKey);
     const idempotentInstruction = createAssociatedTokenAccountIdempotentInstruction(
@@ -696,24 +701,31 @@ async function createTokenAccount(rpc, mint, USER) {
         USER.publicKey,
         new PublicKey(mint)
     )
+
     const connection = new Connection(rpc);
-    await sendTx(connection, [idempotentInstruction, priorityFee, modifyComputeUnits], USER);
+    const transaction = new Transaction();
+    transaction.add(idempotentInstruction, modifyComputeUnits);
+    transaction.feePayer = USER.publicKey;
+    transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    transaction.sign(USER);
+    // for (const region of JITO_REGIONS)
+    const bs64Tx = Buffer.from(transaction.serialize()).toString("base64");
+    for (let i = 0; i < 5; i++){
+        try {
+            await sendJitoTransaction(bs64Tx);
+        }catch(err){
+            if (tokens.has(mint)){
+                return
+            }
+        }
+
+    }
+
+    // await sendTx(connection, [idempotentInstruction, priorityFee, modifyComputeUnits], USER);
+
+    return ata.toBase58();
 }
 
-async function createTokenAccountIfNotExists(rpc, USER, mintAddress) {
-    console.log(rpc)
-    const res = await hasTokenAccount(rpc, USER.publicKey.toBase58(), mintAddress);
-    if (res === undefined) {
-        return;
-    }
-    if (res === false) {
-        console.log(`CREATING TOKEN ACCOUNT...`)
-        await createTokenAccount(rpc, mintAddress, USER);
-        console.log(`TOKEN ACCOUNT CREATED`)
-        await sleep(30000);
-    }
-    console.log(`TOKEN ACCOUNT ALREADY EXISTS`)
-}
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -733,5 +745,5 @@ module.exports = {
     sortPairsByParameter,
     sendTx,
     getDetailedTokenAccounts,
-    createTokenAccountIfNotExists
+    createTokenAccount
 }
