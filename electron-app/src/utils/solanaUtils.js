@@ -6,7 +6,7 @@ const {
 const {retrieveDASAssetFields} = require("./heliusDasApi");
 const {
     Connection, clusterApiUrl, AddressLookupTableProgram, Keypair, PublicKey, Transaction, ComputeBudgetProgram,
-    SendTransactionError
+    SendTransactionError, SystemProgram
 } = require("@solana/web3.js");
 const bs58 = require("bs58");
 const {saveLookupTables, getLookupTables} = require("./fsHelper");
@@ -693,6 +693,7 @@ async function createTokenAccount(rpc, mint, USER, tokens) {
     // const priorityFee = ComputeBudgetProgram.setComputeUnitPrice({
     //     microLamports: 30_000,
     // });
+    const tipIx = getTipIx(2000, "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL", USER);
 
     const ata = await getAssociatedTokenAddress(new PublicKey(mint), USER.publicKey);
     const idempotentInstruction = createAssociatedTokenAccountIdempotentInstruction(
@@ -704,7 +705,7 @@ async function createTokenAccount(rpc, mint, USER, tokens) {
 
     const connection = new Connection(rpc);
     const transaction = new Transaction();
-    transaction.add(idempotentInstruction, modifyComputeUnits);
+    transaction.add(idempotentInstruction, modifyComputeUnits, tipIx);
     transaction.feePayer = USER.publicKey;
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     transaction.sign(USER);
@@ -712,10 +713,11 @@ async function createTokenAccount(rpc, mint, USER, tokens) {
     console.log(`before buffer`);
     const bs64Tx = Buffer.from(transaction.serialize()).toString("base64");
     console.log(`after buffer`);
-    for (let i = 0; i < 5; i++){
+    for (let i = 0; i < 3; i++){
         try {
             console.log(`JITO Attempt: ${i}`)
             await sendJitoTransaction(bs64Tx);
+            await sleep(500);
         }catch(err){
             console.log(`CAUSED ERROR: ${err.message}`);
             if (tokens.has(mint)){
@@ -731,7 +733,13 @@ async function createTokenAccount(rpc, mint, USER, tokens) {
     return ata.toBase58();
 }
 
-
+function getTipIx (tipAmount, tipAccount, sender){
+    return SystemProgram.transfer({
+        fromPubkey: sender.publicKey,
+        toPubkey: new PublicKey(tipAccount),
+        lamports: tipAmount,
+    });
+}
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -750,5 +758,6 @@ module.exports = {
     sortPairsByParameter,
     sendTx,
     getDetailedTokenAccounts,
-    createTokenAccount
+    createTokenAccount,
+    getTipIx
 }
