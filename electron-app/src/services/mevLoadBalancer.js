@@ -1004,8 +1004,8 @@ class MevLoadBalancer {
 
             const jitoValues = [
                 {
-                    jito_lower_bound: 100_000,
-                    jito_upper_bound: 200_000,
+                    jito_lower_bound: 10_000,
+                    jito_upper_bound: 100_000,
                 },
                 {
                     jito_lower_bound: 4_000_000,
