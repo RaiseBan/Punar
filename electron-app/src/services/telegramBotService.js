@@ -1379,9 +1379,9 @@ class TelegramBotService {
                 const status = mevLoadBalancer.getStatus();
                 let statusMessage = '📊 <b>Статус MEV LoadBalancer</b>\n\n';
                 statusMessage += `Активен: ${status.isActive ? '✅' : '❌'}\n`;
-                statusMessage += `Всего процессов: ${status.totalProcesses}\n`;
-                statusMessage += `Активных процессов: ${status.activeProcesses}\n`;
-                statusMessage += `Найдено сигналов: ${status.mevSignals}\n`;
+                statusMessage += `Всего процессов: ${status.processCount}\n`;
+                // statusMessage += `Активных процессов: ${status.activeProcesses}\n`;
+                // statusMessage += `Найдено сигналов: ${status.mevSignals}\n`;
 
                 this.sendMessage(chatId, statusMessage);
             } catch (error) {
