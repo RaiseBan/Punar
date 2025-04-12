@@ -709,12 +709,17 @@ async function createTokenAccount(rpc, mint, USER, tokens) {
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     transaction.sign(USER);
     // for (const region of JITO_REGIONS)
+    console.log(`before buffer`);
     const bs64Tx = Buffer.from(transaction.serialize()).toString("base64");
+    console.log(`after buffer`);
     for (let i = 0; i < 5; i++){
         try {
+            console.log(`JITO Attempt: ${i}`)
             await sendJitoTransaction(bs64Tx);
         }catch(err){
+            console.log(`CAUSED ERROR: ${err.message}`);
             if (tokens.has(mint)){
+                console.log(`token exist ! RETURN`)
                 return
             }
         }
