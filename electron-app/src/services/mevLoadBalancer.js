@@ -121,8 +121,6 @@ class MevLoadBalancer {
     }
 
 
-
-
     /**
      * Добавляет MEV сигнал в буфер для последующей обработки
      * @param {Object} signal - Данные сигнала (tokenAddress, meteoraPool, pumpSwapPool)
@@ -417,7 +415,7 @@ class MevLoadBalancer {
     async startMevProcess(config) {
         try {
             console.log(`ckeck token exists on "${config.tokenAddress}"`);
-            if (!this.userTokens.has(config.tokenAddress.trim())){
+            if (!this.userTokens.has(config.tokenAddress.trim())) {
                 console.log(`NO TOKEN ACCOUNT, CREATING...`)
                 this.userTokens.set(config.tokenAddress.trim(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
                 await sleep(30000);
@@ -436,7 +434,7 @@ class MevLoadBalancer {
             }
 
             // Генерируем уникальный ID для процесса
-            const processId = `mev_${Math.random().toString(36).substring(2, 11)}_${Date.now().toString().substring(8, 13)}`;
+            const processId = `mev_${tokenAddress.substring(0, 4)}_${meteoraPool.substring(0, 4)}_${config.jito_lower_bound}`; // TODO: возможно по другому id задать
 
             // Формируем конфигурацию процесса
             const processConfig = {
@@ -498,6 +496,19 @@ class MevLoadBalancer {
                 this.handleProcessExit(processId, code);
             });
 
+            // Создаем таймер для проверки условия каждые 30 минут
+            const checkInterval = 30 * 60 * 1000; // 30 минут в миллисекундах
+            const processTimer = setInterval(async () => {
+                console.log(`[MEV LoadBalancer] Запуск проверки условия для процесса ${processId}`);
+                const isValid = await this.checkLiquidity(processConfig.meteoraPool.trim());
+
+
+                if (!isValid) {
+                    console.log(`[MEV LoadBalancer] Условие не выполнено для процесса ${processId}, останавливаем процесс`);
+                    await this.stopProcess(processId, true);
+                }
+            }, checkInterval);
+
             // Сохраняем информацию о процессе
             this.mevProcesses.set(processId, {
                 pid: childProcess.pid,
@@ -509,7 +520,8 @@ class MevLoadBalancer {
                 status: 'running',
                 lastActivity: Date.now(),
                 signals: [],
-                config: processConfig
+                config: processConfig,
+                processTimer: processTimer // Сохраняем таймер
             });
 
             // Создаем числовой ID для React UI
@@ -524,12 +536,33 @@ class MevLoadBalancer {
         }
     }
 
+    async checkLiquidity(pair) {
+
+        for (let i = 0; i < 3; i++) {
+            try {
+                const response = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`);
+                const data = await response.json();
+                const pairData = data.pair;
+                const liquidity = pairData.liquidity.usd;
+                return liquidity >= 200;
+            } catch (e) {
+                console.log(`Error while checkLiquidity: ${e}`);
+                await sleep(1500);
+
+            }
+        }
+        return false;
+
+
+    }
+
     /**
      * Останавливает MEV процесс
      * @param {string} processId - Идентификатор процесса
+     * @param {boolean} restart - Идентификатор процесса
      * @returns {Promise<Object>} - Результат остановки процесса
      */
-    async stopProcess(processId) {
+    async stopProcess(processId, restart = false) {
         try {
             if (!this.mevProcesses.has(processId)) {
                 console.warn(`[MEV LoadBalancer] Процесс ${processId} не найден`);
@@ -542,6 +575,14 @@ class MevLoadBalancer {
             const processData = this.mevProcesses.get(processId);
 
             console.log(`[MEV LoadBalancer] Остановка MEV процесса ${processId}`);
+            if (restart) {
+                await this.restartProcesses();
+            }
+            // Очищаем таймер процесса, если он существует
+            if (processData.processTimer) {
+                clearInterval(processData.processTimer);
+                console.log(`[MEV LoadBalancer] Таймер для процесса ${processId} очищен`);
+            }
 
             // Перед остановкой удаляем все слушатели событий
             if (processData.process) {
@@ -1141,6 +1182,71 @@ class MevLoadBalancer {
             };
         }
     }
+
+    async restartProcesses() {
+        try {
+            const currentProcesses = Array.from(this.mevProcesses.entries());
+
+            const newProcessCount = currentProcesses.length;
+            const processDelay = this.calculateProcessDelay(newProcessCount);
+            console.log(`[MEV LoadBalancer] Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
+
+            const processConfigs = [];
+            for (const [processId, processData] of currentProcesses) {
+                // Сохраняем конфигурацию процесса с обновленной задержкой
+                const config = {...processData.config, process_delay: processDelay};
+                processConfigs.push({processId, config});
+
+                // Останавливаем текущий процесс
+                console.log(`[MEV LoadBalancer] Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
+                await this.stopProcess(processId);
+            }
+
+            const restartedProcesses = [];
+            for (const {config} of processConfigs) {
+                console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms`);
+                const restartedProcessId = await this.startMevProcess(config);
+                if (restartedProcessId) {
+                    restartedProcesses.push(restartedProcessId);
+                }
+                // await sleep(1000);
+            }
+
+            console.log(`[MEV LoadBalancer] Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
+
+
+            if (this.settings.notifyTelegram) {
+                // Информация о процессах
+                let processesInfo = "";
+
+                if (restartedProcesses.length > 0) {
+                    processesInfo += `Перезапущенные процессы: ${restartedProcesses.join(', ')}\n`;
+                }
+                processesInfo += `Задержка: ${processDelay}ms\n`;
+
+                const message = `🔄 Перезапуск MEV процессов:\n` +
+                    `\n⚖️ Параметры:\n` +
+                    `Задержка: ${processDelay}ms\n` +
+                    `\n📊 Процессы:\n${processesInfo}`;
+
+                telegramBotService.sendSystemNotification(message);
+                return {
+                    success: true,
+                    restartedProcesses,
+                    processDelay,
+                };
+            }
+        } catch (e) {
+            console.error(`Error while restring: ${e}`);
+            return {
+                success: false,
+                error: e.message
+            };
+        }
+
+
+    }
+
 
     /**
      * Отправляет задачу в обработчик

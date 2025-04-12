@@ -1432,8 +1432,8 @@ class TelegramBotService {
                     const runtime = Math.floor((Date.now() - proc.startTime) / 1000 / 60); // в минутах
 
                     message += `<b>ID:</b> ${proc.id} (PID: ${proc.pid || 'неизвестно'})\n`;
-                    message += `<b>Токен:</b> ${proc.tokenAddress.substring(0, 8)}...\n`;
-                    message += `<b>Meteora пул:</b> ${proc.meteoraPool ? proc.meteoraPool.substring(0, 8) + '...' : 'не указан'}\n`;
+                    message += `<b>Токен:</b> ${proc.tokenAddress}\n`;
+                    message += `<b>Meteora пул:</b> ${proc.meteoraPool ? proc.meteoraPool : 'не указан'}\n`;
                     message += `<b>Время работы:</b> ${runtime} мин.\n\n`;
                 }
 
@@ -1454,7 +1454,7 @@ class TelegramBotService {
             const processId = args[0];
 
             try {
-                const result = await mevLoadBalancer.stopProcess(processId);
+                const result = await mevLoadBalancer.stopProcess(processId, true);
 
                 if (result.success) {
                     this.sendMessage(chatId, `✅ MEV процесс ${processId} успешно остановлен`);
