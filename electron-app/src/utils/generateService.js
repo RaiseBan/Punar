@@ -69,9 +69,14 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
         spam: {
             enabled: !config.useJito,
             sending_rpc_urls: [config.main_rpc],
-            compute_unit_price: 105,
             max_retries: 0,
-            enable_simple_send: false
+            enable_simple_send: false,
+            compute_unit_price: {
+                strategy: "Random",
+                from: 100,
+                to: 100,
+                count: 1
+            }
         },
         jito: {
             enabled: config.useJito,
@@ -211,9 +216,14 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
             spam: {
                 enabled: !useJito,
                 sending_rpc_urls: [main_rpc],
-                compute_unit_price: 5001,
                 max_retries: 0,
-                enable_simple_send: false
+                enable_simple_send: false,
+                compute_unit_price: {
+                    strategy: "Random",
+                    from: 100,
+                    to: 100,
+                    count: 1
+                }
             },
             jito: {
                 enabled: useJito,
