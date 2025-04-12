@@ -417,7 +417,7 @@ class MevLoadBalancer {
     async startMevProcess(config) {
         try {
             if (!this.userTokens.has(config.tokenAddress.trim())){
-                this.userTokens.set(config.tokenAddress(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
+                this.userTokens.set(config.tokenAddress.trim(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
             }
 
 
