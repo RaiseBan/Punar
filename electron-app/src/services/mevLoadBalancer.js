@@ -52,7 +52,7 @@ class MevLoadBalancer {
             maxSignalsPerProcess: 50,    // Максимальное количество сигналов на процесс
             notifyTelegram: true,        // Отправлять уведомления в Telegram
             autoStopIdleTime: 30 * 60 * 1000,  // 30 минут неактивности до остановки процесса
-            processingInterval: 30000     // Интервал обработки буфера сигналов (5 секунд)
+            processingInterval: 10000     // Интервал обработки буфера сигналов (5 секунд)
         };
 
         // Настройки пользователя
@@ -415,11 +415,11 @@ class MevLoadBalancer {
     async startMevProcess(config) {
         try {
             console.log(`ckeck token exists on "${config.tokenAddress}"`);
-            if (!this.userTokens.has(config.tokenAddress.trim())) {
-                console.log(`NO TOKEN ACCOUNT, CREATING...`)
-                this.userTokens.set(config.tokenAddress.trim(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
-                // await sleep(1000);
-            }
+            // if (!this.userTokens.has(config.tokenAddress.trim())) {
+            //     console.log(`NO TOKEN ACCOUNT, CREATING...`)
+            //     this.userTokens.set(config.tokenAddress.trim(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
+            //     await sleep(30000);
+            // }
 
 
             // Проверяем обязательные параметры
@@ -497,7 +497,7 @@ class MevLoadBalancer {
             });
 
             // Создаем таймер для проверки условия каждые 30 минут
-            const checkInterval = 30 * 60 * 1000; // 30 минут в миллисекундах
+            const checkInterval = 60 * 60 * 1000; // 30 минут в миллисекундах
             const processTimer = setInterval(async () => {
                 console.log(`[MEV LoadBalancer] Запуск проверки условия для процесса ${processId}`);
                 const isValid = await this.checkLiquidity(processConfig.meteoraPool.trim());
