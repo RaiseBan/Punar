@@ -1075,7 +1075,7 @@ class MevLoadBalancer {
 
             for (const signal of validSignals) {
                 const {tokenAddress, meteoraPool, pumpSwapPool} = signal;
-                for (let i = 0; i < 2; i++) {
+                for (let i = 0; i < jitoValues.length; i++) {
                     newProcessConfigs.push({
                         tokenAddress,
                         meteoraPool,
