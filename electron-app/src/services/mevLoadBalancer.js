@@ -418,7 +418,7 @@ class MevLoadBalancer {
             if (!this.userTokens.has(config.tokenAddress.trim())) {
                 console.log(`NO TOKEN ACCOUNT, CREATING...`)
                 this.userTokens.set(config.tokenAddress.trim(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
-                await sleep(30000);
+                // await sleep(1000);
             }
 
 
@@ -624,6 +624,7 @@ class MevLoadBalancer {
 
             // Если процесс успешно остановлен, удаляем его из списка процессов
             this.mevProcesses.delete(processId);
+
             console.log(`[MEV LoadBalancer] Процесс ${processId} успешно остановлен и удален из списка`);
             if (restart) {
                 await this.restartProcesses();
