@@ -575,9 +575,7 @@ class MevLoadBalancer {
             const processData = this.mevProcesses.get(processId);
 
             console.log(`[MEV LoadBalancer] Остановка MEV процесса ${processId}`);
-            if (restart) {
-                await this.restartProcesses();
-            }
+
             // Очищаем таймер процесса, если он существует
             if (processData.processTimer) {
                 clearInterval(processData.processTimer);
@@ -627,6 +625,9 @@ class MevLoadBalancer {
             // Если процесс успешно остановлен, удаляем его из списка процессов
             this.mevProcesses.delete(processId);
             console.log(`[MEV LoadBalancer] Процесс ${processId} успешно остановлен и удален из списка`);
+            if (restart) {
+                await this.restartProcesses();
+            }
 
             return {
                 success: true,
