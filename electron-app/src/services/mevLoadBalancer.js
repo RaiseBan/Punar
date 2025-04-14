@@ -418,7 +418,7 @@ class MevLoadBalancer {
             if (!this.userTokens.has(config.tokenAddress.trim())) {
                 console.log(`NO TOKEN ACCOUNT, CREATING...`)
                 this.userTokens.set(config.tokenAddress.trim(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
-                await sleep(10000);
+                await sleep(20000);
             }
 
 
