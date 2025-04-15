@@ -418,7 +418,7 @@ class MevLoadBalancer {
             if (!this.userTokens.has(config.tokenAddress.trim())) {
                 console.log(`NO TOKEN ACCOUNT, CREATING...`)
                 this.userTokens.set(config.tokenAddress.trim(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
-                await sleep(20000);
+                await sleep(21000);
             }
 
 
@@ -497,17 +497,17 @@ class MevLoadBalancer {
             });
 
             // Создаем таймер для проверки условия каждые 30 минут
-            const checkInterval = 60 * 60 * 1000; // 30 минут в миллисекундах
-            const processTimer = setInterval(async () => {
-                console.log(`[MEV LoadBalancer] Запуск проверки условия для процесса ${processId}`);
-                const isValid = await this.checkLiquidity(processConfig.meteoraPool.trim());
-
-
-                if (!isValid) {
-                    console.log(`[MEV LoadBalancer] Условие не выполнено для процесса ${processId}, останавливаем процесс`);
-                    await this.stopProcess(processId, true);
-                }
-            }, checkInterval);
+            // const checkInterval = 60 * 60 * 1000; // 30 минут в миллисекундах
+            // const processTimer = setInterval(async () => {
+            //     console.log(`[MEV LoadBalancer] Запуск проверки условия для процесса ${processId}`);
+            //     const isValid = await this.checkLiquidity(processConfig.meteoraPool.trim());
+            //
+            //
+            //     if (!isValid) {
+            //         console.log(`[MEV LoadBalancer] Условие не выполнено для процесса ${processId}, останавливаем процесс`);
+            //         await this.stopProcess(processId, true);
+            //     }
+            // }, checkInterval);
 
             // Сохраняем информацию о процессе
             this.mevProcesses.set(processId, {
@@ -521,7 +521,7 @@ class MevLoadBalancer {
                 lastActivity: Date.now(),
                 signals: [],
                 config: processConfig,
-                processTimer: processTimer // Сохраняем таймер
+                // processTimer: processTimer // Сохраняем таймер
             });
 
             // Создаем числовой ID для React UI
