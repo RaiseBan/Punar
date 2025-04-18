@@ -364,12 +364,13 @@ async function spawnProcess(taskConfig, userSettings) {
                 env: env
             });
         } else if (moduleDir === "new-token-release") {
-            child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
-                stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
-                shell: true, // Используем shell для корректного выполнения
+            const exePath = path.join(userSettings.scriptDirectory, moduleDir, "new-token-release.exe");
+            child = spawn(exePath, [], {
+                stdio: "pipe",
+                shell: true,
                 detached: false,
-                cwd: userSettings.scriptDirectory, // Устанавливаем рабочую директорию для процесса
-                env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath } // Передаем CONFIG_PATH в переменные окружения
+                cwd: userSettings.scriptDirectory,
+                env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath }
             });
 
         } else if (moduleDir === "mev_subtask") {
