@@ -15,6 +15,8 @@ const fs = require('fs');
 const bs58 = require("bs58");
 const {sleep, getDetailedTokenAccounts, createTokenAccount} = require('../utils/solanaUtils');
 const {Keypair} = require("@solana/web3.js");
+const axios = require('axios');
+const {MASTER_NODE_PORT} = require("../utils/constants");
 
 class MevLoadBalancer {
     constructor() {
@@ -186,6 +188,22 @@ class MevLoadBalancer {
                     `🔄 Начало обработки ${signalsToProcess.length} MEV сигналов из буфера`
                 );
             }
+
+
+            // signalsToProcess.forEach(signal => {
+            //     const {tokenAddress, meteoraPool, pumpSwapPool} = signal;
+            //     axios.post(`http://localhost:${MASTER_NODE_PORT}`, {
+            //         token: tokenAddress,
+            //         meteora: meteoraPool,
+            //         pumpswap: pumpSwapPool
+            //     })
+            //         .then(response => {
+            //             console.log(`Сигнал успешно отправлен: ${tokenAddress}`);
+            //         })
+            //         .catch(error => {
+            //             console.error(`Ошибка при отправке сигнала для ${tokenAddress}:`, error.message);
+            //         });
+            // })
 
             // Обрабатываем все сигналы одним вызовом
             const result = await this.handleMevSignal(signalsToProcess);
@@ -866,6 +884,21 @@ class MevLoadBalancer {
             const signalData = this.parseLogForMevSignal(message);
             if (signalData) {
                 console.log(`[MEV LoadBalancer] Обнаружен MEV сигнал в логе процесса ${processId}, данные:`, JSON.stringify(signalData));
+
+
+                const {tokenAddress, meteoraPool, pumpSwapPool} = signalData;
+                axios.post(`http://localhost:${MASTER_NODE_PORT}/broadcast`, {
+                    token: tokenAddress,
+                    meteora: meteoraPool,
+                    pumpswap: pumpSwapPool
+                })
+                    .then(response => {
+                        console.log(`Сигнал успешно отправлен на веб-сервер: ${tokenAddress}`);
+                    })
+                    .catch(error => {
+                        console.error(`Ошибка при отправке сигнала для ${tokenAddress}:`, error.message);
+                    });
+
 
                 // Вместо непосредственной обработки, добавляем сигнал в буфер
                 this.addSignalToBuffer(signalData, processId);
