@@ -13,6 +13,7 @@ interface AppSettings {
     tensor_api_token?: string;
     bloxroute_api_token?: string;
     migration_wallet?:string;
+    requests_per_second?: number;
 
     thor_streamer_address?: string;
     thor_streamer_token?: string;
@@ -130,6 +131,14 @@ export default function Settings() {
                         fullWidth
                         value={settings.migration_wallet || ""}
                         onChange={handleChange('migration_wallet')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="Req/s"
+                        fullWidth
+                        value={settings.requests_per_second || ""}
+                        onChange={handleChange('requests_per_second')}
                         margin="normal"
                     />
 

@@ -1086,7 +1086,7 @@ class MevLoadBalancer {
         }
 
         // Общая нагрузка - 170 запросов в секунду
-        const TOTAL_REQUESTS_PER_SECOND = 220;
+        const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings.requests_per_second);
 
         // Расчет запросов в секунду на процесс
         const requestsPerProcess = TOTAL_REQUESTS_PER_SECOND / processCount;
