@@ -17,6 +17,7 @@ interface AppSettings {
     proxy_server_ip?: string;
     proxy_server_port?: number;
     primary_ip?:string;
+    requests_per_second?: number
 
     thor_streamer_address?: string;
     thor_streamer_token?: string;
@@ -160,6 +161,16 @@ export default function Settings() {
                         onChange={handleChange('primary_ip')}
                         margin="normal"
                     />
+
+                    <TextField
+                        label="Req/s"
+                        fullWidth
+                        value={settings.requests_per_second || ""}
+                        onChange={handleChange('requests_per_second')}
+                        margin="normal"
+                    />
+
+
 
                 </Typography>
 
