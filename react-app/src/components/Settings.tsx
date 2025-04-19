@@ -12,7 +12,12 @@ interface AppSettings {
     heliusRpcs?: string[];
     tensor_api_token?: string;
     bloxroute_api_token?: string;
+
     migration_wallet?:string;
+    proxy_server_ip?: string;
+    proxy_server_port?: number;
+    primary_ip?:string;
+
     thor_streamer_address?: string;
     thor_streamer_token?: string;
 }
@@ -122,13 +127,37 @@ export default function Settings() {
 
             <Box sx={{ mb: 4 }}>
                 <Typography variant="h6" gutterBottom>
-                    Wallets
+                    Migrate token settings
 
                     <TextField
                         label="Migration wallet"
                         fullWidth
                         value={settings.migration_wallet || ""}
                         onChange={handleChange('migration_wallet')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="proxy server ip address"
+                        fullWidth
+                        value={settings.proxy_server_ip || ""}
+                        onChange={handleChange('proxy_server_ip')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="proxy server port"
+                        fullWidth
+                        value={settings.proxy_server_port || ""}
+                        onChange={handleChange('proxy_server_port')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="Node ip address"
+                        fullWidth
+                        value={settings.primary_ip || ""}
+                        onChange={handleChange('primary_ip')}
                         margin="normal"
                     />
 

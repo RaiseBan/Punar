@@ -166,10 +166,11 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
  * @param {Object} config - Конфигурация задачи
  * @param {string} tokenAddress - Адрес токена
  * @param {string} meteoraPool - Адрес пула Meteora
+ * @param {Object} userSetting  - Адрес пула Meteora
  * @param {string} pumpSwapPool - Адрес пула PumpSwap (опционально)
  * @returns {Promise<string>} - Путь к созданному TOML-файлу
  */
-async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool, pumpSwapPool = null) {
+async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool, userSetting, pumpSwapPool = null) {
     try {
         // Проверяем обязательные параметры
         if (!botDir || !tokenAddress || !meteoraPool) {
@@ -228,15 +229,15 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
             jito: {
                 enabled: useJito,
                 block_engine_urls: [
-                    "http://172.25.64.1:8082/jitoNY/api/v1",
-                    "http://172.25.64.1:8082/jitoTOKIO/api/v1",
-                    "http://172.25.64.1:8082/jitoSLC/api/v1",
-                    "http://172.25.64.1:8082/jitoAMSTERDAM/api/v1",
-                    "http://172.25.64.1:8082/jitoFRANKFURT/api/v1",
-                    "http://172.25.64.1:8082/jitoLONDON/api/v1"
+                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoNY/api/v1`,
+                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoTOKIO/api/v1`,
+                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoSLC/api/v1`,
+                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoAMSTERDAM/api/v1`,
+                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoFRANKFURT/api/v1`,
+                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoLONDON/api/v1`
                 ],
                 uuid: "",
-                ip_addresses: [PRIMARY_IP],
+                ip_addresses: [userSetting.primary_ip],
                 tip_config: {
                     strategy: "Random",
                     from: jito_lower_bound,

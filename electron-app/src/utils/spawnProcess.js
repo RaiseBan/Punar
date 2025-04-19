@@ -390,6 +390,7 @@ async function spawnProcess(taskConfig, userSettings) {
                     updatedTaskConfig,
                     updatedTaskConfig.tokenAddress,
                     updatedTaskConfig.meteoraPool || updatedTaskConfig.poolAddress,
+                    userSettings,
                     updatedTaskConfig.pumpSwapPool
                 );
             } else {
