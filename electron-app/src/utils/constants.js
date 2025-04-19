@@ -23,7 +23,7 @@ const JIT0_REGIONS = [
     "https://london.mainnet.block-engine.jito.wtf",
 ]
 
-const PRIMARY_IP = "194.55.224.16/32"
+const PRIMARY_IP = "94.19.186.22/32"
 
 const RAYDIUM_AMM_OWNER = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
 const RAYDIUM_CPMM_OWNER = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
