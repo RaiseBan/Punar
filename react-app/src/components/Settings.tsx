@@ -170,8 +170,6 @@ export default function Settings() {
                         margin="normal"
                     />
 
-
-
                 </Typography>
 
             </Box>
