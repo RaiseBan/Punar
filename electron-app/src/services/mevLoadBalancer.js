@@ -1108,16 +1108,6 @@ class MevLoadBalancer {
             //   };
             // });
 
-            // Шаг 6: Запускаем все новые процессы
-            console.log(`[MEV LoadBalancer] Запуск ${newProcessConfigs.length} новых MEV процессов`);
-            const newProcesses = [];
-            for (const config of newProcessConfigs) {
-                const processId = await this.startMevProcess(config);
-                if (processId) {
-                    newProcesses.push(processId);
-                }
-                await sleep(1000);
-            }
 
             // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
             const restartedProcesses = [];
@@ -1129,6 +1119,19 @@ class MevLoadBalancer {
                 }
                 // await sleep(1000);
             }
+
+            // Шаг 6: Запускаем все новые процессы
+            console.log(`[MEV LoadBalancer] Запуск ${newProcessConfigs.length} новых MEV процессов`);
+            const newProcesses = [];
+            for (const config of newProcessConfigs) {
+                const processId = await this.startMevProcess(config);
+                if (processId) {
+                    newProcesses.push(processId);
+                }
+                await sleep(1000);
+            }
+
+
 
             console.log(`[MEV LoadBalancer] Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
 
