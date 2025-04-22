@@ -654,7 +654,7 @@ async function getDetailedTokenAccounts(ownerPubkey, rpcUrl) {
 
     const detailedAccounts = await Promise.all(
         response.value.map(async ({pubkey}) => {
-            await sleep(200);
+            await sleep(400);
             const accountInfo = await getAccount(connection, pubkey);
             return {
                 address: pubkey.toBase58(),
