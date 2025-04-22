@@ -644,25 +644,46 @@ async function sortPairsByParameter(rpcUrl, pairs, sortConfig) {
 //     }
 // }
 
-async function getDetailedTokenAccounts(ownerPubkey, rpcUrl) {
+async function getDetailedTokenAccounts(ownerPubkey, rpcUrl, maxRetries = 3) {
     const connection = new Connection(rpcUrl, "confirmed");
     const tokenProgramId = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
-    const response = await connection.getTokenAccountsByOwner(new PublicKey(ownerPubkey), {
-        programId: tokenProgramId,
-    });
+    // Функция для повторного запроса с задержкой при ошибке 429
+    const fetchWithRetry = async (fn, retriesLeft = maxRetries) => {
+        try {
+            return await fn();
+        } catch (error) {
+            if (error.message.includes('429') && retriesLeft > 0) {
+                console.log(`Rate limited (429). Retrying in 2 seconds... (${retriesLeft} retries left)`);
+                await sleep(2000); // Ждём 2 секунды
+                return fetchWithRetry(fn, retriesLeft - 1);
+            }
+            throw error; // Если не 429 или кончились попытки — прокидываем ошибку дальше
+        }
+    };
 
+    // Получаем токен-аккаунты с обработкой 429
+    const response = await fetchWithRetry(() =>
+        connection.getTokenAccountsByOwner(new PublicKey(ownerPubkey), {
+                programId: tokenProgramId,
+            }
+        ));
+
+    // Обрабатываем каждый аккаунт с ретраями
     const detailedAccounts = await Promise.all(
-        response.value.map(async ({pubkey}) => {
-            await sleep(1200);
-            const accountInfo = await getAccount(connection, pubkey);
-            return {
-                address: pubkey.toBase58(),
-                mint: accountInfo.mint.toBase58(),
-                amount: accountInfo.amount.toString(),
-            };
+        response.value.map(async ({ pubkey }) => {
+            return fetchWithRetry(async () => {
+                await sleep(1200); // Базовая задержка между запросами
+                const accountInfo = await getAccount(connection, pubkey);
+                return {
+                    address: pubkey.toBase58(),
+                    mint: accountInfo.mint.toBase58(),
+                    amount: accountInfo.amount.toString(),
+                };
+            });
         })
     );
+
     console.log(JSON.stringify(detailedAccounts, null, 2));
     return detailedAccounts;
 }
