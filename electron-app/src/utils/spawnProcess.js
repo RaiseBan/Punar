@@ -365,7 +365,7 @@ async function spawnProcess(taskConfig, userSettings) {
             });
         } else if (moduleDir === "new-token-release") {
             const exePath = path.join(userSettings.scriptDirectory, moduleDir, "new-token-release.exe");
-            child = spawn(exePath, [], {
+            child = spawn(exePath, ["--port", "5001"], {
                 stdio: "pipe",
                 shell: true,
                 detached: false,
