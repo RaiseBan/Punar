@@ -4,12 +4,12 @@
  * Отвечает за обнаружение сигналов MEV в логах процессов new-token-release,
  * запуск MEV процессов и распределение нагрузки между ними.
  */
-const {ipcMain} = require('electron');
+const { ipcMain } = require('electron');
 const path = require('path');
-const {app} = require('electron');
-const {spawnProcess, stopMevProcess, forceKillWindowsProcess} = require('../utils/spawnProcess');
-const {generateMevConfig} = require('../utils/generateService');
-const {getSettings} = require('../utils/fsHelper');
+const { app } = require('electron');
+const { spawnProcess, stopMevProcess, forceKillWindowsProcess } = require('../utils/spawnProcess');
+const { generateMevConfig } = require('../utils/generateService');
+const { getSettings } = require('../utils/fsHelper');
 const telegramBotService = require('./telegramBotService');
 const fs = require('fs');
 const bs58 = require("bs58");
@@ -228,7 +228,7 @@ class MevLoadBalancer {
         try {
             if (this.isActive) {
                 console.log('[MEV LoadBalancer] Балансировщик уже запущен');
-                return {success: true, status: 'already_running'};
+                return { success: true, status: 'already_running' };
             }
 
             console.log('[MEV LoadBalancer] Запуск MEV LoadBalancer');
@@ -274,7 +274,7 @@ class MevLoadBalancer {
         try {
             if (!this.isActive) {
                 console.log('[MEV LoadBalancer] Балансировщик уже остановлен');
-                return {success: true, status: 'already_stopped'};
+                return { success: true, status: 'already_stopped' };
             }
 
             console.log('[MEV LoadBalancer] Остановка MEV LoadBalancer');
@@ -715,10 +715,15 @@ class MevLoadBalancer {
      */
     writeProcessLog(processId, message, level = 'info') {
         try {
+            // Записываем в файл только ошибки (сообщения, начинающиеся с "Error")
+            if (level !== 'error' && !message.trim().startsWith('Error')) {
+                return; // Не записываем не-ошибки
+            }
+
             // Создаем директорию для логов, если она еще не существует
             const logDir = path.join(app.getPath('userData'), 'logs');
             if (!fs.existsSync(logDir)) {
-                fs.mkdirSync(logDir, {recursive: true});
+                fs.mkdirSync(logDir, { recursive: true });
             }
 
             // Формируем путь к файлу логов для указанного процесса
@@ -733,8 +738,7 @@ class MevLoadBalancer {
             // Асинхронно добавляем запись в файл
             fs.appendFileSync(logFilePath, logEntry);
 
-            // Для отладки (ПОТОМ УБРАТЬ)
-            // console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Записана запись в лог ${processId}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
+            // console.log(`[MEV LoadBalancer] Записана ошибка в лог ${processId}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
         } catch (error) {
             console.error(`[MEV LoadBalancer] Ошибка при записи лога для процесса ${processId}:`, error);
         }
@@ -807,7 +811,7 @@ class MevLoadBalancer {
         });
 
         // Добавляем обработчик события завершения процесса
-        ipcMain.on('mev-process-exit', (event, {processId, exitCode, config}) => {
+        ipcMain.on('mev-process-exit', (event, { processId, exitCode, config }) => {
             this.handleProcessExit(processId, exitCode);
         });
 
@@ -819,15 +823,15 @@ class MevLoadBalancer {
         // Новый обработчик для ручного запуска обработки буфера сигналов
         ipcMain.handle('mev-loadbalancer:process-buffer', async () => {
             if (!this.isActive) {
-                return {success: false, message: 'Балансировщик неактивен'};
+                return { success: false, message: 'Балансировщик неактивен' };
             }
 
             if (this.signalBuffer.length === 0) {
-                return {success: true, message: 'Буфер сигналов пуст'};
+                return { success: true, message: 'Буфер сигналов пуст' };
             }
 
             await this.processSignalBuffer();
-            return {success: true, message: 'Запущена обработка буфера сигналов'};
+            return { success: true, message: 'Запущена обработка буфера сигналов' };
         });
     }
 
@@ -842,7 +846,7 @@ class MevLoadBalancer {
                 return;
             }
 
-            const {processId, message, level, config} = logData;
+            const { processId, message, level, config } = logData;
             if (!processId || !message) {
                 console.log('[MEV LoadBalancer] Получен некорректный лог без processId или message');
                 return;
@@ -1006,7 +1010,7 @@ class MevLoadBalancer {
             console.log(`[MEV LoadBalancer] После обработки: tokenAddress="${tokenAddress}", meteoraPool="${meteoraPool}", pumpSwapPool="${pumpSwapPool || 'не указан'}"`);
 
             if (!tokenAddress || !meteoraPool) {
-                console.error('[MEV LoadBalancer] Не удалось извлечь токен или пул:', {tokenAddress, meteoraPool});
+                console.error('[MEV LoadBalancer] Не удалось извлечь токен или пул:', { tokenAddress, meteoraPool });
                 return null;
             }
 
@@ -1065,7 +1069,7 @@ class MevLoadBalancer {
 
             // Шаг 1: Проверяем все сигналы на валидность
             const validSignals = signals.filter(signal => {
-                const {tokenAddress, meteoraPool} = signal;
+                const { tokenAddress, meteoraPool } = signal;
                 if (!tokenAddress || !meteoraPool) {
                     console.error('[MEV LoadBalancer] Сигнал не содержит необходимых данных (tokenAddress или meteoraPool)');
                     this.stats.failedSignals++;
@@ -1098,8 +1102,8 @@ class MevLoadBalancer {
             const processConfigs = [];
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = {...processData.config, process_delay: processDelay};
-                processConfigs.push({processId, config});
+                const config = { ...processData.config, process_delay: processDelay };
+                processConfigs.push({ processId, config });
 
                 // Останавливаем текущий процесс
                 console.log(`[MEV LoadBalancer] Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
@@ -1109,7 +1113,7 @@ class MevLoadBalancer {
             let newProcessConfigs = [];
 
             for (const signal of validSignals) {
-                const {tokenAddress, meteoraPool, pumpSwapPool} = signal;
+                const { tokenAddress, meteoraPool, pumpSwapPool } = signal;
                 for (let i = 0; i < jitoValues.length; i++) {
                     newProcessConfigs.push({
                         tokenAddress,
@@ -1141,6 +1145,17 @@ class MevLoadBalancer {
             //   };
             // });
 
+            // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
+            const restartedProcesses = [];
+            for (const { config } of processConfigs) {
+                console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms`);
+                const restartedProcessId = await this.startMevProcess(config);
+                if (restartedProcessId) {
+                    restartedProcesses.push(restartedProcessId);
+                }
+                // await sleep(1000);
+            }
+
             // Шаг 6: Запускаем все новые процессы
             console.log(`[MEV LoadBalancer] Запуск ${newProcessConfigs.length} новых MEV процессов`);
             const newProcesses = [];
@@ -1152,16 +1167,6 @@ class MevLoadBalancer {
                 await sleep(1000);
             }
 
-            // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
-            const restartedProcesses = [];
-            for (const {config} of processConfigs) {
-                console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms`);
-                const restartedProcessId = await this.startMevProcess(config);
-                if (restartedProcessId) {
-                    restartedProcesses.push(restartedProcessId);
-                }
-                // await sleep(1000);
-            }
 
             console.log(`[MEV LoadBalancer] Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
 
@@ -1225,8 +1230,8 @@ class MevLoadBalancer {
             const processConfigs = [];
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = {...processData.config, process_delay: processDelay};
-                processConfigs.push({processId, config});
+                const config = { ...processData.config, process_delay: processDelay };
+                processConfigs.push({ processId, config });
 
                 // Останавливаем текущий процесс
                 console.log(`[MEV LoadBalancer] Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
@@ -1234,7 +1239,7 @@ class MevLoadBalancer {
             }
 
             const restartedProcesses = [];
-            for (const {config} of processConfigs) {
+            for (const { config } of processConfigs) {
                 console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms`);
                 const restartedProcessId = await this.startMevProcess(config);
                 if (restartedProcessId) {
