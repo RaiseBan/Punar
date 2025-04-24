@@ -29,7 +29,6 @@ class MevLoadBalancer {
         this.userTokens = new Map();
         this.USER;
 
-
         // Флаг активации балансировщика
         this.isActive = false;
 
@@ -37,6 +36,12 @@ class MevLoadBalancer {
         this.signalBuffer = [];
         this.processingSignals = false;
         this.processingTimer = null;
+
+        // Таймер проверки ликвидности пулов
+        this.liquidityCheckerTimer = null;
+
+        // Флаг блокировки очистки процессов
+        this.isCleaningProcesses = false;
 
         // Статистика
         this.stats = {
@@ -52,7 +57,10 @@ class MevLoadBalancer {
             maxSignalsPerProcess: 50,    // Максимальное количество сигналов на процесс
             notifyTelegram: true,        // Отправлять уведомления в Telegram
             autoStopIdleTime: 30 * 60 * 1000,  // 30 минут неактивности до остановки процесса
-            processingInterval: 10000     // Интервал обработки буфера сигналов (5 секунд)
+            processingInterval: 10000,    // Интервал обработки буфера сигналов (5 секунд)
+            liquidityCheckInterval: 20 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
+            minimumLiquidity: 200,       // Минимальная ликвидность пула (USD)
+            minProcessAgeForCleanup: 20 * 60 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
         };
 
         // Настройки пользователя
@@ -88,6 +96,9 @@ class MevLoadBalancer {
             // Запускаем таймер обработки сигналов
             this.startProcessingTimer();
 
+            // Запускаем таймер проверки ликвидности пулов
+            this.startPoolLiquidityChecker();
+
             console.log('[MEV LoadBalancer] Инициализация завершена');
         } catch (error) {
             console.error('[MEV LoadBalancer] Ошибка при инициализации:', error);
@@ -120,6 +131,33 @@ class MevLoadBalancer {
         }
     }
 
+    /**
+     * Запускает таймер проверки ликвидности пулов
+     */
+    startPoolLiquidityChecker() {
+        // Останавливаем предыдущий таймер, если он был
+        if (this.liquidityCheckerTimer) {
+            clearInterval(this.liquidityCheckerTimer);
+        }
+
+        console.log(`[MEV LoadBalancer] Запуск таймера проверки ликвидности пулов (интервал: ${this.settings.liquidityCheckInterval}мс)`);
+
+        // Запускаем новый таймер
+        this.liquidityCheckerTimer = setInterval(() => {
+            this.checkAndCleanProcessesByLiquidity();
+        }, this.settings.liquidityCheckInterval);
+    }
+
+    /**
+     * Останавливает таймер проверки ликвидности пулов
+     */
+    stopPoolLiquidityChecker() {
+        if (this.liquidityCheckerTimer) {
+            clearInterval(this.liquidityCheckerTimer);
+            this.liquidityCheckerTimer = null;
+            console.log('[MEV LoadBalancer] Таймер проверки ликвидности пулов остановлен');
+        }
+    }
 
     /**
      * Добавляет MEV сигнал в буфер для последующей обработки
@@ -185,6 +223,21 @@ class MevLoadBalancer {
                 telegramBotService.sendSystemNotification(
                     `🔄 Начало обработки ${signalsToProcess.length} MEV сигналов из буфера`
                 );
+            }
+
+            // Проверяем, идет ли очистка процессов
+            if (this.isCleaningProcesses) {
+                console.log(`[MEV LoadBalancer] Обнаружена активная очистка процессов, откладываем обработку сигналов`);
+                // Возвращаем сигналы обратно в буфер
+                this.signalBuffer.push(...signalsToProcess);
+
+                if (this.settings.notifyTelegram) {
+                    telegramBotService.sendSystemNotification(
+                        `⏱️ Обработка ${signalsToProcess.length} MEV сигналов отложена: идет очистка процессов`
+                    );
+                }
+
+                return;
             }
 
             // Обрабатываем все сигналы одним вызовом
@@ -263,6 +316,9 @@ class MevLoadBalancer {
 
             // Останавливаем таймер обработки сигналов
             this.stopProcessingTimer();
+
+            // Останавливаем таймер проверки ликвидности
+            this.stopPoolLiquidityChecker();
 
             // Очищаем буфер сигналов
             this.signalBuffer = [];
@@ -410,9 +466,12 @@ class MevLoadBalancer {
     /**
      * Запускает новый MEV процесс
      * @param {Object} config - Конфигурация процесса
+     * @param {Object} options - Дополнительные параметры
+     * @param {boolean} options.isRestart - Флаг, указывающий, что это перезапуск существующего процесса
+     * @param {number} options.initialCreationTime - Исходное время создания процесса (для перезапуска)
      * @returns {Promise<string|null>} - ID процесса или null в случае ошибки
      */
-    async startMevProcess(config) {
+    async startMevProcess(config, options = {}) {
         try {
             console.log(`ckeck token exists on "${config.tokenAddress}"`);
             if (!this.userTokens.has(config.tokenAddress.trim())) {
@@ -496,18 +555,10 @@ class MevLoadBalancer {
                 this.handleProcessExit(processId, code);
             });
 
-            // Создаем таймер для проверки условия каждые 30 минут
-            // const checkInterval = 60 * 60 * 1000; // 30 минут в миллисекундах
-            // const processTimer = setInterval(async () => {
-            //     console.log(`[MEV LoadBalancer] Запуск проверки условия для процесса ${processId}`);
-            //     const isValid = await this.checkLiquidity(processConfig.meteoraPool.trim());
-            //
-            //
-            //     if (!isValid) {
-            //         console.log(`[MEV LoadBalancer] Условие не выполнено для процесса ${processId}, останавливаем процесс`);
-            //         await this.stopProcess(processId, true);
-            //     }
-            // }, checkInterval);
+            // Определяем время создания
+            const currentTime = Date.now();
+            // Если это перезапуск - используем оригинальное время создания, иначе - текущее
+            const initialCreationTime = options.isRestart ? options.initialCreationTime : currentTime;
 
             // Сохраняем информацию о процессе
             this.mevProcesses.set(processId, {
@@ -516,12 +567,12 @@ class MevLoadBalancer {
                 meteoraPool,
                 pumpSwapPool,
                 process: childProcess,
-                startTime: Date.now(),
+                startTime: currentTime,
+                initialCreationTime: initialCreationTime, // Сохраняем оригинальное время создания
                 status: 'running',
-                lastActivity: Date.now(),
+                lastActivity: currentTime,
                 signals: [],
                 config: processConfig,
-                // processTimer: processTimer // Сохраняем таймер
             });
 
             // Создаем числовой ID для React UI
@@ -1027,6 +1078,17 @@ class MevLoadBalancer {
      */
     async handleMevSignal(signals) {
         try {
+            // Проверяем, идет ли очистка процессов
+            if (this.isCleaningProcesses) {
+                console.log(`[MEV LoadBalancer] Нельзя обработать сигналы: идет очистка процессов`);
+                // Возвращаем сигналы обратно в буфер
+                this.signalBuffer.push(...signals);
+                return {
+                    success: false,
+                    error: 'Операция отложена, идёт очистка процессов с низкой ликвидностью'
+                };
+            }
+
             console.log(`[MEV LoadBalancer] =====================================================`);
             console.log(`[MEV LoadBalancer] НАЧАЛО ОБРАБОТКИ ${signals.length} MEV сигналов`);
             console.log(`[MEV LoadBalancer] =====================================================`);
@@ -1065,12 +1127,19 @@ class MevLoadBalancer {
             const processDelay = this.calculateProcessDelay(newProcessCount);
             console.log(`[MEV LoadBalancer] Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
 
-            // Шаг 4: Сохраняем конфигурации текущих процессов
+            // Шаг 4: Сохраняем конфигурации текущих процессов с временем их создания
             const processConfigs = [];
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
                 const config = { ...processData.config, process_delay: processDelay };
-                processConfigs.push({ processId, config });
+                // Сохраняем также время первоначального создания процесса
+                const initialCreationTime = processData.initialCreationTime || processData.startTime;
+
+                processConfigs.push({
+                    processId,
+                    config,
+                    initialCreationTime
+                });
 
                 // Останавливаем текущий процесс
                 console.log(`[MEV LoadBalancer] Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
@@ -1096,28 +1165,15 @@ class MevLoadBalancer {
                 }
             }
 
-            // Шаг 5: Создаем конфиги для новых процессов
-            // const newProcessConfigs = validSignals.map(signal => {
-            //   const { tokenAddress, meteoraPool, pumpSwapPool } = signal;
-            //   return {
-            //     tokenAddress,
-            //     meteoraPool,
-            //     pumpSwapPool,
-            //     main_rpc: this.userSettings?.mainRpc || "https://api.mainnet-beta.solana.com",
-            //     useJito: true,
-            //     jito_lower_bound: 100000,
-            //     jito_upper_bound: 200000,
-            //     process_delay: processDelay,
-            //     task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
-            //   };
-            // });
-
-
             // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
             const restartedProcesses = [];
-            for (const { config } of processConfigs) {
-                console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms`);
-                const restartedProcessId = await this.startMevProcess(config);
+            for (const { config, initialCreationTime } of processConfigs) {
+                console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
+                // Передаем флаг, что это перезапуск и оригинальное время создания
+                const restartedProcessId = await this.startMevProcess(config, {
+                    isRestart: true,
+                    initialCreationTime: initialCreationTime
+                });
                 if (restartedProcessId) {
                     restartedProcesses.push(restartedProcessId);
                 }
@@ -1128,14 +1184,13 @@ class MevLoadBalancer {
             console.log(`[MEV LoadBalancer] Запуск ${newProcessConfigs.length} новых MEV процессов`);
             const newProcesses = [];
             for (const config of newProcessConfigs) {
+                // Для новых процессов не передаем флаг перезапуска
                 const processId = await this.startMevProcess(config);
                 if (processId) {
                     newProcesses.push(processId);
                 }
                 await sleep(1000);
             }
-
-
 
             console.log(`[MEV LoadBalancer] Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
 
@@ -1200,7 +1255,14 @@ class MevLoadBalancer {
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
                 const config = { ...processData.config, process_delay: processDelay };
-                processConfigs.push({ processId, config });
+                // Сохраняем также время первоначального создания процесса
+                const initialCreationTime = processData.initialCreationTime || processData.startTime;
+
+                processConfigs.push({
+                    processId,
+                    config,
+                    initialCreationTime
+                });
 
                 // Останавливаем текущий процесс
                 console.log(`[MEV LoadBalancer] Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
@@ -1208,9 +1270,12 @@ class MevLoadBalancer {
             }
 
             const restartedProcesses = [];
-            for (const { config } of processConfigs) {
-                console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms`);
-                const restartedProcessId = await this.startMevProcess(config);
+            for (const { config, initialCreationTime } of processConfigs) {
+                console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
+                const restartedProcessId = await this.startMevProcess(config, {
+                    isRestart: true,
+                    initialCreationTime: initialCreationTime
+                });
                 if (restartedProcessId) {
                     restartedProcesses.push(restartedProcessId);
                 }
@@ -1252,6 +1317,106 @@ class MevLoadBalancer {
 
     }
 
+    /**
+     * Проверяет ликвидность пулов всех процессов и удаляет процессы с низкой ликвидностью
+     */
+    async checkAndCleanProcessesByLiquidity() {
+        // Проверяем, что очистка уже не запущена и не идёт обработка сигналов
+        if (this.isCleaningProcesses || this.processingSignals) {
+            console.log('[MEV LoadBalancer] Пропуск проверки ликвидности: уже выполняется другая операция с процессами');
+            return;
+        }
+
+        if (!this.isActive || this.mevProcesses.size === 0) {
+            console.log('[MEV LoadBalancer] Пропуск проверки ликвидности: балансировщик неактивен или нет процессов');
+            return;
+        }
+
+        try {
+            // Устанавливаем блокировку на время операции
+            this.isCleaningProcesses = true;
+
+            console.log(`[MEV LoadBalancer] Начало проверки ликвидности пулов для ${this.mevProcesses.size} процессов`);
+
+            // Текущее время для проверки возраста процессов
+            const currentTime = Date.now();
+
+            // Собираем процессы, которые нужно остановить
+            const processesToStop = [];
+
+            // Проходим по всем процессам и проверяем ликвидность их пулов
+            for (const [processId, processData] of this.mevProcesses.entries()) {
+                try {
+                    const meteoraPool = processData.meteoraPool || processData.config?.meteoraPool;
+
+                    if (!meteoraPool) {
+                        console.log(`[MEV LoadBalancer] Пропуск проверки для процесса ${processId}: пул не найден`);
+                        continue;
+                    }
+
+                    // Проверяем возраст процесса
+                    const processAge = currentTime - (processData.initialCreationTime || processData.startTime);
+                    if (processAge < this.settings.minProcessAgeForCleanup) {
+                        console.log(`[MEV LoadBalancer] Пропуск проверки для молодого процесса ${processId}: возраст ${Math.floor(processAge / 1000 / 60)} минут < ${Math.floor(this.settings.minProcessAgeForCleanup / 1000 / 60)} минут`);
+                        continue;
+                    }
+
+                    console.log(`[MEV LoadBalancer] Проверка ликвидности пула ${meteoraPool} для процесса ${processId} (возраст: ${Math.floor(processAge / 1000 / 60)} минут)`);
+
+                    // Проверяем ликвидность пула
+                    const hasEnoughLiquidity = await this.checkLiquidity(meteoraPool);
+
+                    // Если ликвидность ниже порогового значения, добавляем процесс в список на остановку
+                    if (!hasEnoughLiquidity) {
+                        console.log(`[MEV LoadBalancer] Процесс ${processId} будет остановлен: ликвидность пула ${meteoraPool} ниже ${this.settings.minimumLiquidity} USD`);
+                        processesToStop.push(processId);
+                    } else {
+                        console.log(`[MEV LoadBalancer] Процесс ${processId} продолжит работу: ликвидность пула достаточна`);
+                    }
+                } catch (error) {
+                    console.error(`[MEV LoadBalancer] Ошибка при проверке ликвидности для процесса ${processId}:`, error);
+                }
+            }
+
+            // Если есть процессы для остановки, останавливаем их
+            if (processesToStop.length > 0) {
+                console.log(`[MEV LoadBalancer] Найдено ${processesToStop.length} процессов с низкой ликвидностью для остановки`);
+
+                // Уведомляем в Telegram о начале очистки
+                if (this.settings.notifyTelegram) {
+                    telegramBotService.sendSystemNotification(
+                        `🧹 Начало очистки ${processesToStop.length} MEV процессов с низкой ликвидностью`
+                    );
+                }
+
+                // Останавливаем все процессы, кроме последнего
+                for (let i = 0; i < processesToStop.length - 1; i++) {
+                    await this.stopProcess(processesToStop[i], false);
+                }
+
+                // Останавливаем последний процесс с флагом restart=true
+                if (processesToStop.length > 0) {
+                    const lastProcessId = processesToStop[processesToStop.length - 1];
+                    await this.stopProcess(lastProcessId, true);
+
+                    // Уведомляем об окончании процесса очистки
+                    if (this.settings.notifyTelegram) {
+                        telegramBotService.sendSystemNotification(
+                            `✅ Завершена очистка ${processesToStop.length} MEV процессов с низкой ликвидностью.\nЗапущен перерасчет и перезапуск оставшихся процессов.`
+                        );
+                    }
+                }
+            } else {
+                console.log('[MEV LoadBalancer] Процессы с низкой ликвидностью не найдены');
+            }
+        } catch (error) {
+            console.error('[MEV LoadBalancer] Ошибка при проверке и очистке процессов с низкой ликвидностью:', error);
+        } finally {
+            // Снимаем блокировку в любом случае, даже при ошибке
+            this.isCleaningProcesses = false;
+            console.log('[MEV LoadBalancer] Завершена проверка ликвидности пулов');
+        }
+    }
 
     /**
      * Отправляет задачу в обработчик
