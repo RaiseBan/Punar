@@ -13,10 +13,10 @@ interface AppSettings {
     tensor_api_token?: string;
     bloxroute_api_token?: string;
 
-    migration_wallet?:string;
+    migration_wallet?: string;
     proxy_server_ip?: string;
     proxy_server_port?: number;
-    primary_ip?:string;
+    primary_ip?: string;
     requests_per_second?: number
 
     thor_streamer_address?: string;
