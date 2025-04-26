@@ -311,7 +311,7 @@ async function spawnProcess(taskConfig, userSettings) {
         } else if (updatedTaskConfig.module_name === "MEV Module") {
             if (updatedTaskConfig.globalStrategy === "check_migration") {
                 moduleDir = "new-token-release"
-                fileToExecute = "index.js";
+                fileToExecute = "index.ts";
             } else if (updatedTaskConfig.globalStrategy === "jito_only") {
                 moduleDir = "mev";
                 fileToExecute = "index.ts"
@@ -366,7 +366,7 @@ async function spawnProcess(taskConfig, userSettings) {
 
             console.log(`✅ SPAWN: Python процесс запущен, PID: ${child.pid}`);
         } else if (moduleDir === "new-token-release") {
-            child = spawn("node", [path.join(userSettings.scriptDirectory, moduleDir, "dist", fileToExecute)], {
+            child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "srt", fileToExecute)], {
                 stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
                 shell: true, // Используем shell для корректного выполнения
                 detached: false,
