@@ -13,66 +13,58 @@ const mevSubtaskProcesses = new Map();
 // Улучшаем функцию для принудительного завершения процесса в Windows
 async function forceKillWindowsProcess(pid) {
     if (!pid) {
-        console.error("Невозможно убить процесс: PID не указан");
+        console.error("❌ KILL: Невозможно убить процесс: PID не указан");
         return false;
     }
 
-    console.log(`KILL: Начинаем принудительное завершение процесса с PID ${pid}`);
+    console.log(`🔪 KILL: Начинаем принудительное завершение процесса с PID ${pid}`);
 
-    return new Promise((resolve) => {
-        try {
-            console.log(`KILL: Пытаемся завершить процесс ${pid} через tree-kill`);
+    try {
+        // Сначала пробуем использовать tree-kill
+        console.log(`🌳 KILL: Попытка использования tree-kill для PID ${pid}`);
+        const treeKill = require('tree-kill');
 
-            // Сначала пытаемся завершить с помощью tree-kill
-            const treeKill = require('tree-kill');
-            treeKill(pid, 'SIGKILL', (treeKillError) => {
-                if (treeKillError) {
-                    console.log(`KILL: tree-kill не завершил процесс ${pid}, ошибка: ${treeKillError}`);
-                    console.log(`KILL: Пробуем taskkill как резервный вариант`);
+        return new Promise((resolve) => {
+            treeKill(pid, 'SIGKILL', (err) => {
+                if (err) {
+                    console.warn(`⚠️ KILL: tree-kill не смог завершить процесс ${pid}: ${err.message}`);
+                    console.log(`🔄 KILL: Переключаемся на taskkill для PID ${pid}`);
 
-                    // Если не удалось через tree-kill, пробуем через taskkill как резервный вариант
-                    const { execSync } = require('child_process');
-                    try {
-                        // Используем /F для принудительного завершения и /T для завершения дерева процессов
-                        const output = execSync(`taskkill /pid ${pid} /T /F`, { encoding: 'utf8' });
-                        console.log(`KILL: Результат taskkill для процесса ${pid}: ${output.trim()}`);
-                        console.log(`KILL: Процесс ${pid} успешно завершен через taskkill`);
-                        resolve(true);
-                    } catch (taskkillError) {
-                        // Если taskkill не нашел процесс, это нормально
-                        const errorMsg = taskkillError.message || '';
-                        if (errorMsg.includes('не найден')) {
-                            console.log(`KILL: Процесс ${pid} не найден taskkill, возможно уже завершен`);
-                            resolve(true);
-                        } else {
-                            console.error(`KILL: Ошибка завершения процесса ${pid} через taskkill: ${errorMsg}`);
+                    // Если tree-kill не сработал, используем taskkill
+                    const { exec } = require('child_process');
 
-                            // Проверяем, запущен ли еще процесс
-                            try {
-                                const checkOutput = execSync(`tasklist /FI "PID eq ${pid}" /FO CSV`, { encoding: 'utf8' });
-                                if (checkOutput.includes(pid)) {
-                                    console.error(`KILL: Процесс ${pid} все еще запущен после попыток завершения!`);
+                    // Сначала пробуем обычное завершение
+                    console.log(`🔵 KILL: Запускаем taskkill для PID ${pid}`);
+                    exec(`taskkill /PID ${pid}`, (error) => {
+                        if (error) {
+                            console.warn(`⚠️ KILL: Обычный taskkill не смог завершить процесс ${pid}: ${error.message}`);
+                            console.log(`🔴 KILL: Запускаем принудительный taskkill /F для PID ${pid}`);
+
+                            // Если обычное завершение не сработало, используем принудительное
+                            exec(`taskkill /F /PID ${pid}`, (forceError) => {
+                                if (forceError) {
+                                    console.error(`❌ KILL: Принудительный taskkill не смог завершить процесс ${pid}: ${forceError.message}`);
                                     resolve(false);
                                 } else {
-                                    console.log(`KILL: Процесс ${pid} не обнаружен в списке задач, считаем завершенным`);
+                                    console.log(`✅ KILL: Процесс ${pid} успешно завершен с помощью принудительного taskkill`);
                                     resolve(true);
                                 }
-                            } catch (checkError) {
-                                console.error(`KILL: Ошибка при проверке статуса процесса ${pid}: ${checkError.message}`);
-                                resolve(false);
-                            }
+                            });
+                        } else {
+                            console.log(`✅ KILL: Процесс ${pid} успешно завершен с помощью обычного taskkill`);
+                            resolve(true);
                         }
-                    }
+                    });
                 } else {
-                    console.log(`KILL: Процесс ${pid} успешно завершен через tree-kill`);
+                    console.log(`✅ KILL: Процесс ${pid} успешно завершен с помощью tree-kill`);
                     resolve(true);
                 }
             });
-        } catch (error) {
-            console.error(`KILL: Общая ошибка при завершении процесса ${pid}: ${error.message}`);
-            resolve(false);
-        }
-    });
+        });
+    } catch (error) {
+        console.error(`❌ KILL: Критическая ошибка при попытке завершения процесса ${pid}: ${error.message}`);
+        return false;
+    }
 }
 
 // Переменная для отслеживания идентификаторов процессов WSL
@@ -239,44 +231,46 @@ function stopMevProcess(taskId) {
 
 // Добавим логирование входных параметров для диагностики
 async function spawnProcess(taskConfig, userSettings) {
-    console.log(`SPAWN: Запуск процесса с конфигурацией:`, JSON.stringify(taskConfig, null, 2));
-    console.log(`SPAWN: Настройки пользователя:`, JSON.stringify(userSettings, null, 2));
+    console.log(`🚀 SPAWN: Запуск процесса с конфигурацией:`, JSON.stringify(taskConfig, null, 2));
+    console.log(`⚙️ SPAWN: Настройки пользователя:`, JSON.stringify(userSettings, null, 2));
 
     // Проверка необходимых параметров
     if (!taskConfig) {
-        console.error(`SPAWN: Ошибка - taskConfig не определен`);
+        console.error(`❌ SPAWN: Ошибка - taskConfig не определен`);
         return null;
     }
 
     if (!userSettings) {
-        console.error(`SPAWN: Ошибка - userSettings не определен`);
+        console.error(`❌ SPAWN: Ошибка - userSettings не определен`);
         return null;
     }
 
     if (!userSettings.scriptDirectory) {
-        console.error(`SPAWN: Ошибка - scriptDirectory не определен в userSettings`);
+        console.error(`❌ SPAWN: Ошибка - scriptDirectory не определен в userSettings`);
         return null;
     }
 
     // Добавим более детальное логирование для отладки
     try {
         if (!taskConfig.module_name || !taskConfig.task_name) {
-            console.error("Ошибка: taskConfig должен содержать module_name и task_name");
+            console.error("❌ SPAWN: Ошибка: taskConfig должен содержать module_name и task_name");
             return null;
         }
 
         // Убедимся, что taskId доступен и корректен
         const taskId = taskConfig.taskId || (taskConfig.sourceTaskId ? taskConfig.sourceTaskId : Date.now());
-        console.log(`ПРОЦЕСС: Используем taskId: ${taskId} для процесса ${taskConfig.module_name}/${taskConfig.task_name}`);
+        console.log(`🔖 SPAWN: Используем taskId: ${taskId} для процесса ${taskConfig.module_name}/${taskConfig.task_name}`);
 
         // Сохраняем taskId в конфигурации, если его там нет
         taskConfig.taskId = taskId;
 
         // Получаем правильную директорию конфигов
         const configDir = getConfigDirectory();
+        console.log(`📁 SPAWN: Директория конфигов: ${configDir}`);
 
         // Создаем папку, если её нет
         if (!fs.existsSync(configDir)) {
+            console.log(`📂 SPAWN: Создаем директорию конфигов: ${configDir}`);
             fs.mkdirSync(configDir, { recursive: true });
         }
 
@@ -285,7 +279,7 @@ async function spawnProcess(taskConfig, userSettings) {
         const taskName = sanitizeFileName(taskConfig.task_name);
         const configFileName = `${moduleName}_${taskName}.json`;
         const configPath = path.join(configDir, configFileName);
-        console.log(JSON.stringify(taskConfig, null, 2));
+        console.log(`📄 SPAWN: Путь к файлу конфигурации: ${configPath}`);
         let updatedTaskConfig;
         if (taskConfig.module_name === "Tensor sniper (SDK)" || taskConfig.module_name === "Tensor reprice") {
             updatedTaskConfig = await updateConfigCollectionId(taskConfig);
@@ -335,6 +329,9 @@ async function spawnProcess(taskConfig, userSettings) {
             const pythonScriptPath = path.join(userSettings.scriptDirectory, moduleDir);
             const venvPath = path.join(pythonScriptPath, '.venv');
 
+            console.log(`🐍 SPAWN: Запуск Python процесса для MEV из директории: ${pythonScriptPath}`);
+            console.log(`🌐 SPAWN: Используем виртуальное окружение: ${venvPath}`);
+
             // 1. Активируем переменные окружения вручную
             const env = {
                 ...process.env,
@@ -346,6 +343,7 @@ async function spawnProcess(taskConfig, userSettings) {
 
             // 2. Путь к Python в виртуальном окружении
             const pythonExecutable = path.join(venvPath, 'Scripts', 'python.exe');
+            console.log(`🔧 SPAWN: Путь к исполняемому файлу Python: ${pythonExecutable}`);
 
             // 3. Аргументы для запуска
             const args = [
@@ -355,6 +353,7 @@ async function spawnProcess(taskConfig, userSettings) {
                 `--max-attempts=${taskConfig.max_attempts}`,
                 `--threads=${taskConfig.thread_workers}`
             ];
+            console.log(`⚡ SPAWN: Командная строка: ${pythonExecutable} ${args.join(' ')}`);
 
             // 4. Запуск процесса
             child = spawn(pythonExecutable, args, {
@@ -363,6 +362,8 @@ async function spawnProcess(taskConfig, userSettings) {
                 cwd: pythonScriptPath,
                 env: env
             });
+
+            console.log(`✅ SPAWN: Python процесс запущен, PID: ${child.pid}`);
         } else if (moduleDir === "new-token-release") {
             const exePath = path.join(userSettings.scriptDirectory, moduleDir, "new-token-release.exe");
             child = spawn(exePath, ["--port", "5001"], {
@@ -414,13 +415,14 @@ async function spawnProcess(taskConfig, userSettings) {
             const program = `${convertWindowsPathToWSL(userSettings.mevBotDirectory)}/${fileToExecute}`
             const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
             // const wslCommand = `${fileToExecute} ${configFilePath}`;
-            console.log(`full command: wsl ${program} ${configFilePathWSL}`);
+            console.log(`⚡ SPAWN: Запуск WSL процесса: wsl ${program} ${configFilePathWSL}`);
             child = spawn('wsl.exe', ['-e', program, "run", configFilePathWSL], {
                 stdio: 'pipe',
                 shell: true,
                 detached: false,
                 cwd: userSettings.mevBotDirectory,
             });
+            console.log(`✅ SPAWN: WSL процесс запущен, PID: ${child.pid}`);
 
             // Проверяем, включен ли режим мониторинга
             if (updatedTaskConfig.enablePoolMonitoring === true) {
@@ -691,14 +693,15 @@ async function spawnProcess(taskConfig, userSettings) {
         // Добавляем обработчик завершения для mev_subtask процессов
         if (updatedTaskConfig.module_name === "mev_subtask" && updatedTaskConfig.enablePoolMonitoring) {
             child.on("exit", (code) => {
-                console.log(`mev_subtask process ${taskId} exited with code ${code}, cleaning up monitoring`);
+                console.log(`🛑 SPAWN: mev_subtask процесс ${taskId} завершился с кодом ${code}, очищаем мониторинг`);
 
                 // Даже если код равен null (принудительное завершение), мы должны корректно очистить ресурсы
                 if (code === null) {
-                    console.log(`МОНИТОРИНГ: Процесс ${taskId} был завершен принудительно. Очищаем ресурсы.`);
+                    console.log(`⚠️ SPAWN: Процесс ${taskId} был завершен принудительно. Очищаем ресурсы.`);
                 }
 
                 stopMevProcess(taskId);
+                console.log(`🧹 SPAWN: Ресурсы процесса ${taskId} очищены успешно`);
             });
         }
 
@@ -707,9 +710,10 @@ async function spawnProcess(taskConfig, userSettings) {
 
         // Добавляем обработчики для корректного отслеживания состояния процесса
         child.on('error', (err) => {
-            console.error(`ПРОЦЕСС ${taskId}: Ошибка процесса WSL:`, err.message);
+            console.error(`❌ SPAWN: Ошибка процесса ${taskId}:`, err.message);
             // Помечаем процесс как проблемный в трекере
             wslProcessTracking.removeProcess(taskId);
+            console.log(`🗑️ SPAWN: Процесс ${taskId} удален из трекера WSL процессов из-за ошибки`);
         });
 
         // Добавляем надежное отслеживание отключения процесса
@@ -753,9 +757,10 @@ async function spawnProcess(taskConfig, userSettings) {
             }
         });
 
+        console.log(`✨ SPAWN: Процесс ${taskId} успешно инициализирован и запущен`);
         return child;
     } catch (error) {
-        console.error(`SPAWN: Ошибка запуска процесса:`, error);
+        console.error(`❌ SPAWN: Критическая ошибка при запуске процесса:`, error);
         return null;
     }
 }
