@@ -15,7 +15,7 @@ const fs = require('fs');
 const bs58 = require("bs58");
 const { sleep, getDetailedTokenAccounts, createTokenAccount } = require('../utils/solanaUtils');
 const { Keypair } = require("@solana/web3.js");
-const logger = require('../utils/logger');
+const logger = require('../services/loggerService');
 
 class MevLoadBalancer {
     constructor() {
