@@ -341,7 +341,7 @@ export default function CreateTaskWizard({
                 main_rpc: settings?.mainRpc || "",
                 mode: mevParams.mode,
                 globalStrategy: mevParams.globalStrategy,
-                grpc_token: settings?.thor_streamer_address,
+                grpc_token: settings?.thor_streamer_token,
                 grpc_address: settings?.thor_streamer_address
                 
             };
