@@ -340,7 +340,10 @@ export default function CreateTaskWizard({
                 private_key: mevParams.privateKey,
                 main_rpc: settings?.mainRpc || "",
                 mode: mevParams.mode,
-                globalStrategy: mevParams.globalStrategy
+                globalStrategy: mevParams.globalStrategy,
+                grpc_token: settings?.thor_streamer_address,
+                grpc_address: settings?.thor_streamer_address
+                
             };
             onCreateTask(cfg);
         }

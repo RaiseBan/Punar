@@ -4,6 +4,8 @@ const { app, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { getGlobalConfigDirectory } = require("../utils/wallet");
+const mevLoadBalancer = require('./mevLoadBalancer');
+const logger = require('./loggerService');
 
 class TelegramBotService {
     constructor() {
@@ -1454,15 +1456,18 @@ class TelegramBotService {
             const processId = args[0];
 
             try {
+                logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, `Остановка MEV процесса ${processId} по запросу из Telegram`);
                 const result = await mevLoadBalancer.stopProcess(processId, true);
 
                 if (result.success) {
+                    logger.success(logger.LOG_MODULES.TELEGRAM_SERVICE, `MEV процесс ${processId} успешно остановлен`);
                     this.sendMessage(chatId, `✅ MEV процесс ${processId} успешно остановлен`);
                 } else {
+                    logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, `Ошибка остановки MEV процесса: ${result.error}`, { processId });
                     this.sendMessage(chatId, `❌ Ошибка остановки MEV процесса: ${result.error}`);
                 }
             } catch (error) {
-                console.error(`[TG Bot] Ошибка при остановке MEV процесса ${processId}:`, error);
+                logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, `Ошибка при остановке MEV процесса ${processId}`, error);
                 this.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
             }
         });

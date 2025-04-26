@@ -13,10 +13,14 @@ const { getSettings } = require('../utils/fsHelper');
 const telegramBotService = require('./telegramBotService');
 const fs = require('fs');
 const bs58 = require("bs58");
+
 const {sleep, getDetailedTokenAccounts, createTokenAccount} = require('../utils/solanaUtils');
 const {Keypair} = require("@solana/web3.js");
 const axios = require('axios');
 const {MASTER_NODE_PORT} = require("../utils/constants");
+
+const logger = require('../utils/logger');
+
 
 class MevLoadBalancer {
     constructor() {
@@ -85,7 +89,7 @@ class MevLoadBalancer {
 
             // Активируем балансировщик автоматически при запуске
             this.isActive = true;
-            console.log('[MEV LoadBalancer] Балансировщик автоматически активирован при запуске');
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик автоматически активирован при запуске');
 
             this.USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(this.userSettings.migration_wallet)));
             // кешируем токен аккаунты
@@ -101,9 +105,9 @@ class MevLoadBalancer {
             // Запускаем таймер проверки ликвидности пулов
             this.startPoolLiquidityChecker();
 
-            console.log('[MEV LoadBalancer] Инициализация завершена');
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Инициализация завершена');
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при инициализации:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при инициализации:', error);
         }
     }
 
@@ -115,7 +119,7 @@ class MevLoadBalancer {
             clearInterval(this.processingTimer);
         }
 
-        console.log(`[MEV LoadBalancer] Запуск таймера обработки сигналов (интервал: ${this.settings.processingInterval}мс)`);
+        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск таймера обработки сигналов (интервал: ${this.settings.processingInterval}мс)`);
 
         this.processingTimer = setInterval(() => {
             this.processSignalBuffer();
@@ -129,7 +133,7 @@ class MevLoadBalancer {
         if (this.processingTimer) {
             clearInterval(this.processingTimer);
             this.processingTimer = null;
-            console.log('[MEV LoadBalancer] Таймер обработки сигналов остановлен');
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Таймер обработки сигналов остановлен');
         }
     }
 
@@ -142,7 +146,7 @@ class MevLoadBalancer {
             clearInterval(this.liquidityCheckerTimer);
         }
 
-        console.log(`[MEV LoadBalancer] Запуск таймера проверки ликвидности пулов (интервал: ${this.settings.liquidityCheckInterval}мс)`);
+        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск таймера проверки ликвидности пулов (интервал: ${this.settings.liquidityCheckInterval}мс)`);
 
         // Запускаем новый таймер
         this.liquidityCheckerTimer = setInterval(() => {
@@ -157,7 +161,7 @@ class MevLoadBalancer {
         if (this.liquidityCheckerTimer) {
             clearInterval(this.liquidityCheckerTimer);
             this.liquidityCheckerTimer = null;
-            console.log('[MEV LoadBalancer] Таймер проверки ликвидности пулов остановлен');
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Таймер проверки ликвидности пулов остановлен');
         }
     }
 
@@ -170,14 +174,14 @@ class MevLoadBalancer {
     addSignalToBuffer(signal, sourceProcessId) {
         try {
             if (!this.isActive) {
-                console.log('[MEV LoadBalancer] Балансировщик неактивен, сигнал игнорируется');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик неактивен, сигнал игнорируется');
                 return {
                     success: false,
                     error: 'Балансировщик неактивен'
                 };
             }
 
-            console.log(`[MEV LoadBalancer] Добавление сигнала в буфер от процесса ${sourceProcessId}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Добавление сигнала в буфер от процесса ${sourceProcessId}`);
 
             // Добавляем сигнал в буфер с метаданными
             this.signalBuffer.push({
@@ -186,14 +190,14 @@ class MevLoadBalancer {
                 addedTime: Date.now()
             });
 
-            console.log(`[MEV LoadBalancer] Сигнал добавлен в буфер (всего в буфере: ${this.signalBuffer.length})`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Сигнал добавлен в буфер (всего в буфере: ${this.signalBuffer.length})`);
 
             return {
                 success: true,
                 bufferSize: this.signalBuffer.length
             };
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при добавлении сигнала в буфер:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при добавлении сигнала в буфер:', error);
             return {
                 success: false,
                 error: error.message
@@ -214,7 +218,7 @@ class MevLoadBalancer {
             // Устанавливаем флаг обработки
             this.processingSignals = true;
 
-            console.log(`[MEV LoadBalancer] Начало обработки буфера сигналов (${this.signalBuffer.length} сигналов)`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Начало обработки буфера сигналов (${this.signalBuffer.length} сигналов)`);
 
             // Копируем буфер и очищаем его
             const signalsToProcess = [...this.signalBuffer];
@@ -230,7 +234,7 @@ class MevLoadBalancer {
 
             // Проверяем, идет ли очистка процессов
             if (this.isCleaningProcesses) {
-                console.log(`[MEV LoadBalancer] Обнаружена активная очистка процессов, откладываем обработку сигналов`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Обнаружена активная очистка процессов, откладываем обработку сигналов`);
                 // Возвращаем сигналы обратно в буфер
                 this.signalBuffer.push(...signalsToProcess);
 
@@ -247,11 +251,11 @@ class MevLoadBalancer {
             const result = await this.handleMevSignal(signalsToProcess);
 
             if (!result.success) {
-                console.error('[MEV LoadBalancer] Ошибка при обработке буфера сигналов:', result.error);
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при обработке буфера сигналов:', result.error);
             }
 
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при обработке буфера сигналов:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при обработке буфера сигналов:', error);
         } finally {
             // Сбрасываем флаг обработки
             this.processingSignals = false;
@@ -265,11 +269,11 @@ class MevLoadBalancer {
     async start() {
         try {
             if (this.isActive) {
-                console.log('[MEV LoadBalancer] Балансировщик уже запущен');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик уже запущен');
                 return { success: true, status: 'already_running' };
             }
 
-            console.log('[MEV LoadBalancer] Запуск MEV LoadBalancer');
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Запуск MEV LoadBalancer');
 
             // Получаем глобальные настройки пользователя
             this.userSettings = await getSettings();
@@ -293,7 +297,7 @@ class MevLoadBalancer {
                 message: 'MEV LoadBalancer успешно запущен'
             };
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при запуске:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при запуске:', error);
             this.isActive = false;
 
             return {
@@ -311,11 +315,11 @@ class MevLoadBalancer {
     async stop() {
         try {
             if (!this.isActive) {
-                console.log('[MEV LoadBalancer] Балансировщик уже остановлен');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик уже остановлен');
                 return { success: true, status: 'already_stopped' };
             }
 
-            console.log('[MEV LoadBalancer] Остановка MEV LoadBalancer');
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Остановка MEV LoadBalancer');
 
             // Останавливаем таймер обработки сигналов
             this.stopProcessingTimer();
@@ -345,7 +349,7 @@ class MevLoadBalancer {
                 message: 'MEV LoadBalancer успешно остановлен'
             };
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при остановке:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при остановке:', error);
 
             return {
                 success: false,
@@ -398,7 +402,7 @@ class MevLoadBalancer {
      */
     updateSettings(settings) {
         try {
-            console.log('[MEV LoadBalancer] Обновление настроек:', settings);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Обновление настроек:', settings);
 
             // Обновляем настройки
             this.settings = {
@@ -412,7 +416,7 @@ class MevLoadBalancer {
                 message: 'Настройки успешно обновлены'
             };
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при обновлении настроек:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при обновлении настроек:', error);
 
             return {
                 success: false,
@@ -437,7 +441,7 @@ class MevLoadBalancer {
      */
     registerTokenReleaseProcess(processId) {
         if (!this.tokenReleaseProcesses.has(processId)) {
-            console.log(`[MEV LoadBalancer] Регистрация процесса ${processId} как процесса new-token-release`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Регистрация процесса ${processId} как процесса new-token-release`);
             this.tokenReleaseProcesses.set(processId, true);
         }
     }
@@ -476,9 +480,9 @@ class MevLoadBalancer {
      */
     async startMevProcess(config, options = {}) {
         try {
-            console.log(`ckeck token exists on "${config.tokenAddress}"`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ckeck token exists on "${config.tokenAddress}"`);
             if (!this.userTokens.has(config.tokenAddress.trim())) {
-                console.log(`NO TOKEN ACCOUNT, CREATING...`)
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `NO TOKEN ACCOUNT, CREATING...`);
                 this.userTokens.set(config.tokenAddress.trim(), await createTokenAccount(this.userSettings.mainRpc, config.tokenAddress.trim(), this.USER, this.userTokens));
                 await sleep(21000);
             }
@@ -490,8 +494,8 @@ class MevLoadBalancer {
             let pumpSwapPool = config.pumpSwapPool || null;
 
             if (!tokenAddress || !meteoraPool) {
-                console.error(`[MEV LoadBalancer] Не указаны обязательные параметры токена или пула.`);
-                console.error(`[MEV LoadBalancer] Токен: ${tokenAddress}, пул: ${meteoraPool}`);
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Не указаны обязательные параметры токена или пула.`);
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Токен: ${tokenAddress}, пул: ${meteoraPool}`);
                 return null;
             }
 
@@ -508,20 +512,20 @@ class MevLoadBalancer {
                 task_name: config.task_name || `MEV Process ${processId}`,
             };
 
-            console.log(`[MEV LoadBalancer] Запуск MEV процесса с конфигурацией:`, JSON.stringify(processConfig));
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск MEV процесса с конфигурацией:`, JSON.stringify(processConfig));
 
             // Отправка процесса на запуск - передаем userSettings
             const childProcess = await spawnProcess(processConfig, this.userSettings);
 
             if (!childProcess) {
-                console.error(`[MEV LoadBalancer] Не удалось создать дочерний процесс для ${processId}`);
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Не удалось создать дочерний процесс для ${processId}`);
                 return null;
             }
 
-            console.log(`[MEV LoadBalancer] Успешно запущен MEV процесс ${processId}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Успешно запущен MEV процесс ${processId}`);
 
             // Добавляем обработчики для логирования вывода процесса (ПОТОМ УБРАТЬ консольный вывод)
-            console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) Настраиваем перехват вывода для процесса ${processId}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `(ПОТОМ УБРАТЬ) Настраиваем перехват вывода для процесса ${processId}`);
 
             // Обработка стандартного вывода (stdout)
             childProcess.stdout.on("data", (data) => {
@@ -549,7 +553,7 @@ class MevLoadBalancer {
 
             // Добавляем обработчик завершения процесса
             childProcess.on("exit", (code) => {
-                console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) завершился с кодом ${code}`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `(ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) завершился с кодом ${code}`);
 
                 // Записываем информацию о завершении в лог
                 this.writeProcessLog(processId, `Процесс завершен с кодом ${code}`, code === 0 ? 'info' : 'error');
@@ -585,7 +589,7 @@ class MevLoadBalancer {
 
             return processId;
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при запуске MEV процесса:', error, error.stack);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при запуске MEV процесса:', error, error.stack);
             return null;
         }
     }
@@ -600,7 +604,7 @@ class MevLoadBalancer {
                 const liquidity = pairData.liquidity.usd;
                 return liquidity >= 200;
             } catch (e) {
-                console.log(`Error while checkLiquidity: ${e}`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
                 await sleep(1500);
 
             }
@@ -617,85 +621,131 @@ class MevLoadBalancer {
      * @returns {Promise<Object>} - Результат остановки процесса
      */
     async stopProcess(processId, restart = false) {
+        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔴 НАЧАЛО ОСТАНОВКИ: Остановка MEV процесса ${processId} (restart=${restart})`);
+
         try {
+            // Проверяем, есть ли такой процесс
             if (!this.mevProcesses.has(processId)) {
-                console.warn(`[MEV LoadBalancer] Процесс ${processId} не найден`);
-                return {
-                    success: false,
-                    error: 'Процесс не найден'
-                };
+                logger.warn(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⚠️ Процесс ${processId} не найден в списке активных процессов`);
+                return false;
             }
 
+            // Получаем данные о процессе
             const processData = this.mevProcesses.get(processId);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ℹ️ Найдены данные процесса ${processId}, статус: ${processData.status}`);
 
-            console.log(`[MEV LoadBalancer] Остановка MEV процесса ${processId}`);
-
-            // Очищаем таймер процесса, если он существует
-            if (processData.processTimer) {
-                clearInterval(processData.processTimer);
-                console.log(`[MEV LoadBalancer] Таймер для процесса ${processId} очищен`);
+            // Очищаем таймер автоматического перезапуска, если он есть
+            if (processData.restartTimer) {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⏱️ Очищаем таймер автоматического перезапуска для процесса ${processId}`);
+                clearTimeout(processData.restartTimer);
+                processData.restartTimer = null;
             }
 
-            // Перед остановкой удаляем все слушатели событий
+            // Если процесс не запущен, просто удаляем его из списка
+            if (processData.status !== 'running') {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⏭️ Процесс ${processId} не запущен (статус: ${processData.status}), пропускаем остановку`);
+                this.mevProcesses.delete(processId);
+                return true;
+            }
+
+            // Удаляем обработчики событий
             if (processData.process) {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔄 Удаляем обработчики событий процесса ${processId}`);
+
                 try {
-                    // Удаляем слушатели stdout
-                    if (processData.process.stdout) {
-                        processData.process.stdout.removeAllListeners('data');
-                    }
+                    const listenerCount = {
+                        exit: processData.process.listenerCount('exit'),
+                        error: processData.process.listenerCount('error'),
+                        message: processData.process.listenerCount('message')
+                    };
 
-                    // Удаляем слушатели stderr
-                    if (processData.process.stderr) {
-                        processData.process.stderr.removeAllListeners('data');
-                    }
+                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `📊 Количество слушателей для процесса ${processId}: exit=${listenerCount.exit}, error=${listenerCount.error}, message=${listenerCount.message}`);
 
-                    // Удаляем слушатели exit
-                    processData.process.removeAllListeners('exit');
+                    processData.process.removeAllListeners();
+                    logger.success(logger.LOG_MODULES.MEV_LOAD_BALANCER, `✅ Слушатели успешно удалены для процесса ${processId}`);
                 } catch (listenerError) {
-                    console.error(`[MEV LoadBalancer] Ошибка при удалении слушателей для процесса ${processId}:`, listenerError);
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `❌ Ошибка при удалении слушателей для процесса ${processId}:`, listenerError);
                 }
-            }
 
-            // Используем forceKillWindowsProcess вместо stopMevProcess
-            let success = false;
-            if (processData.process && processData.process.pid) {
-                console.log(`[MEV LoadBalancer] Принудительное завершение процесса ${processId} с PID ${processData.process.pid} через forceKillWindowsProcess`);
-                success = await forceKillWindowsProcess(processData.process.pid);
+                // Получаем PID процесса
+                const pid = processData.process.pid;
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔍 PID процесса ${processId}: ${pid}`);
+
+                try {
+                    // Пытаемся "мягко" закрыть процесс
+                    if (processData.process.stdin && !processData.process.stdin.destroyed) {
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `�� Пытаемся корректно завершить процесс ${processId} через stdin.end()`);
+                        processData.process.stdin.end();
+                    }
+
+                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🛑 Пытаемся завершить процесс ${processId} через .kill()`);
+                    processData.process.kill();
+
+                    // Принудительное завершение через Windows Process Kill
+                    if (processData.process.pid) {
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔪 Принудительное завершение процесса ${processId} с PID ${pid} через forceKillWindowsProcess`);
+                        const killResult = await forceKillWindowsProcess(processData.process.pid);
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `${killResult ? '✅' : '❌'} Результат принудительного завершения процесса ${processId}: ${killResult ? 'успешно' : 'не удалось'}`);
+                    }
+                } catch (killError) {
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `❌ Ошибка при попытке завершить процесс ${processId}:`, killError);
+                }
+
+                // Отвязываем потоки ввода-вывода
+                try {
+                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔌 Отвязываем потоки ввода-вывода процесса ${processId}`);
+
+                    if (processData.process.stdout) {
+                        processData.process.stdout.removeAllListeners();
+                        processData.process.stdout.destroy();
+                    }
+
+                    if (processData.process.stderr) {
+                        processData.process.stderr.removeAllListeners();
+                        processData.process.stderr.destroy();
+                    }
+
+                    logger.success(logger.LOG_MODULES.MEV_LOAD_BALANCER, `✅ Потоки ввода-вывода процесса ${processId} успешно отвязаны`);
+                } catch (streamError) {
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⚠️ Ошибка при отвязке потоков ввода-вывода процесса ${processId}:`, streamError);
+                }
+
+                // Устанавливаем процесс в null
+                processData.process = null;
             } else {
-                console.log(`[MEV LoadBalancer] Процесс ${processId} не имеет допустимого PID, пропускаем forceKillWindowsProcess`);
-                success = true; // Считаем успешным, если процесса уже нет
+                logger.warn(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⚠️ Процесс ${processId} не имеет связанного объекта процесса`);
             }
 
-            // Обрабатываем результат остановки
-            if (!success) {
-                console.error(`[MEV LoadBalancer] Не удалось завершить процесс ${processId}`);
-                return {
-                    success: false,
-                    error: "Не удалось завершить процесс",
-                    processId
-                };
-            }
+            // Обновляем статус процесса
+            processData.status = 'stopped';
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `📝 Статус процесса ${processId} обновлен на 'stopped'`);
 
-            // Если процесс успешно остановлен, удаляем его из списка процессов
-            this.mevProcesses.delete(processId);
-
-            console.log(`[MEV LoadBalancer] Процесс ${processId} успешно остановлен и удален из списка`);
+            // Если нужно перезапустить, обновляем статус и планируем перезапуск
             if (restart) {
-                await this.restartProcesses();
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔄 Планируем перезапуск процесса ${processId}`);
+                processData.status = 'restarting';
+
+                // Устанавливаем таймер на перезапуск через 2 секунды
+                processData.restartTimer = setTimeout(() => {
+                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⏰ Выполняем запланированный перезапуск процесса ${processId}`);
+                    this.startProcess(processId);
+                }, 2000);
+            } else {
+                // Если не нужно перезапускать, удаляем процесс из списка
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🗑️ Процесс ${processId} успешно удален из списка mevProcesses`);
+                this.mevProcesses.delete(processId);
             }
 
-            return {
-                success: true,
-                processId,
-                message: 'Процесс успешно остановлен'
-            };
+            logger.success(logger.LOG_MODULES.MEV_LOAD_BALANCER, `✅ ЗАВЕРШЕНИЕ ОСТАНОВКИ: Процесс ${processId} успешно остановлен (restart=${restart})`);
+            return true;
         } catch (error) {
-            console.error(`[MEV LoadBalancer] Ошибка при остановке MEV процесса ${processId}:`, error);
-            return {
-                success: false,
-                error: error.message,
-                processId
-            };
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `❌ Критическая ошибка при остановке процесса ${processId}:`, error);
+            // В случае ошибки, если это не перезапуск, удаляем процесс из списка
+            if (!restart && this.mevProcesses.has(processId)) {
+                this.mevProcesses.delete(processId);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🗑️ Процесс ${processId} удален из списка из-за ошибки при остановке`);
+            }
+            return false;
         }
     }
 
@@ -707,7 +757,7 @@ class MevLoadBalancer {
     handleProcessExit(processId, code) {
         if (!this.mevProcesses.has(processId)) return;
 
-        console.log(`[MEV LoadBalancer] MEV процесс ${processId} завершился с кодом ${code}`);
+        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `MEV процесс ${processId} завершился с кодом ${code}`);
 
         const processData = this.mevProcesses.get(processId);
 
@@ -727,9 +777,9 @@ class MevLoadBalancer {
                 // Удаляем слушатели exit
                 processData.process.removeAllListeners('exit');
 
-                console.log(`[MEV LoadBalancer] Все слушатели событий удалены для процесса ${processId} после завершения`);
+                logger.success(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Все слушатели событий удалены для процесса ${processId} после завершения`);
             } catch (listenerError) {
-                console.error(`[MEV LoadBalancer] Ошибка при удалении слушателей для процесса ${processId}:`, listenerError);
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при удалении слушателей для процесса ${processId}:`, listenerError);
             }
         }
 
@@ -740,7 +790,7 @@ class MevLoadBalancer {
 
         // Удаляем процесс из карты MEV процессов сразу
         this.mevProcesses.delete(processId);
-        console.log(`[MEV LoadBalancer] Информация о MEV процессе ${processId} удалена`);
+        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Информация о MEV процессе ${processId} удалена`);
     }
 
     /**
@@ -776,7 +826,7 @@ class MevLoadBalancer {
 
             // console.log(`[MEV LoadBalancer] Записана ошибка в лог ${processId}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
         } catch (error) {
-            console.error(`[MEV LoadBalancer] Ошибка при записи лога для процесса ${processId}:`, error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при записи лога для процесса ${processId}:`, error);
         }
     }
 
@@ -793,7 +843,7 @@ class MevLoadBalancer {
 
             // Проверяем, существует ли файл логов
             if (!fs.existsSync(logFilePath)) {
-                console.log(`[MEV LoadBalancer] Файл логов не найден для процесса ${processId}: ${logFilePath}`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Файл логов не найден для процесса ${processId}: ${logFilePath}`);
                 return [];
             }
 
@@ -806,7 +856,7 @@ class MevLoadBalancer {
             // Возвращаем последние N строк
             return lines.slice(-lineCount);
         } catch (error) {
-            console.error(`[MEV LoadBalancer] Ошибка при получении логов процесса ${processId}:`, error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при получении логов процесса ${processId}:`, error);
             return [];
         }
     }
@@ -817,7 +867,7 @@ class MevLoadBalancer {
     initIpcHandlers() {
         // Обработчик для логов процессов
         ipcMain.on('process-log', async (event, data) => {
-            console.log(`FROM IPC HANDLER`)
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `FROM IPC HANDLER`);
             this.handleProcessLog(data);
         });
 
@@ -878,13 +928,13 @@ class MevLoadBalancer {
     handleProcessLog(logData) {
         try {
             if (!this.isActive) {
-                console.log('[MEV LoadBalancer] Балансировщик неактивен, пропускаем лог');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик неактивен, пропускаем лог');
                 return;
             }
 
             const { processId, message, level, config } = logData;
             if (!processId || !message) {
-                console.log('[MEV LoadBalancer] Получен некорректный лог без processId или message');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Получен некорректный лог без processId или message');
                 return;
             }
 
@@ -894,7 +944,7 @@ class MevLoadBalancer {
                 return;
             }
 
-            console.log(`[MEV LoadBalancer] ПОЛУЧЕН ЛОГ от ${processId}: ${message.substring(0, 100)}...`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ПОЛУЧЕН ЛОГ от ${processId}: ${message.substring(0, 100)}...`);
 
             // Пропускаем логи от MEV процессов, чтобы избежать бесконечного цикла
             if (this.mevProcesses.has(processId)) {
@@ -903,7 +953,7 @@ class MevLoadBalancer {
                 if (processData) {
                     processData.lastActivity = Date.now();
                 }
-                console.log(`[MEV LoadBalancer] Это лог от MEV процесса ${processId}, пропускаем`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Это лог от MEV процесса ${processId}, пропускаем`);
                 return;
             }
 
@@ -916,14 +966,14 @@ class MevLoadBalancer {
 
             // Обновляем время последней активности процесса токен-релиза
             if (this.isTokenReleaseProcess(processId)) {
-                console.log(`[MEV LoadBalancer] Лог от процесса токен-релиза ${processId}: ${message.substring(0, 100)}...`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Лог от процесса токен-релиза ${processId}: ${message.substring(0, 100)}...`);
             }
 
             // Проверяем наличие MEV сигнала в логе
-            console.log(`[MEV LoadBalancer] Проверяем наличие MEV сигнала в логе: ${message.substring(0, 100)}...`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверяем наличие MEV сигнала в логе: ${message.substring(0, 100)}...`);
             const signalData = this.parseLogForMevSignal(message);
             if (signalData) {
-                console.log(`[MEV LoadBalancer] Обнаружен MEV сигнал в логе процесса ${processId}, данные:`, JSON.stringify(signalData));
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Обнаружен MEV сигнал в логе процесса ${processId}, данные:`, JSON.stringify(signalData));
 
 
                 const {tokenAddress, meteoraPool, pumpSwapPool} = signalData;
@@ -943,10 +993,10 @@ class MevLoadBalancer {
                 // Вместо непосредственной обработки, добавляем сигнал в буфер
                 this.addSignalToBuffer(signalData, processId);
             } else {
-                console.log(`[MEV LoadBalancer] MEV сигнал НЕ обнаружен в логе`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `MEV сигнал НЕ обнаружен в логе`);
             }
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при обработке лога процесса:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при обработке лога процесса:', error);
         }
     }
 
@@ -958,27 +1008,27 @@ class MevLoadBalancer {
     parseLogForMevSignal(logMessage) {
         try {
             // Проверяем, содержит ли сообщение MEV сигнал
-            console.log(`[MEV LoadBalancer] Проверка на наличие '[PERFORM_MEV_ACTION]' в логе`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка на наличие '[PERFORM_MEV_ACTION]' в логе`);
 
             // Исследуем, какие строки вообще приходят
             if (logMessage.includes('[')) {
                 const matches = logMessage.match(/\[(.*?)\]/g);
                 if (matches && matches.length > 0) {
-                    console.log(`[MEV LoadBalancer] Найдены квадратные скобки в логе: ${JSON.stringify(matches)}`);
+                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Найдены квадратные скобки в логе: ${JSON.stringify(matches)}`);
                 }
             }
 
             if (!logMessage.includes('[PERFORM_MEV_ACTION]')) {
-                console.log(`[MEV LoadBalancer] Маркер '[PERFORM_MEV_ACTION]' не найден в логе`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Маркер '[PERFORM_MEV_ACTION]' не найден в логе`);
                 return null;
             }
 
-            console.log(`[MEV LoadBalancer] Обнаружен возможный MEV сигнал: ${logMessage}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Обнаружен возможный MEV сигнал: ${logMessage}`);
 
             // Извлекаем данные из сигнала
             return this.extractSignalDataFromText(logMessage);
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при парсинге лога:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при парсинге лога:', error);
             return null;
         }
     }
@@ -994,8 +1044,8 @@ class MevLoadBalancer {
             const startMarker = '[PERFORM_MEV_ACTION]';
             const endMarker = '[END]';
 
-            console.log(`[MEV LoadBalancer] Ищем маркеры в сообщении, длина: ${logMessage.length}`);
-            console.log(`[MEV LoadBalancer] Полный текст сообщения: ${logMessage}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ищем маркеры в сообщении, длина: ${logMessage.length}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Полный текст сообщения: ${logMessage}`);
 
             // Проверяем наличие маркеров в любом порядке и положении
             let startIndex = logMessage.indexOf(startMarker);
@@ -1003,19 +1053,19 @@ class MevLoadBalancer {
 
             // Если маркеры не найдены, пробуем искать без учёта регистра
             if (startIndex === -1) {
-                console.log('[MEV LoadBalancer] Маркер PERFORM_MEV_ACTION не найден, пробуем искать без учёта регистра');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Маркер PERFORM_MEV_ACTION не найден, пробуем искать без учёта регистра');
                 startIndex = logMessage.toLowerCase().indexOf(startMarker.toLowerCase());
             }
 
             if (endIndex === -1) {
-                console.log('[MEV LoadBalancer] Маркер END не найден, ищем до конца сообщения');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Маркер END не найден, ищем до конца сообщения');
                 endIndex = logMessage.length;
             }
 
-            console.log(`[MEV LoadBalancer] Индексы маркеров: startIndex=${startIndex}, endIndex=${endIndex}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Индексы маркеров: startIndex=${startIndex}, endIndex=${endIndex}`);
 
             if (startIndex === -1) {
-                console.error('[MEV LoadBalancer] Не найден маркер начала сигнала в сообщении');
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Не найден маркер начала сигнала в сообщении');
                 return null;
             }
 
@@ -1024,15 +1074,15 @@ class MevLoadBalancer {
                 .substring(startIndex + startMarker.length, endIndex)
                 .trim();
 
-            console.log(`[MEV LoadBalancer] Извлечено содержимое: "${content}"`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Извлечено содержимое: "${content}"`);
 
             // Разделяем по символу |
             const parts = content.split('|').map(s => s.trim());
-            console.log(`[MEV LoadBalancer] Разделено по |: ${JSON.stringify(parts)}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Разделено по |: ${JSON.stringify(parts)}`);
 
             // Проверяем количество частей
             if (parts.length < 2) {
-                console.error('[MEV LoadBalancer] Недостаточно параметров в сигнале, ожидается как минимум 2 (токен и пул)');
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Недостаточно параметров в сигнале, ожидается как минимум 2 (токен и пул)');
                 return null;
             }
 
@@ -1043,14 +1093,14 @@ class MevLoadBalancer {
             // Извлекаем опциональный третий параметр (пул pumpSwap), если он есть
             const pumpSwapPool = parts.length > 2 ? parts[2] : null;
 
-            console.log(`[MEV LoadBalancer] После обработки: tokenAddress="${tokenAddress}", meteoraPool="${meteoraPool}", pumpSwapPool="${pumpSwapPool || 'не указан'}"`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `После обработки: tokenAddress="${tokenAddress}", meteoraPool="${meteoraPool}", pumpSwapPool="${pumpSwapPool || 'не указан'}"`);
 
             if (!tokenAddress || !meteoraPool) {
-                console.error('[MEV LoadBalancer] Не удалось извлечь токен или пул:', { tokenAddress, meteoraPool });
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Не удалось извлечь токен или пул:', { tokenAddress, meteoraPool });
                 return null;
             }
 
-            console.log(`[MEV LoadBalancer] Успешно извлечены данные: Токен=${tokenAddress}, Пул=${meteoraPool}, PumpSwap=${pumpSwapPool || 'не указан'}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Успешно извлечены данные: Токен=${tokenAddress}, Пул=${meteoraPool}, PumpSwap=${pumpSwapPool || 'не указан'}`);
 
             return {
                 tokenAddress,
@@ -1059,7 +1109,7 @@ class MevLoadBalancer {
                 timestamp: Date.now()
             };
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при извлечении данных из сигнала:', error, error.stack);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при извлечении данных из сигнала:', error, error.stack);
             return null;
         }
     }
@@ -1084,8 +1134,8 @@ class MevLoadBalancer {
         // Расчет задержки по формуле: Math.ceil(1000 / requestsPerProcess) + 1
         let delay = Math.ceil(1000 / requestsPerProcess) + 1;
 
-        console.log(`[MEV LoadBalancer] Расчет задержки: ${TOTAL_REQUESTS_PER_SECOND} req/s / ${processCount} процессов = ${requestsPerProcess} req/s на процесс`);
-        console.log(`[MEV LoadBalancer] Итоговая задержка: ${delay}ms`);
+        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Расчет задержки: ${TOTAL_REQUESTS_PER_SECOND} req/s / ${processCount} процессов = ${requestsPerProcess} req/s на процесс`);
+        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Итоговая задержка: ${delay}ms`);
         return delay;
     }
 
@@ -1098,7 +1148,7 @@ class MevLoadBalancer {
         try {
             // Проверяем, идет ли очистка процессов
             if (this.isCleaningProcesses) {
-                console.log(`[MEV LoadBalancer] Нельзя обработать сигналы: идет очистка процессов`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Нельзя обработать сигналы: идет очистка процессов`);
                 // Возвращаем сигналы обратно в буфер
                 this.signalBuffer.push(...signals);
                 return {
@@ -1107,9 +1157,9 @@ class MevLoadBalancer {
                 };
             }
 
-            console.log(`[MEV LoadBalancer] =====================================================`);
-            console.log(`[MEV LoadBalancer] НАЧАЛО ОБРАБОТКИ ${signals.length} MEV сигналов`);
-            console.log(`[MEV LoadBalancer] =====================================================`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `=====================================================`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `НАЧАЛО ОБРАБОТКИ ${signals.length} MEV сигналов`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `=====================================================`);
 
             // Увеличиваем счетчик обработанных сигналов
             this.stats.processedSignals += signals.length;
@@ -1118,7 +1168,7 @@ class MevLoadBalancer {
             const validSignals = signals.filter(signal => {
                 const { tokenAddress, meteoraPool } = signal;
                 if (!tokenAddress || !meteoraPool) {
-                    console.error('[MEV LoadBalancer] Сигнал не содержит необходимых данных (tokenAddress или meteoraPool)');
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Сигнал не содержит необходимых данных (tokenAddress или meteoraPool)`);
                     this.stats.failedSignals++;
                     return false;
                 }
@@ -1138,12 +1188,12 @@ class MevLoadBalancer {
 
             // Шаг 2: Сохраняем текущие процессы для последующего перезапуска
             const currentProcesses = Array.from(this.mevProcesses.entries());
-            console.log(`[MEV LoadBalancer] Текущее количество процессов: ${currentProcesses.length}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Текущее количество процессов: ${currentProcesses.length}`);
 
             // Шаг 3: Рассчитываем новую задержку для всех процессов (текущие + новые)
             const newProcessCount = currentProcesses.length + validSignals.length * jitoValues.length;
             const processDelay = this.calculateProcessDelay(newProcessCount);
-            console.log(`[MEV LoadBalancer] Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
 
             // Шаг 4: Сохраняем конфигурации текущих процессов с временем их создания
             const processConfigs = [];
@@ -1160,7 +1210,7 @@ class MevLoadBalancer {
                 });
 
                 // Останавливаем текущий процесс
-                console.log(`[MEV LoadBalancer] Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
                 await this.stopProcess(processId);
             }
 
@@ -1187,7 +1237,7 @@ class MevLoadBalancer {
             // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
             const restartedProcesses = [];
             for (const { config, initialCreationTime } of processConfigs) {
-                console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
                 // Передаем флаг, что это перезапуск и оригинальное время создания
                 const restartedProcessId = await this.startMevProcess(config, {
                     isRestart: true,
@@ -1200,7 +1250,7 @@ class MevLoadBalancer {
             }
 
             // Шаг 6: Запускаем все новые процессы
-            console.log(`[MEV LoadBalancer] Запуск ${newProcessConfigs.length} новых MEV процессов`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск ${newProcessConfigs.length} новых MEV процессов`);
             const newProcesses = [];
             for (const config of newProcessConfigs) {
                 // Для новых процессов не передаем флаг перезапуска
@@ -1212,7 +1262,7 @@ class MevLoadBalancer {
             }
 
 
-            console.log(`[MEV LoadBalancer] Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
 
             // Статистика и уведомления
             this.stats.totalMevActions += validSignals.length;
@@ -1245,7 +1295,7 @@ class MevLoadBalancer {
                 totalProcesses: newProcessCount
             };
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при обработке MEV сигналов:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при обработке MEV сигналов:', error);
             this.stats.failedSignals += signals.length;
 
             // Отправляем уведомление об ошибке в Telegram
@@ -1269,7 +1319,7 @@ class MevLoadBalancer {
 
             const newProcessCount = currentProcesses.length;
             const processDelay = this.calculateProcessDelay(newProcessCount);
-            console.log(`[MEV LoadBalancer] Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
 
             const processConfigs = [];
             for (const [processId, processData] of currentProcesses) {
@@ -1285,13 +1335,13 @@ class MevLoadBalancer {
                 });
 
                 // Останавливаем текущий процесс
-                console.log(`[MEV LoadBalancer] Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
                 await this.stopProcess(processId);
             }
 
             const restartedProcesses = [];
             for (const { config, initialCreationTime } of processConfigs) {
-                console.log(`[MEV LoadBalancer] Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
                 const restartedProcessId = await this.startMevProcess(config, {
                     isRestart: true,
                     initialCreationTime: initialCreationTime
@@ -1302,7 +1352,7 @@ class MevLoadBalancer {
                 // await sleep(1000);
             }
 
-            console.log(`[MEV LoadBalancer] Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
 
 
             if (this.settings.notifyTelegram) {
@@ -1327,7 +1377,7 @@ class MevLoadBalancer {
                 };
             }
         } catch (e) {
-            console.error(`Error while restring: ${e}`);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while restring: ${e}`);
             return {
                 success: false,
                 error: e.message
@@ -1343,12 +1393,12 @@ class MevLoadBalancer {
     async checkAndCleanProcessesByLiquidity() {
         // Проверяем, что очистка уже не запущена и не идёт обработка сигналов
         if (this.isCleaningProcesses || this.processingSignals) {
-            console.log('[MEV LoadBalancer] Пропуск проверки ликвидности: уже выполняется другая операция с процессами');
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Пропуск проверки ликвидности: уже выполняется другая операция с процессами');
             return;
         }
 
         if (!this.isActive || this.mevProcesses.size === 0) {
-            console.log('[MEV LoadBalancer] Пропуск проверки ликвидности: балансировщик неактивен или нет процессов');
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Пропуск проверки ликвидности: балансировщик неактивен или нет процессов');
             return;
         }
 
@@ -1356,7 +1406,7 @@ class MevLoadBalancer {
             // Устанавливаем блокировку на время операции
             this.isCleaningProcesses = true;
 
-            console.log(`[MEV LoadBalancer] Начало проверки ликвидности пулов для ${this.mevProcesses.size} процессов`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Начало проверки ликвидности пулов для ${this.mevProcesses.size} процессов`);
 
             // Текущее время для проверки возраста процессов
             const currentTime = Date.now();
@@ -1370,37 +1420,37 @@ class MevLoadBalancer {
                     const meteoraPool = processData.meteoraPool || processData.config?.meteoraPool;
 
                     if (!meteoraPool) {
-                        console.log(`[MEV LoadBalancer] Пропуск проверки для процесса ${processId}: пул не найден`);
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для процесса ${processId}: пул не найден`);
                         continue;
                     }
 
                     // Проверяем возраст процесса
                     const processAge = currentTime - (processData.initialCreationTime || processData.startTime);
                     if (processAge < this.settings.minProcessAgeForCleanup) {
-                        console.log(`[MEV LoadBalancer] Пропуск проверки для молодого процесса ${processId}: возраст ${Math.floor(processAge / 1000 / 60)} минут < ${Math.floor(this.settings.minProcessAgeForCleanup / 1000 / 60)} минут`);
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для молодого процесса ${processId}: возраст ${Math.floor(processAge / 1000 / 60)} минут < ${Math.floor(this.settings.minProcessAgeForCleanup / 1000 / 60)} минут`);
                         continue;
                     }
 
-                    console.log(`[MEV LoadBalancer] Проверка ликвидности пула ${meteoraPool} для процесса ${processId} (возраст: ${Math.floor(processAge / 1000 / 60)} минут)`);
+                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка ликвидности пула ${meteoraPool} для процесса ${processId} (возраст: ${Math.floor(processAge / 1000 / 60)} минут)`);
 
                     // Проверяем ликвидность пула
                     const hasEnoughLiquidity = await this.checkLiquidity(meteoraPool);
 
                     // Если ликвидность ниже порогового значения, добавляем процесс в список на остановку
                     if (!hasEnoughLiquidity) {
-                        console.log(`[MEV LoadBalancer] Процесс ${processId} будет остановлен: ликвидность пула ${meteoraPool} ниже ${this.settings.minimumLiquidity} USD`);
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} будет остановлен: ликвидность пула ${meteoraPool} ниже ${this.settings.minimumLiquidity} USD`);
                         processesToStop.push(processId);
                     } else {
-                        console.log(`[MEV LoadBalancer] Процесс ${processId} продолжит работу: ликвидность пула достаточна`);
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} продолжит работу: ликвидность пула достаточна`);
                     }
                 } catch (error) {
-                    console.error(`[MEV LoadBalancer] Ошибка при проверке ликвидности для процесса ${processId}:`, error);
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при проверке ликвидности для процесса ${processId}:`, error);
                 }
             }
 
             // Если есть процессы для остановки, останавливаем их
             if (processesToStop.length > 0) {
-                console.log(`[MEV LoadBalancer] Найдено ${processesToStop.length} процессов с низкой ликвидностью для остановки`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Найдено ${processesToStop.length} процессов с низкой ликвидностью для остановки`);
 
                 // Уведомляем в Telegram о начале очистки
                 if (this.settings.notifyTelegram) {
@@ -1427,14 +1477,14 @@ class MevLoadBalancer {
                     }
                 }
             } else {
-                console.log('[MEV LoadBalancer] Процессы с низкой ликвидностью не найдены');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Процессы с низкой ликвидностью не найдены');
             }
         } catch (error) {
-            console.error('[MEV LoadBalancer] Ошибка при проверке и очистке процессов с низкой ликвидностью:', error);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при проверке и очистке процессов с низкой ликвидностью:', error);
         } finally {
             // Снимаем блокировку в любом случае, даже при ошибке
             this.isCleaningProcesses = false;
-            console.log('[MEV LoadBalancer] Завершена проверка ликвидности пулов');
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Завершена проверка ликвидности пулов');
         }
     }
 
@@ -1444,7 +1494,7 @@ class MevLoadBalancer {
      * @returns {Promise<boolean>} - Успешность отправки
      */
     async sendTaskToHandler(taskConfig) {
-        console.log('[MEV LoadBalancer] Отправка задачи в обработчик:', taskConfig);
+        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Отправка задачи в обработчик:', taskConfig);
         // Реализация опущена для примера
         return true;
     }

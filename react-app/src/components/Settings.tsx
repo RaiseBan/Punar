@@ -13,6 +13,7 @@ interface AppSettings {
     tensor_api_token?: string;
     bloxroute_api_token?: string;
     migration_wallet?:string;
+
     thor_streamer_address?: string;
     thor_streamer_token?: string;
 }
