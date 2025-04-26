@@ -366,7 +366,7 @@ async function spawnProcess(taskConfig, userSettings) {
 
             console.log(`✅ SPAWN: Python процесс запущен, PID: ${child.pid}`);
         } else if (moduleDir === "new-token-release") {
-            child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "srt", fileToExecute)], {
+            child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
                 stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
                 shell: true, // Используем shell для корректного выполнения
                 detached: false,
