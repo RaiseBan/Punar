@@ -17,6 +17,7 @@ const { sleep, getDetailedTokenAccounts, createTokenAccount } = require('../util
 const { Keypair } = require("@solana/web3.js");
 const logger = require('../services/loggerService');
 
+
 class MevLoadBalancer {
     constructor() {
         // Карта для отслеживания MEV процессов
