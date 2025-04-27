@@ -14,10 +14,10 @@ const telegramBotService = require('./telegramBotService');
 const fs = require('fs');
 const bs58 = require("bs58");
 
-const {sleep, getDetailedTokenAccounts, createTokenAccount} = require('../utils/solanaUtils');
-const {Keypair} = require("@solana/web3.js");
+const { sleep, getDetailedTokenAccounts, createTokenAccount } = require('../utils/solanaUtils');
+const { Keypair } = require("@solana/web3.js");
 const axios = require('axios');
-const {MASTER_NODE_PORT} = require("../utils/constants");
+const { MASTER_NODE_PORT } = require("../utils/constants");
 
 const logger = require('../utils/logger');
 
@@ -976,7 +976,7 @@ class MevLoadBalancer {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Обнаружен MEV сигнал в логе процесса ${processId}, данные:`, JSON.stringify(signalData));
 
 
-                const {tokenAddress, meteoraPool, pumpSwapPool} = signalData;
+                const { tokenAddress, meteoraPool, pumpSwapPool } = signalData;
                 axios.post(`http://localhost:${MASTER_NODE_PORT}/broadcast`, {
                     token: tokenAddress,
                     meteora: meteoraPool,

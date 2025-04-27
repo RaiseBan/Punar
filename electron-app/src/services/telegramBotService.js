@@ -4,8 +4,7 @@ const { app, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { getGlobalConfigDirectory } = require("../utils/wallet");
-const mevLoadBalancer = require('./mevLoadBalancer');
-const logger = require('./loggerService');
+const logger = require('../services/loggerService');
 
 class TelegramBotService {
     constructor() {
