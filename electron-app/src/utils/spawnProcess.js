@@ -24,43 +24,44 @@ async function forceKillWindowsProcess(pid) {
         console.log(`🌳 KILL: Попытка использования tree-kill для PID ${pid}`);
         const treeKill = require('tree-kill');
 
-        return new Promise((resolve) => {
-            treeKill(pid, 'SIGKILL', (err) => {
-                if (err) {
-                    console.warn(`⚠️ KILL: tree-kill не смог завершить процесс ${pid}: ${err.message}`);
-                    console.log(`🔄 KILL: Переключаемся на taskkill для PID ${pid}`);
-
-                    // Если tree-kill не сработал, используем taskkill
-                    const { exec } = require('child_process');
-
-                    // Сначала пробуем обычное завершение
-                    console.log(`🔵 KILL: Запускаем taskkill для PID ${pid}`);
-                    exec(`taskkill /PID ${pid}`, (error) => {
-                        if (error) {
-                            console.warn(`⚠️ KILL: Обычный taskkill не смог завершить процесс ${pid}: ${error.message}`);
-                            console.log(`🔴 KILL: Запускаем принудительный taskkill /F для PID ${pid}`);
-
-                            // Если обычное завершение не сработало, используем принудительное
-                            exec(`taskkill /F /PID ${pid}`, (forceError) => {
-                                if (forceError) {
-                                    console.error(`❌ KILL: Принудительный taskkill не смог завершить процесс ${pid}: ${forceError.message}`);
-                                    resolve(false);
-                                } else {
-                                    console.log(`✅ KILL: Процесс ${pid} успешно завершен с помощью принудительного taskkill`);
-                                    resolve(true);
-                                }
-                            });
-                        } else {
-                            console.log(`✅ KILL: Процесс ${pid} успешно завершен с помощью обычного taskkill`);
-                            resolve(true);
-                        }
-                    });
-                } else {
-                    console.log(`✅ KILL: Процесс ${pid} успешно завершен с помощью tree-kill`);
-                    resolve(true);
-                }
+        try {
+            await new Promise((resolve, reject) => {
+                treeKill(pid, 'SIGKILL', (err) => {
+                    if (err) {
+                        console.warn(`⚠️ KILL: tree-kill не смог завершить процесс ${pid}: ${err.message}`);
+                        reject(err);
+                    } else {
+                        console.log(`✅ KILL: Процесс ${pid} успешно завершен с помощью tree-kill`);
+                        resolve();
+                    }
+                });
             });
-        });
+            return true;
+        } catch (treeKillError) {
+            console.warn(`⚠️ KILL: Не удалось использовать tree-kill: ${treeKillError.message}`);
+        }
+
+        // Если tree-kill не сработал, используем taskkill
+        const { exec } = require('child_process');
+        console.log(`🔴 KILL: Попытка taskkill /F /T для PID ${pid}`);
+
+        try {
+            await new Promise((resolve, reject) => {
+                exec(`taskkill /F /T /PID ${pid}`, (error) => {
+                    if (error) {
+                        console.error(`❌ KILL: taskkill не смог завершить процесс ${pid}: ${error.message}`);
+                        reject(error);
+                    } else {
+                        console.log(`✅ KILL: Процесс ${pid} успешно завершен с помощью taskkill`);
+                        resolve();
+                    }
+                });
+            });
+            return true;
+        } catch (taskKillError) {
+            console.error(`❌ KILL: Не удалось завершить процесс ${pid} с помощью taskkill: ${taskKillError.message}`);
+            return false;
+        }
     } catch (error) {
         console.error(`❌ KILL: Критическая ошибка при попытке завершения процесса ${pid}: ${error.message}`);
         return false;
