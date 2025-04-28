@@ -58,9 +58,9 @@ class MevLoadBalancer {
             maxSignalsPerProcess: 50,    // Максимальное количество сигналов на процесс
             notifyTelegram: true,        // Отправлять уведомления в Telegram
             processingInterval: 10000,    // Интервал обработки буфера сигналов (5 секунд)
-            liquidityCheckInterval: 30 * 1000, // Интервал проверки ликвидности (20 минут)
-            minimumLiquidity: 200,       // Минимальная ликвидность пула (USD)
-            minProcessAgeForCleanup: 15 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
+            liquidityCheckInterval: 30 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
+            minimumLiquidity: 170,       // Минимальная ликвидность пула (USD)
+            minProcessAgeForCleanup: 25 * 60 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
         };
 
         // Настройки пользователя
@@ -595,7 +595,7 @@ class MevLoadBalancer {
                 const data = await response.json();
                 const pairData = data.pair;
                 const liquidity = pairData.liquidity.usd;
-                return liquidity >= 5000;
+                return liquidity >= this.settings.minimumLiquidity;
             } catch (e) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
                 await sleep(1500);
