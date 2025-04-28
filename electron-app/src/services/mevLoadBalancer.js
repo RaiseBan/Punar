@@ -858,7 +858,7 @@ class MevLoadBalancer {
                 return;
             }
 
-            console.log(`[MEV LoadBalancer] ПОЛУЧЕН ЛОГ от ${processId}: ${message.substring(0, 100)}...`);
+            console.log(`[MEV LoadBalancer] ПОЛУЧЕН ЛОГ от ${processId}: ${message}`);
 
             // Пропускаем логи от MEV процессов, чтобы избежать бесконечного цикла
             if (this.mevProcesses.has(processId)) {
