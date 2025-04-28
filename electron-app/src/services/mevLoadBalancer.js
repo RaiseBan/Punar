@@ -64,7 +64,7 @@ class MevLoadBalancer {
             notifyTelegram: true,        // Отправлять уведомления в Telegram
             autoStopIdleTime: 30 * 60 * 1000,  // 30 минут неактивности до остановки процесса
             processingInterval: 10000,    // Интервал обработки буфера сигналов (5 секунд)
-            liquidityCheckInterval: 20 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
+            liquidityCheckInterval: 30 * 1000, // Интервал проверки ликвидности (20 минут)
             minimumLiquidity: 200,       // Минимальная ликвидность пула (USD)
             minProcessAgeForCleanup: 20 * 60 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
         };
