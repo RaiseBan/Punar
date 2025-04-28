@@ -19,7 +19,7 @@ const { Keypair } = require("@solana/web3.js");
 const axios = require('axios');
 const { MASTER_NODE_PORT } = require("../utils/constants");
 
-const logger = require('../utils/logger');
+const logger = require('../services/loggerService');
 
 
 class MevLoadBalancer {
