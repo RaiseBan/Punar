@@ -616,131 +616,92 @@ class MevLoadBalancer {
      * @returns {Promise<Object>} - Результат остановки процесса
      */
     async stopProcess(processId, restart = false) {
-        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔴 НАЧАЛО ОСТАНОВКИ: Остановка MEV процесса ${processId} (restart=${restart})`);
-
         try {
-            // Проверяем, есть ли такой процесс
             if (!this.mevProcesses.has(processId)) {
-                logger.warn(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⚠️ Процесс ${processId} не найден в списке активных процессов`);
-                return false;
+                console.warn(`[MEV LoadBalancer] Процесс ${processId} не найден`);
+                return {
+                    success: false,
+                    error: 'Процесс не найден'
+                };
             }
 
-            // Получаем данные о процессе
             const processData = this.mevProcesses.get(processId);
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ℹ️ Найдены данные процесса ${processId}, статус: ${processData.status}`);
 
-            // Очищаем таймер автоматического перезапуска, если он есть
-            if (processData.restartTimer) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⏱️ Очищаем таймер автоматического перезапуска для процесса ${processId}`);
-                clearTimeout(processData.restartTimer);
-                processData.restartTimer = null;
+            console.log(`[MEV LoadBalancer] Остановка MEV процесса ${processId}`);
+
+            // Очищаем таймер процесса, если он существует
+            if (processData.processTimer) {
+                clearInterval(processData.processTimer);
+                console.log(`[MEV LoadBalancer] Таймер для процесса ${processId} очищен`);
             }
 
-            // Если процесс не запущен, просто удаляем его из списка
-            if (processData.status !== 'running') {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⏭️ Процесс ${processId} не запущен (статус: ${processData.status}), пропускаем остановку`);
-                this.mevProcesses.delete(processId);
-                return true;
-            }
-
-            // Удаляем обработчики событий
+            // Перед остановкой удаляем все слушатели событий
             if (processData.process) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔄 Удаляем обработчики событий процесса ${processId}`);
-
                 try {
-                    const listenerCount = {
-                        exit: processData.process.listenerCount('exit'),
-                        error: processData.process.listenerCount('error'),
-                        message: processData.process.listenerCount('message')
-                    };
-
-                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `📊 Количество слушателей для процесса ${processId}: exit=${listenerCount.exit}, error=${listenerCount.error}, message=${listenerCount.message}`);
-
-                    processData.process.removeAllListeners();
-                    logger.success(logger.LOG_MODULES.MEV_LOAD_BALANCER, `✅ Слушатели успешно удалены для процесса ${processId}`);
-                } catch (listenerError) {
-                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `❌ Ошибка при удалении слушателей для процесса ${processId}:`, listenerError);
-                }
-
-                // Получаем PID процесса
-                const pid = processData.process.pid;
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔍 PID процесса ${processId}: ${pid}`);
-
-                try {
-                    // Пытаемся "мягко" закрыть процесс
-                    if (processData.process.stdin && !processData.process.stdin.destroyed) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `�� Пытаемся корректно завершить процесс ${processId} через stdin.end()`);
-                        processData.process.stdin.end();
-                    }
-
-                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🛑 Пытаемся завершить процесс ${processId} через .kill()`);
-                    processData.process.kill();
-
-                    // Принудительное завершение через Windows Process Kill
-                    if (processData.process.pid) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔪 Принудительное завершение процесса ${processId} с PID ${pid} через forceKillWindowsProcess`);
-                        const killResult = await forceKillWindowsProcess(processData.process.pid);
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `${killResult ? '✅' : '❌'} Результат принудительного завершения процесса ${processId}: ${killResult ? 'успешно' : 'не удалось'}`);
-                    }
-                } catch (killError) {
-                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `❌ Ошибка при попытке завершить процесс ${processId}:`, killError);
-                }
-
-                // Отвязываем потоки ввода-вывода
-                try {
-                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔌 Отвязываем потоки ввода-вывода процесса ${processId}`);
-
+                    // Удаляем слушатели stdout
                     if (processData.process.stdout) {
-                        processData.process.stdout.removeAllListeners();
-                        processData.process.stdout.destroy();
+                        processData.process.stdout.removeAllListeners('data');
                     }
 
+                    // Удаляем слушатели stderr
                     if (processData.process.stderr) {
-                        processData.process.stderr.removeAllListeners();
-                        processData.process.stderr.destroy();
+                        processData.process.stderr.removeAllListeners('data');
                     }
 
-                    logger.success(logger.LOG_MODULES.MEV_LOAD_BALANCER, `✅ Потоки ввода-вывода процесса ${processId} успешно отвязаны`);
-                } catch (streamError) {
-                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⚠️ Ошибка при отвязке потоков ввода-вывода процесса ${processId}:`, streamError);
+                    // Удаляем слушатели exit
+                    processData.process.removeAllListeners('exit');
+                } catch (listenerError) {
+                    console.error(`[MEV LoadBalancer] Ошибка при удалении слушателей для процесса ${processId}:`, listenerError);
                 }
-
-                // Устанавливаем процесс в null
-                processData.process = null;
-            } else {
-                logger.warn(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⚠️ Процесс ${processId} не имеет связанного объекта процесса`);
             }
 
-            // Обновляем статус процесса
-            processData.status = 'stopped';
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `📝 Статус процесса ${processId} обновлен на 'stopped'`);
+            let success = false;
+            console.log(`[MEV LoadBalancer] Принудительное завершение процесса ${processId} с PID ${processData.process.pid} через forceKillWindowsProcess`);
+            success = await forceKillWindowsProcess(processData.process.pid);
+            // if (processData.process && processData.process.pid) {
+            //     console.log(`[MEV LoadBalancer] Принудительное завершение процесса ${processId} с PID ${processData.process.pid} через forceKillWindowsProcess`);
+            //     success = await forceKillWindowsProcess(processData.process.pid);
+            // } else {
+            //     console.log(`[MEV LoadBalancer] Процесс ${processId} не имеет допустимого PID, пропускаем forceKillWindowsProcess`);
+            //     success = true; // Считаем успешным, если процесса уже нет
+            // }
 
-            // Если нужно перезапустить, обновляем статус и планируем перезапуск
+            // Обрабатываем результат остановки
+            if (!success) {
+                console.error(`[MEV LoadBalancer] Не удалось завершить процесс ${processId}`);
+                return {
+                    success: false,
+                    error: "Не удалось завершить процесс",
+                    processId
+                };
+            }
+            try {
+                console.log(JSON.stringify(processData, null, 2));
+            }catch (e){
+                console.log(e)
+            }
+            console.log(processData);
+
+            // Если процесс успешно остановлен, удаляем его из списка процессов
+            this.mevProcesses.delete(processId);
+
+            console.log(`[MEV LoadBalancer] Процесс ${processId} успешно остановлен и удален из списка`);
             if (restart) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🔄 Планируем перезапуск процесса ${processId}`);
-                processData.status = 'restarting';
-
-                // Устанавливаем таймер на перезапуск через 2 секунды
-                processData.restartTimer = setTimeout(() => {
-                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `⏰ Выполняем запланированный перезапуск процесса ${processId}`);
-                    this.startProcess(processId);
-                }, 2000);
-            } else {
-                // Если не нужно перезапускать, удаляем процесс из списка
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🗑️ Процесс ${processId} успешно удален из списка mevProcesses`);
-                this.mevProcesses.delete(processId);
+                await this.restartProcesses();
             }
 
-            logger.success(logger.LOG_MODULES.MEV_LOAD_BALANCER, `✅ ЗАВЕРШЕНИЕ ОСТАНОВКИ: Процесс ${processId} успешно остановлен (restart=${restart})`);
-            return true;
+            return {
+                success: true,
+                processId,
+                message: 'Процесс успешно остановлен'
+            };
         } catch (error) {
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `❌ Критическая ошибка при остановке процесса ${processId}:`, error);
-            // В случае ошибки, если это не перезапуск, удаляем процесс из списка
-            if (!restart && this.mevProcesses.has(processId)) {
-                this.mevProcesses.delete(processId);
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `🗑️ Процесс ${processId} удален из списка из-за ошибки при остановке`);
-            }
-            return false;
+            console.error(`[MEV LoadBalancer] Ошибка при остановке MEV процесса ${processId}:`, error);
+            return {
+                success: false,
+                error: error.message,
+                processId
+            };
         }
     }
 
