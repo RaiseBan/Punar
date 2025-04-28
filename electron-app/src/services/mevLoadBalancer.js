@@ -55,10 +55,8 @@ class MevLoadBalancer {
 
         // Настройки
         this.settings = {
-            maxProcessesPerToken: 3,     // Максимальное количество процессов на токен
             maxSignalsPerProcess: 50,    // Максимальное количество сигналов на процесс
             notifyTelegram: true,        // Отправлять уведомления в Telegram
-            autoStopIdleTime: 30 * 60 * 1000,  // 30 минут неактивности до остановки процесса
             processingInterval: 10000,    // Интервал обработки буфера сигналов (5 секунд)
             liquidityCheckInterval: 30 * 1000, // Интервал проверки ликвидности (20 минут)
             minimumLiquidity: 200,       // Минимальная ликвидность пула (USD)
