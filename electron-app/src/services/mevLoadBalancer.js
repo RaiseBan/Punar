@@ -597,7 +597,7 @@ class MevLoadBalancer {
                 const data = await response.json();
                 const pairData = data.pair;
                 const liquidity = pairData.liquidity.usd;
-                return liquidity >= 200;
+                return liquidity >= 5000;
             } catch (e) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
                 await sleep(1500);
