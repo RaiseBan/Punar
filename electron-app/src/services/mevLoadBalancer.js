@@ -662,16 +662,15 @@ class MevLoadBalancer {
                 }
             }
 
+            // Используем forceKillWindowsProcess вместо stopMevProcess
             let success = false;
-            console.log(`[MEV LoadBalancer] Принудительное завершение процесса ${processId} с PID ${processData.process.pid} через forceKillWindowsProcess`);
-            success = await forceKillWindowsProcess(processData.process.pid);
-            // if (processData.process && processData.process.pid) {
-            //     console.log(`[MEV LoadBalancer] Принудительное завершение процесса ${processId} с PID ${processData.process.pid} через forceKillWindowsProcess`);
-            //     success = await forceKillWindowsProcess(processData.process.pid);
-            // } else {
-            //     console.log(`[MEV LoadBalancer] Процесс ${processId} не имеет допустимого PID, пропускаем forceKillWindowsProcess`);
-            //     success = true; // Считаем успешным, если процесса уже нет
-            // }
+            if (processData.process && processData.process.pid) {
+                console.log(`[MEV LoadBalancer] Принудительное завершение процесса ${processId} с PID ${processData.process.pid} через forceKillWindowsProcess`);
+                success = await forceKillWindowsProcess(processData.process.pid);
+            } else {
+                console.log(`[MEV LoadBalancer] Процесс ${processId} не имеет допустимого PID, пропускаем forceKillWindowsProcess`);
+                success = true; // Считаем успешным, если процесса уже нет
+            }
 
             // Обрабатываем результат остановки
             if (!success) {
@@ -682,12 +681,6 @@ class MevLoadBalancer {
                     processId
                 };
             }
-            try {
-                console.log(JSON.stringify(processData, null, 2));
-            }catch (e){
-                console.log(e)
-            }
-            console.log(processData);
 
             // Если процесс успешно остановлен, удаляем его из списка процессов
             this.mevProcesses.delete(processId);
