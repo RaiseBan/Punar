@@ -1565,7 +1565,7 @@ class TelegramBotService {
                     message += `<b>============================================</b>\n`;
                     i++;
                 }
-
+                this.sendMessage(chatId, message);
 
             }catch(error){
                 console.error('[TG Bot] Ошибка:', error);
