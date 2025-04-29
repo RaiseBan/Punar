@@ -1556,7 +1556,42 @@ class TelegramBotService {
             }
         });
 
-        console.log('[TG Bot] MEV команды успешно инициализированы');
+
+        // Команда для добавления MEV сигнала
+        this.registerCommand('mev_add_signal', async (chatId, args) => {
+            if (!args || args.length < 2) {
+                this.sendMessage(chatId, '❌ Неверный формат команды. Использование: \n/mev_add_signal <token_address> <meteora_pool> [pumpswap_pool]');
+                return;
+            }
+
+            const tokenAddress = args[0];
+            const meteoraPool = args[1];
+            const pumpSwapPool = args.length > 2 ? args[2] : null;
+
+            try {
+                logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, `[TG Bot] Добавление MEV сигнала: ${tokenAddress}, ${meteoraPool}${pumpSwapPool ? ', ' + pumpSwapPool : ''}`);
+
+                const signal = {
+                    tokenAddress,
+                    meteoraPool,
+                    pumpSwapPool,
+                    timestamp: Date.now()
+                };
+
+                const result = mevLoadBalancer.handleExternalMevSignal(signal, 'telegram_' + chatId);
+
+                if (result.success) {
+                    this.sendMessage(chatId, `✅ MEV сигнал успешно добавлен в буфер (общий размер буфера: ${result.bufferSize || 'неизвестно'})`);
+                } else {
+                    this.sendMessage(chatId, `❌ Ошибка добавления MEV сигнала: ${result.error}`);
+                }
+            } catch (error) {
+                logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] Ошибка при добавлении MEV сигнала:', error);
+                this.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+            }
+        });
+
+        logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] MEV команды успешно инициализированы');
     }
 }
 

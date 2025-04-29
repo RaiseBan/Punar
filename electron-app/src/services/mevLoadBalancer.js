@@ -428,6 +428,7 @@ class MevLoadBalancer {
         return this.tokenReleaseProcesses.has(processId);
     }
 
+
     /**
      * Регистрирует процесс как процесс new-token-release
      * @param {string} processId - Идентификатор процесса
@@ -1434,6 +1435,60 @@ class MevLoadBalancer {
         logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Отправка задачи в обработчик:', taskConfig);
         // Реализация опущена для примера
         return true;
+    }
+
+    /**
+     * Получает информацию о всех процессах токен-релиза
+     * @returns {Array} - Массив ID процессов токен-релиза
+     */
+    getTokenReleaseProcesses() {
+        return Array.from(this.tokenReleaseProcesses.keys());
+    }
+
+    /**
+     * Обрабатывает MEV сигнал из внешнего источника
+     * @param {Object} signal - Данные сигнала (tokenAddress, meteoraPool, pumpSwapPool)
+     * @param {string} sourceId - ID источника сигнала (например, 'telegram')
+     * @returns {Object} - Результат добавления сигнала в буфер
+     */
+    handleExternalMevSignal(signal, sourceId = 'external') {
+        try {
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Получен внешний MEV сигнал от ${sourceId}: ${JSON.stringify(signal)}`);
+
+            // Проверяем наличие обязательных полей
+            if (!signal.tokenAddress || !signal.meteoraPool) {
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Некорректный формат внешнего сигнала: ${JSON.stringify(signal)}`);
+                return {
+                    success: false,
+                    error: 'Недостаточно данных в сигнале (требуется tokenAddress и meteoraPool)'
+                };
+            }
+
+            // Получаем ID процесса токен-релиза для использования в качестве источника
+            const tokenReleaseProcesses = this.getTokenReleaseProcesses();
+            console.log(tokenReleaseProcesses);
+            console.log(JSON.stringify(tokenReleaseProcesses, null ,2));
+            let processId;
+
+            if (tokenReleaseProcesses.length > 0) {
+                // Берем первый процесс из списка, если они есть
+                processId = tokenReleaseProcesses[0];
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Используем процесс токен-релиза ${processId} в качестве источника сигнала`);
+            } else {
+                // Если процессов нет, используем переданный sourceId
+                processId = `external_${sourceId}`;
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Активные процессы токен-релиза не найдены, используем ${processId}`);
+            }
+
+            // Добавляем сигнал в буфер, используя ID процесса токен-релиза
+            return this.addSignalToBuffer(signal, processId);
+        } catch (error) {
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при обработке внешнего MEV сигнала:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
 }
 
