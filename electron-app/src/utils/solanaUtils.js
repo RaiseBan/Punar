@@ -671,16 +671,17 @@ async function getDetailedTokenAccounts(ownerPubkey, rpcUrl, maxRetries = 3) {
 
     // Обрабатываем каждый аккаунт с ретраями
     const detailedAccounts = await Promise.all(
-        response.value.map(async ({ pubkey }) => {
-            return fetchWithRetry(async () => {
-                await sleep(1200); // Базовая задержка между запросами
-                const accountInfo = await getAccount(connection, pubkey);
-                return {
-                    address: pubkey.toBase58(),
-                    mint: accountInfo.mint.toBase58(),
-                    amount: accountInfo.amount.toString(),
-                };
-            });
+
+        response.value.map(async ({pubkey}) => {
+            await sleep(100);
+            const accountInfo = await getAccount(connection, pubkey);
+
+            return {
+                address: pubkey.toBase58(),
+                mint: accountInfo.mint.toBase58(),
+                amount: accountInfo.amount.toString(),
+            };
+
         })
     );
 
