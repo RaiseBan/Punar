@@ -1531,7 +1531,7 @@ class TelegramBotService {
                     message += `<b>${i}. ID:</b> <code>${proc.id}</code> (PID: ${proc.pid || 'неизвестно'})\n`;
                     message += `<b>${i}. Token:</b> <code>${proc.tokenAddress}</code>\n`;
                     message += `<b>${i}. Meteora pool:</b> <code>${proc.meteoraPool ? proc.meteoraPool : 'N/A'}</code>\n`;
-                    message += `<b>${i}. Meteora pool:</b> <code>${proc.pumpSwapPool ? proc.pumpSwapPool : 'N/A'}</code>\n`;
+                    message += `<b>${i}. Pumpswap pool:</b> <code>${proc.pumpSwapPool ? proc.pumpSwapPool : 'N/A'}</code>\n`;
                     message += `<b>${i}. Uptime:</b> ${runtime} min.\n`;
                     message += `<b>${i}. DELETE:</b> <code>/mev_stop_process ${proc.id}</code>\n`;
                     message += `<b>============================================</b>\n`;
