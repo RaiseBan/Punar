@@ -1530,10 +1530,12 @@ class TelegramBotService {
                     const runtime = Math.floor((Date.now() - proc.startTime) / 1000 / 60); // в минутах
 
                     message += `<b>ID:</b> <code>${proc.id}</code> (PID: ${proc.pid || 'неизвестно'})\n`;
-                    message += `<b>Токен:</b> <code>${proc.tokenAddress}</code>\n`;
-                    message += `<b>Meteora пул:</b> <code>${proc.meteoraPool ? proc.meteoraPool : 'не указан'}</code>\n`;
-                    message += `<b>Время работы:</b> ${runtime} мин.\n`;
-                    message += `<b>DELETE:</b> <code>/mev_stop_process ${proc.id}</code>`;
+                    message += `<b>Token:</b> <code>${proc.tokenAddress}</code>\n`;
+                    message += `<b>Meteora pool:</b> <code>${proc.meteoraPool ? proc.meteoraPool : 'N/A'}</code>\n`;
+                    message += `<b>Meteora pool:</b> <code>${proc.pumpSwapPool ? proc.pumpSwapPool : 'N/A'}</code>\n`;
+                    message += `<b>Uptime:</b> ${runtime} min.\n`;
+                    message += `<b>DELETE:</b> <code>/mev_stop_process ${proc.id}</code>\n`;
+                    message += `<b>============================================</b>\n`;
 
                 }
 
