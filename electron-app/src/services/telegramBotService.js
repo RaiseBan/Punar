@@ -1436,6 +1436,8 @@ class TelegramBotService {
                     message += `<b>Токен:</b> <code>${proc.tokenAddress}</code>\n`;
                     message += `<b>Meteora пул:</b> <code>${proc.meteoraPool ? proc.meteoraPool : 'не указан'}</code>\n`;
                     message += `<b>Время работы:</b> ${runtime} мин.\n`;
+                    message += `<b>DELETE:</b> /mev_stop_process ${proc.id}`;
+
                 }
 
                 this.sendMessage(chatId, message);
