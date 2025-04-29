@@ -654,12 +654,15 @@ async function getDetailedTokenAccounts(ownerPubkey, rpcUrl) {
 
     const detailedAccounts = await Promise.all(
         response.value.map(async ({pubkey}) => {
+            await sleep(100);
             const accountInfo = await getAccount(connection, pubkey);
+
             return {
                 address: pubkey.toBase58(),
                 mint: accountInfo.mint.toBase58(),
                 amount: accountInfo.amount.toString(),
             };
+
         })
     );
     console.log(JSON.stringify(detailedAccounts, null, 2));
