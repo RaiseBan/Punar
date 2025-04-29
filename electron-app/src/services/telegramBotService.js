@@ -1432,10 +1432,10 @@ class TelegramBotService {
                 for (const proc of processes) {
                     const runtime = Math.floor((Date.now() - proc.startTime) / 1000 / 60); // в минутах
 
-                    message += `<b>ID:</b> ${proc.id} (PID: ${proc.pid || 'неизвестно'})\n`;
-                    message += `<b>Токен:</b> ${proc.tokenAddress}\n`;
-                    message += `<b>Meteora пул:</b> ${proc.meteoraPool ? proc.meteoraPool : 'не указан'}\n`;
-                    message += `<b>Время работы:</b> ${runtime} мин.\n\n`;
+                    message += `<b>ID:</b> <code>${proc.id}</code> (PID: ${proc.pid || 'неизвестно'})\n`;
+                    message += `<b>Токен:</b> <code>${proc.tokenAddress}</code>\n`;
+                    message += `<b>Meteora пул:</b> <code>${proc.meteoraPool ? proc.meteoraPool : 'не указан'}</code>\n`;
+                    message += `<b>Время работы:</b> ${runtime} мин.\n`;
                 }
 
                 this.sendMessage(chatId, message);
