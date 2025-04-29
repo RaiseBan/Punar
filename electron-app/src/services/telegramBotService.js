@@ -1547,6 +1547,31 @@ class TelegramBotService {
             }
         });
 
+        this.registerCommand('get_add_dump', async (chatId) => {
+            try{
+                const processes = mevLoadBalancer.getProcesses();
+
+
+                if (processes.length === 0) {
+                    this.sendMessage(chatId, '📊 Активные MEV процессы отсутствуют');
+                    return;
+                }
+                let message = '📊 <b>___COMMANDS___</b>\n\n';
+                let i = 1;
+                for (const proc of processes){
+                    message += `${i}. <b>ID:</b> <code>${proc.id}</code> (PID: ${proc.pid || 'неизвестно'})\n`;
+                    message += `${i}. <code>/mev_add_signal ${proc.tokenAddress} ${proc.meteoraPool} ${proc.pumpSwapPool}</code>\n`;
+                    message += `<b>============================================</b>\n`;
+                    i++;
+                }
+
+
+            }catch(error){
+                console.error('[TG Bot] Ошибка:', error);
+                this.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+            }
+        });
+
         // Команда для остановки MEV процесса по ID
         this.registerCommand('mev_stop_process', async (chatId, args) => {
             if (!args || args.length === 0) {
