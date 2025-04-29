@@ -249,7 +249,7 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
                 enabled: true
             },
             bot: {
-                compute_unit_limit: 650000,
+                compute_unit_limit: 420000,
                 merge_mints: false
             },
             wallet: {}
