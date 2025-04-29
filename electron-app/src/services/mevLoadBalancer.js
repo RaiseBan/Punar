@@ -601,11 +601,19 @@ class MevLoadBalancer {
 
         for (let i = 0; i < 3; i++) {
             try {
-                const response = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`);
-                const data = await response.json();
-                const pairData = data.pair;
-                const liquidity = pairData.liquidity.usd;
-                return liquidity >= this.settings.minimumLiquidity;
+
+                const resp2 = await fetch(`https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`);
+
+                const data2 = await resp2.json()
+                if (data2[0].onchain_timestamp) {
+                    // Проверка, что timestamp был 20 минут назад
+                    const currentTimestamp = Math.floor(Date.now() / 1000);
+                    const twentyMinutesAgo = currentTimestamp - (20 * 60); // 20 минут в секундах
+                    // Проверяем, что onchain_timestamp примерно 20 минут назад
+                    if (data2[0].onchain_timestamp > twentyMinutesAgo) {
+                        return true;
+                    }
+                }
             } catch (e) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
                 await sleep(1500);
@@ -1486,7 +1494,7 @@ class MevLoadBalancer {
             // Получаем ID процесса токен-релиза для использования в качестве источника
             const tokenReleaseProcesses = this.getTokenReleaseProcesses();
             console.log(tokenReleaseProcesses);
-            console.log(JSON.stringify(tokenReleaseProcesses, null ,2));
+            console.log(JSON.stringify(tokenReleaseProcesses, null, 2));
             let processId;
 
             if (tokenReleaseProcesses.length > 0) {
