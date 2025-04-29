@@ -87,11 +87,13 @@ class MevLoadBalancer {
 
             this.USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(this.userSettings.migration_wallet)));
             // кешируем токен аккаунты
+            console.log(1)
             const tokenObjects = await getDetailedTokenAccounts(this.USER.publicKey, this.userSettings.mainRpc);
-
+            console.log(2)
             tokenObjects.forEach(tokenFields => {
                 this.userTokens.set(tokenFields.mint, tokenFields.address);
             })
+            console.log(3)
 
             // Запускаем таймер обработки сигналов
             this.startProcessingTimer();
@@ -117,6 +119,7 @@ class MevLoadBalancer {
 
         this.processingTimer = setInterval(() => {
             this.processSignalBuffer();
+
         }, this.settings.processingInterval);
     }
 
