@@ -1,4 +1,4 @@
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { app } = require("electron");
@@ -417,9 +417,12 @@ async function spawnProcess(taskConfig, userSettings) {
             const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
             // const wslCommand = `${fileToExecute} ${configFilePath}`;
             console.log(`⚡ SPAWN: Запуск WSL процесса: wsl ${program} ${configFilePathWSL}`);
-            const child = spawn('wsl.exe', [
+            // Получаем домашнюю директорию пользователя в WSL
+            const homeDir = execSync('wsl -e bash -c "echo $HOME"').toString().trim();
+
+            child = spawn('wsl.exe', [
                 '-e',
-                '/usr/local/bin/run-high-limit',
+                `${homeDir}/run-high-limit.sh`,
                 program,
                 "run",
                 configFilePathWSL
