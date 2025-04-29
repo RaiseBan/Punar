@@ -252,21 +252,16 @@ class TelegramBotService {
 
     async sendMessage(chatId, text, options = {}) {
         if (!this.botToken) return;
-        
+
         // Константа для лимита сообщения Telegram
         const TELEGRAM_MESSAGE_LIMIT = 4096;
-        
-        // Проверяем, есть ли текст и не превышает ли он лимит
-        if (!text) {
-            console.log(`[TG Bot] Попытка отправить пустое сообщение в чат ${chatId}`);
-            return;
-        }
-        
-        try {
-            // Если текст короче лимита, отправляем как обычно
-            if (text.length <= TELEGRAM_MESSAGE_LIMIT) {
-                console.log(`[TG Bot] Отправка сообщения в чат ${chatId}, длина: ${text.length} символов`);
-                
+
+        // Если сообщение короче лимита, отправляем как обычно
+        if (!text || text.length <= TELEGRAM_MESSAGE_LIMIT) {
+            try {
+                // Логируем отправляемый текст для отладки
+                console.log(`[TG Bot] Отправка сообщения в чат ${chatId}, длина: ${text?.length || 0} символов`);
+
                 const response = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
                     chat_id: chatId,
                     text,
@@ -274,151 +269,129 @@ class TelegramBotService {
                     reply_markup: options.replyMarkup
                 });
                 return response.data;
-            } 
-            // Если текст длиннее лимита, разбиваем на части
-            else {
-                console.log(`[TG Bot] Отправка длинного сообщения в чат ${chatId}, длина: ${text.length} символов (будет разбито)`);
-                
-                // Разбиваем текст на части
-                let messageParts = [];
-                let currentPart = "";
-                
-                // Для HTML-разметки нужно аккуратно разбивать текст, чтобы не разорвать теги
-                if (options.parseMode === 'HTML' || options.parseMode === undefined) {
-                    // Простая эвристика: делим по строкам и стараемся не разрывать теги
-                    const lines = text.split("\n");
-                    
-                    for (const line of lines) {
-                        // Если текущая часть + новая строка не превышают лимит
-                        if ((currentPart + line + "\n").length <= TELEGRAM_MESSAGE_LIMIT) {
-                            currentPart += line + "\n";
-                        } 
-                        // Если одна строка превышает лимит
-                        else if (line.length > TELEGRAM_MESSAGE_LIMIT) {
-                            // Если текущая часть не пуста, добавляем её в результат
-                            if (currentPart.length > 0) {
-                                messageParts.push(currentPart);
-                                currentPart = "";
-                            }
-                            
-                            // Разбиваем длинную строку на более мелкие части
-                            let remainingLine = line;
-                            while (remainingLine.length > 0) {
-                                // Находим безопасное место для разделения (вне тегов)
-                                let safeLength = TELEGRAM_MESSAGE_LIMIT;
-                                if (safeLength > remainingLine.length) {
-                                    safeLength = remainingLine.length;
-                                } else {
-                                    // Пытаемся найти пробел для разрыва
-                                    for (let i = safeLength; i > safeLength - 100 && i > 0; i--) {
-                                        if (remainingLine[i] === ' ') {
-                                            safeLength = i;
-                                            break;
-                                        }
-                                    }
-                                }
-                                
-                                messageParts.push(remainingLine.substring(0, safeLength));
-                                remainingLine = remainingLine.substring(safeLength);
-                            }
-                            
-                            currentPart = "";
-                        } 
-                        // Если новая строка не помещается, добавляем текущую часть в результат
-                        else {
-                            messageParts.push(currentPart);
-                            currentPart = line + "\n";
+            } catch (error) {
+                // Расширенное логирование ошибок
+                console.error(`[TG Bot] Ошибка отправки сообщения Telegram: ${error.message}`);
+
+                if (error.response) {
+                    console.error(`[TG Bot] Статус ошибки: ${error.response.status}`);
+                    console.error(`[TG Bot] Ответ API Telegram: ${JSON.stringify(error.response.data)}`);
+
+                    // Если проблема с форматированием HTML
+                    if (error.response.data?.description?.includes('can\'t parse entities')) {
+                        // Пробуем отправить без HTML-форматирования
+                        try {
+                            console.log('[TG Bot] Пробуем отправить сообщение без HTML-разметки');
+                            const plainResponse = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
+                                chat_id: chatId,
+                                text,
+                                parse_mode: '',  // Без форматирования
+                                reply_markup: options.replyMarkup
+                            });
+                            console.log('[TG Bot] Сообщение успешно отправлено без HTML-разметки');
+                            return plainResponse.data;
+                        } catch (plainError) {
+                            console.error(`[TG Bot] Не удалось отправить даже без HTML-разметки: ${plainError.message}`);
                         }
                     }
-                    
-                    // Не забываем добавить последнюю часть
+                }
+
+                // Записываем текст сообщения, вызвавшего ошибку (первые 200 символов для понимания)
+                if (text) {
+                    const preview = text.substring(0, 200) + (text.length > 200 ? '...' : '');
+                    console.error(`[TG Bot] Содержимое сообщения, вызвавшего ошибку (первые 200 символов):\n${preview}`);
+                }
+            }
+        }
+        // Если сообщение длиннее лимита, разбиваем на части по строкам
+        else {
+            console.log(`[TG Bot] Отправка длинного сообщения в чат ${chatId}, длина: ${text.length} символов (будет разбито)`);
+
+            // Разбиваем на части по строкам
+            const lines = text.split('\n');
+            const messageParts = [];
+            let currentPart = '';
+
+            // Собираем строки в части, не превышающие лимит
+            for (const line of lines) {
+                // Если добавление строки не превысит лимит
+                if ((currentPart + line + '\n').length <= TELEGRAM_MESSAGE_LIMIT) {
+                    currentPart += line + '\n';
+                }
+                // Если текущая строка сама по себе превышает лимит
+                else if (line.length > TELEGRAM_MESSAGE_LIMIT) {
+                    // Если в текущей части что-то есть, добавляем её
                     if (currentPart.length > 0) {
                         messageParts.push(currentPart);
+                        currentPart = '';
                     }
-                } 
-                // Для обычного текста просто делим по лимиту
+
+                    // Разбиваем длинную строку на несколько частей
+                    let remainingLine = line;
+                    while (remainingLine.length > 0) {
+                        const chunkSize = Math.min(remainingLine.length, TELEGRAM_MESSAGE_LIMIT);
+                        messageParts.push(remainingLine.substring(0, chunkSize));
+                        remainingLine = remainingLine.substring(chunkSize);
+                    }
+                }
+                // Если добавление превысит лимит, начинаем новую часть
                 else {
-                    for (let i = 0; i < text.length; i += TELEGRAM_MESSAGE_LIMIT) {
-                        messageParts.push(text.substring(i, i + TELEGRAM_MESSAGE_LIMIT));
-                    }
+                    messageParts.push(currentPart);
+                    currentPart = line + '\n';
                 }
-                
-                // Отправляем каждую часть последовательно
-                let responses = [];
-                for (let i = 0; i < messageParts.length; i++) {
-                    const part = messageParts[i];
-                    console.log(`[TG Bot] Отправка части ${i+1}/${messageParts.length}, длина: ${part.length} символов`);
-                    
-                    try {
-                        const response = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
-                            chat_id: chatId,
-                            text: part,
-                            parse_mode: options.parseMode || 'HTML',
-                            reply_markup: i === messageParts.length - 1 ? options.replyMarkup : undefined
-                        });
-                        responses.push(response.data);
-                        
-                        // Добавляем небольшую задержку между отправками, чтобы избежать флуда
-                        if (i < messageParts.length - 1) {
-                            await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            // Добавляем последнюю часть, если она не пуста
+            if (currentPart.length > 0) {
+                messageParts.push(currentPart);
+            }
+
+            // Отправляем каждую часть
+            const responses = [];
+            for (let i = 0; i < messageParts.length; i++) {
+                const part = messageParts[i];
+                console.log(`[TG Bot] Отправка части ${i+1}/${messageParts.length}, длина: ${part.length} символов`);
+
+                try {
+                    const response = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
+                        chat_id: chatId,
+                        text: part,
+                        parse_mode: options.parseMode || 'HTML',
+                        reply_markup: i === messageParts.length - 1 ? options.replyMarkup : undefined
+                    });
+                    responses.push(response.data);
+
+                    // Небольшая задержка между отправками
+                    if (i < messageParts.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    }
+                } catch (error) {
+                    console.error(`[TG Bot] Ошибка отправки части ${i+1}: ${error.message}`);
+
+                    // Если проблема с форматированием HTML
+                    if (error.response?.data?.description?.includes('can\'t parse entities')) {
+                        try {
+                            console.log('[TG Bot] Пробуем отправить часть без HTML-разметки');
+                            const plainResponse = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
+                                chat_id: chatId,
+                                text: part,
+                                parse_mode: '',
+                                reply_markup: i === messageParts.length - 1 ? options.replyMarkup : undefined
+                            });
+                            responses.push(plainResponse.data);
+                        } catch (plainError) {
+                            console.error(`[TG Bot] Не удалось отправить часть даже без HTML-разметки: ${plainError.message}`);
                         }
-                    } catch (partError) {
-                        console.error(`[TG Bot] Ошибка отправки части ${i+1}/${messageParts.length}: ${partError.message}`);
-                        
-                        // Пробуем отправить без HTML-форматирования при ошибке парсинга
-                        if (partError.response?.data?.description?.includes('can\'t parse entities') && 
-                            (options.parseMode === 'HTML' || options.parseMode === undefined)) {
-                            try {
-                                console.log('[TG Bot] Пробуем отправить часть без HTML-разметки');
-                                const plainResponse = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
-                                    chat_id: chatId,
-                                    text: part,
-                                    parse_mode: '',  // Без форматирования
-                                    reply_markup: i === messageParts.length - 1 ? options.replyMarkup : undefined
-                                });
-                                responses.push(plainResponse.data);
-                            } catch (plainPartError) {
-                                console.error(`[TG Bot] Не удалось отправить часть даже без HTML-разметки: ${plainPartError.message}`);
-                            }
-                        }
                     }
-                }
-                
-                console.log(`[TG Bot] Отправлено ${responses.length}/${messageParts.length} частей сообщения`);
-                return responses;
-            }
-        } catch (error) {
-            // Расширенное логирование ошибок
-            console.error(`[TG Bot] Ошибка отправки сообщения Telegram: ${error.message}`);
-    
-            if (error.response) {
-                console.error(`[TG Bot] Статус ошибки: ${error.response.status}`);
-                console.error(`[TG Bot] Ответ API Telegram: ${JSON.stringify(error.response.data)}`);
-    
-                // Если проблема с форматированием HTML
-                if (error.response.data?.description?.includes('can\'t parse entities')) {
-                    // Пробуем отправить без HTML-форматирования
-                    try {
-                        console.log('[TG Bot] Пробуем отправить сообщение без HTML-разметки');
-                        const plainResponse = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
-                            chat_id: chatId,
-                            text,
-                            parse_mode: '',  // Без форматирования
-                            reply_markup: options.replyMarkup
-                        });
-                        console.log('[TG Bot] Сообщение успешно отправлено без HTML-разметки');
-                        return plainResponse.data;
-                    } catch (plainError) {
-                        console.error(`[TG Bot] Не удалось отправить даже без HTML-разметки: ${plainError.message}`);
-                    }
+
+                    // Записываем проблемный текст
+                    const preview = part.substring(0, 200) + (part.length > 200 ? '...' : '');
+                    console.error(`[TG Bot] Часть сообщения, вызвавшая ошибку (первые 200 символов):\n${preview}`);
                 }
             }
-    
-            // Записываем текст сообщения, вызвавшего ошибку (первые 200 символов для понимания)
-            if (text) {
-                const preview = text.substring(0, 200) + (text.length > 200 ? '...' : '');
-                console.error(`[TG Bot] Содержимое сообщения, вызвавшего ошибку (первые 200 символов):\n${preview}`);
-            }
+
+            console.log(`[TG Bot] Отправлено ${responses.length}/${messageParts.length} частей сообщения`);
+            return responses.length > 0 ? responses : null;
         }
     }
 
@@ -1556,12 +1529,10 @@ class TelegramBotService {
                     const runtime = Math.floor((Date.now() - proc.startTime) / 1000 / 60); // в минутах
 
                     message += `<b>ID:</b> <code>${proc.id}</code> (PID: ${proc.pid || 'неизвестно'})\n`;
-                    message += `<b>Token:</b> <code>${proc.tokenAddress}</code>\n`;
-                    message += `<b>Meteora pool:</b> <code>${proc.meteoraPool ? proc.meteoraPool : 'не указан'}</code>\n`;
-                    message += `<b>Pumpswap pool:</b> <code>${proc.pumpSwapPool ? proc.pumpSwapPool : 'не указан'}</code>\n`;
-                    message += `<b>working time:</b> ${runtime} мин.\n`;
-                    message += `<b>DELETE:</b> <code>/mev_stop_process ${proc.id}</code>\n`;
-                    message += `<b=====================\n`;
+                    message += `<b>Токен:</b> <code>${proc.tokenAddress}</code>\n`;
+                    message += `<b>Meteora пул:</b> <code>${proc.meteoraPool ? proc.meteoraPool : 'не указан'}</code>\n`;
+                    message += `<b>Время работы:</b> ${runtime} мин.\n`;
+                    message += `<b>DELETE:</b> <code>/mev_stop_process ${proc.id}</code>`;
 
                 }
 
