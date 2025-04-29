@@ -464,6 +464,7 @@ class MevLoadBalancer {
                 pumpSwapPool: processData.config ? processData.config.pumpSwapPool : null,
                 status: processData.status,
                 startTime: processData.startTime,
+
                 lastActivity: processData.lastActivity,
                 signals: processData.signals ? processData.signals.length : 0
             });
