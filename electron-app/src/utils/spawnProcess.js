@@ -417,7 +417,13 @@ async function spawnProcess(taskConfig, userSettings) {
             const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
             // const wslCommand = `${fileToExecute} ${configFilePath}`;
             console.log(`⚡ SPAWN: Запуск WSL процесса: wsl ${program} ${configFilePathWSL}`);
-            child = spawn('wsl.exe', ['-e', program, "run", configFilePathWSL], {
+            const child = spawn('wsl.exe', [
+                '-e',
+                '/usr/local/bin/run-high-limit',
+                program,
+                "run",
+                configFilePathWSL
+            ], {
                 stdio: 'pipe',
                 shell: true,
                 detached: false,
