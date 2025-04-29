@@ -428,7 +428,7 @@ async function spawnProcess(taskConfig, userSettings) {
                 configFilePathWSL
             ], {
                 stdio: 'pipe',
-                shell: true,
+                shell: false,
                 detached: false,
                 cwd: userSettings.mevBotDirectory,
             });
