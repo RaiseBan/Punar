@@ -8,7 +8,7 @@
   "scripts": {
     "start": "cross-env NODE_ENV=development concurrently \"npm run react-start\" \"npm run electron-start\"",
     "react-start": "cd ../react-app && npm start",
-    "electron-start": "wait-on http://localhost:3001 && electron . --disk-cache-dir=./electron-cache --user-data-dir=./electron-data",
+    "electron-start": "wait-on http://localhost:3002 && electron . --disk-cache-dir=./electron-cache --user-data-dir=./electron-data",
     "build": "cross-env NODE_ENV=production npm run react-build && npm run electron-build",
     "react-build": "cd ../react-app && npm run build",
     "electron-build": "electron-builder --win",
