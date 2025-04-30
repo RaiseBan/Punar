@@ -604,11 +604,21 @@ class MevLoadBalancer {
 
                 logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${i+1} для пары ${pair}`);
                 const resp = await axios.post(
-                    `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`,  // Используем эндпоинт /forward
+                    `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`,
                     {
                         url: targetUrl,
                         method: "GET",
-                        headers: {'Content-Type': 'application/json'},
+                        headers: {
+                            'Content-Type': 'application/json',
+                            // Добавим заголовок, который указывает, что не нужно использовать Transfer-Encoding
+                            'Connection': 'close'
+                        },
+                    },
+                    {
+                        // Отключаем автоматическое сжатие и декодирование
+                        decompress: false,
+                        // Указываем, что не нужно следовать редиректам автоматически
+                        maxRedirects: 0
                     }
                 );
                 const data2 = await resp.data;
