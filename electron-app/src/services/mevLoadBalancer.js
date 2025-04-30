@@ -59,7 +59,7 @@ class MevLoadBalancer {
             notifyTelegram: true,        // Отправлять уведомления в Telegram
             processingInterval: 10000,    // Интервал обработки буфера сигналов (5 секунд)
 
-            liquidityCheckInterval: 5 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
+            liquidityCheckInterval: 6 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
             minimumLiquidity: 170,       // Минимальная ликвидность пула (USD)
             minProcessAgeForCleanup: 20 * 60 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
         };
@@ -597,10 +597,36 @@ class MevLoadBalancer {
 
         for (let i = 0; i < 3; i++) {
             try {
+                const targetUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
 
-                const resp2 = await fetch(`https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`);
 
-                const data2 = await resp2.json()
+
+                logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${i+1} для пары ${pair}`);
+                const resp = await fetch(
+                    `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            url: targetUrl,
+                            method: "GET",
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        })
+                    }
+                );
+                if (!resp.ok) {
+                    const errorText = await resp.text();
+                    throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}. Текст ответа: ${errorText}`);
+                }
+                const data2 = await resp.json();
+
+                logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data2, null, 2)}`);
+
+
                 if (data2[0].onchain_timestamp) {
                     // Проверка, что timestamp был 20 минут назад
                     const currentTimestamp = Math.floor(Date.now() / 1000);
@@ -610,9 +636,17 @@ class MevLoadBalancer {
                         return true;
                     }
                 }
-            } catch (e) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
-                await sleep(1500);
+            } catch (error) {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${error}`);
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+                if (error.cause) {
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
+                }
+                // Можно добавить дополнительные проверки сетевых ошибок
+                if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сетевая ошибка: не удалось подключиться к серверу');
+                }
+                await sleep(6000);
 
             }
         }
