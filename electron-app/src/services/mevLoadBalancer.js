@@ -16,7 +16,6 @@ const bs58 = require("bs58");
 const { sleep, getDetailedTokenAccounts, createTokenAccount } = require('../utils/solanaUtils');
 const { Keypair } = require("@solana/web3.js");
 const logger = require('../services/loggerService');
-const { net } = require('electron');
 
 
 class MevLoadBalancer {
@@ -593,30 +592,51 @@ class MevLoadBalancer {
         }
     }
 
-
-
-
     /**
-     * Проверяет наличие ликвидности для указанной пары
+     * Проверяет наличие ликвидности для указанной пары через прокси-сервер
      * @param {string} pair - Идентификатор пары
      * @returns {Promise<boolean>} - true если ликвидность присутствует и обновлялась недавно
      */
     async checkLiquidity(pair) {
-        const MAX_ATTEMPTS = 30;
         const MINUTES_THRESHOLD = 20;
-        let currentDelay = 1500;  // Начальная задержка
+        const MAX_ATTEMPTS = 30;
+        const RETRY_DELAY = 1500;
 
-        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        for (let i = 0; i < MAX_ATTEMPTS; i++) {
             try {
-                logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${attempt} для пары ${pair}`);
+                // Адрес прокси-сервера из настроек
+                const proxyUrl = `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`;
 
-                // Используем Electron API для запроса
-                const url = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
-                const data = await this.electronRequest(url);
+                // Данные для отправки на прокси-сервер
+                const requestData = {
+                    url: `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`,
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                };
 
+                // Отправляем запрос на прокси-сервер
+                const resp = await fetch(proxyUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                // Проверяем статус ответа
+                if (!resp.ok) {
+                    throw new Error(`Proxy response error: ${resp.status} ${resp.statusText}`);
+                }
+
+                // Парсим JSON из ответа
+                const data = await resp.json();
                 logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data, null, 2)}`);
 
+                // Проверяем данные
                 if (Array.isArray(data) && data.length > 0 && data[0].onchain_timestamp) {
+                    // Проверка, что timestamp был не раньше 20 минут назад
                     const currentTimestamp = Math.floor(Date.now() / 1000);
                     const twentyMinutesAgo = currentTimestamp - (MINUTES_THRESHOLD * 60);
 
@@ -624,93 +644,18 @@ class MevLoadBalancer {
                         return true;
                     }
                 }
-            } catch (error) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${error}`);
+            } catch (e) {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
 
-                if (attempt < MAX_ATTEMPTS) {
-                    // Увеличиваем задержку при каждой ошибке
-                    if (error.toString().includes('429')) {
-                        currentDelay = Math.min(currentDelay * 2, 15000);
-                    }
-
-                    logger.info(logger.LOG_MODULES.SYSTEM, `Ожидание ${currentDelay}мс перед следующей попыткой...`);
-                    await sleep(currentDelay);
+                // Ждем перед следующей попыткой
+                if (i < MAX_ATTEMPTS - 1) {
+                    await sleep(RETRY_DELAY);
                 }
             }
         }
 
         return false;
     }
-
-    /**
-     * Выполняет запрос с использованием Electron net API
-     * @param {string} url - URL для запроса
-     * @returns {Promise<any>} - Распарсенный JSON ответ
-     */
-    electronRequest(url) {
-        return new Promise((resolve, reject) => {
-            const request = net.request({
-                method: 'GET',
-                url: url,
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'Electron/App',
-                    'Cache-Control': 'no-cache'
-                }
-            });
-
-            let responseData = '';
-
-            request.on('response', (response) => {
-                // Проверяем код ответа
-                if (response.statusCode === 429) {
-                    reject(new Error(`HTTP 429: Too Many Requests`));
-                    return;
-                }
-
-                if (response.statusCode < 200 || response.statusCode >= 300) {
-                    reject(new Error(`HTTP ошибка! Статус: ${response.statusCode}`));
-                    return;
-                }
-
-                response.on('data', (chunk) => {
-                    responseData += chunk.toString();
-                });
-
-                response.on('end', () => {
-                    try {
-                        const parsedData = JSON.parse(responseData);
-                        resolve(parsedData);
-                    } catch (error) {
-                        reject(new Error(`Ошибка парсинга JSON: ${error.message}`));
-                    }
-                });
-            });
-
-            request.on('error', (error) => {
-                reject(error);
-            });
-
-            request.on('abort', () => {
-                reject(new Error('Запрос был прерван'));
-            });
-
-            // Устанавливаем таймаут
-            setTimeout(() => {
-                if (request) {
-                    request.abort();
-                    reject(new Error('Таймаут запроса'));
-                }
-            }, 10000);
-
-            request.end();
-        });
-    }
-
-
-
-
-
 
     /**
      * Останавливает MEV процесс
