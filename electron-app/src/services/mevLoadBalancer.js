@@ -619,7 +619,10 @@ class MevLoadBalancer {
                         })
                     }
                 );
-
+                if (!resp.ok) {
+                    const errorText = await resp.text();
+                    throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}. Текст ответа: ${errorText}`);
+                }
                 const data2 = await resp.json();
 
                 logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data2, null, 2)}`);
