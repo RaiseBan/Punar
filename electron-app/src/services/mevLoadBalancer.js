@@ -637,8 +637,16 @@ class MevLoadBalancer {
                         return true;
                     }
                 }
-            } catch (e) {
+            } catch (error) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+                if (error.cause) {
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
+                }
+                // Можно добавить дополнительные проверки сетевых ошибок
+                if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сетевая ошибка: не удалось подключиться к серверу');
+                }
                 await sleep(6000);
 
             }
