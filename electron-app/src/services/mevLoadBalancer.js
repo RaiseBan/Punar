@@ -58,9 +58,9 @@ class MevLoadBalancer {
             maxSignalsPerProcess: 50,    // Максимальное количество сигналов на процесс
             notifyTelegram: true,        // Отправлять уведомления в Telegram
             processingInterval: 10000,    // Интервал обработки буфера сигналов (5 секунд)
-            liquidityCheckInterval: 5 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
+            liquidityCheckInterval: 15 * 1000, // Интервал проверки ликвидности (20 минут)
             minimumLiquidity: 170,       // Минимальная ликвидность пула (USD)
-            minProcessAgeForCleanup: 20 * 60 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
+            minProcessAgeForCleanup: 10 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
         };
 
         // Настройки пользователя
@@ -594,12 +594,13 @@ class MevLoadBalancer {
 
     async checkLiquidity(pair) {
 
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 30; i++) {
             try {
 
                 const resp2 = await fetch(`https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`);
 
                 const data2 = await resp2.json()
+                logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data2, null, 2)}`);
                 if (data2[0].onchain_timestamp) {
                     // Проверка, что timestamp был 20 минут назад
                     const currentTimestamp = Math.floor(Date.now() / 1000);
