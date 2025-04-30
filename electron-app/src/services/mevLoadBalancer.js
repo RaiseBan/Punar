@@ -16,7 +16,7 @@ const bs58 = require("bs58");
 const { sleep, getDetailedTokenAccounts, createTokenAccount } = require('../utils/solanaUtils');
 const { Keypair } = require("@solana/web3.js");
 const logger = require('../services/loggerService');
-const https = require('https');
+const { net } = require('electron');
 
 
 class MevLoadBalancer {
@@ -610,33 +610,29 @@ class MevLoadBalancer {
             try {
                 logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${attempt} для пары ${pair}`);
 
-                // Запрос к API
+                // Используем Electron API для запроса
                 const url = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
-                const response = await this.makeHttpRequest(url);
+                const data = await this.electronRequest(url);
 
-                logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(response, null, 2)}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data, null, 2)}`);
 
-                // Проверка данных ответа
-                if (Array.isArray(response) && response.length > 0 && response[0].onchain_timestamp) {
-                    // Проверка, что timestamp был не раньше 20 минут назад
+                if (Array.isArray(data) && data.length > 0 && data[0].onchain_timestamp) {
                     const currentTimestamp = Math.floor(Date.now() / 1000);
                     const twentyMinutesAgo = currentTimestamp - (MINUTES_THRESHOLD * 60);
 
-                    if (response[0].onchain_timestamp > twentyMinutesAgo) {
+                    if (data[0].onchain_timestamp > twentyMinutesAgo) {
                         return true;
                     }
                 }
             } catch (error) {
-                // Логируем ошибку
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${error}`);
 
-                // Если это ограничение по запросам, увеличиваем задержку
-                if (error.message.includes('429')) {
-                    currentDelay = Math.min(currentDelay * 2, 15000);  // Увеличиваем задержку, но не более 15 секунд
-                }
-
-                // Ждем перед следующей попыткой
                 if (attempt < MAX_ATTEMPTS) {
+                    // Увеличиваем задержку при каждой ошибке
+                    if (error.toString().includes('429')) {
+                        currentDelay = Math.min(currentDelay * 2, 15000);
+                    }
+
                     logger.info(logger.LOG_MODULES.SYSTEM, `Ожидание ${currentDelay}мс перед следующей попыткой...`);
                     await sleep(currentDelay);
                 }
@@ -647,50 +643,69 @@ class MevLoadBalancer {
     }
 
     /**
-     * Выполняет HTTP запрос
+     * Выполняет запрос с использованием Electron net API
      * @param {string} url - URL для запроса
-     * @returns {Promise<any>} - JSON ответ
+     * @returns {Promise<any>} - Распарсенный JSON ответ
      */
-    makeHttpRequest(url) {
+    electronRequest(url) {
         return new Promise((resolve, reject) => {
-            https.get(url, {
+            const request = net.request({
+                method: 'GET',
+                url: url,
                 headers: {
                     'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Node.js)'
-                },
-                timeout: 10000
-            }, (res) => {
-                let data = '';
+                    'User-Agent': 'Electron/App',
+                    'Cache-Control': 'no-cache'
+                }
+            });
 
-                // Проверка кода ответа
-                if (res.statusCode === 429) {
-                    return reject(new Error('HTTP 429: Too Many Requests'));
+            let responseData = '';
+
+            request.on('response', (response) => {
+                // Проверяем код ответа
+                if (response.statusCode === 429) {
+                    reject(new Error(`HTTP 429: Too Many Requests`));
+                    return;
                 }
 
-                if (res.statusCode < 200 || res.statusCode >= 300) {
-                    return reject(new Error(`HTTP ошибка! Статус: ${res.statusCode}`));
+                if (response.statusCode < 200 || response.statusCode >= 300) {
+                    reject(new Error(`HTTP ошибка! Статус: ${response.statusCode}`));
+                    return;
                 }
 
-                res.on('data', (chunk) => {
-                    data += chunk;
+                response.on('data', (chunk) => {
+                    responseData += chunk.toString();
                 });
 
-                res.on('end', () => {
+                response.on('end', () => {
                     try {
-                        const parsedData = JSON.parse(data);
+                        const parsedData = JSON.parse(responseData);
                         resolve(parsedData);
                     } catch (error) {
                         reject(new Error(`Ошибка парсинга JSON: ${error.message}`));
                     }
                 });
-            }).on('error', (error) => {
-                reject(error);
-            }).on('timeout', () => {
-                reject(new Error('Таймаут запроса'));
             });
+
+            request.on('error', (error) => {
+                reject(error);
+            });
+
+            request.on('abort', () => {
+                reject(new Error('Запрос был прерван'));
+            });
+
+            // Устанавливаем таймаут
+            setTimeout(() => {
+                if (request) {
+                    request.abort();
+                    reject(new Error('Таймаут запроса'));
+                }
+            }, 10000);
+
+            request.end();
         });
     }
-
 
 
 
