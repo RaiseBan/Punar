@@ -601,80 +601,72 @@ class MevLoadBalancer {
      * @param {string} pair - Идентификатор пары
      * @returns {Promise<boolean>} - true если ликвидность присутствует и обновлялась недавно
      */
-
     async checkLiquidity(pair) {
         const MAX_ATTEMPTS = 30;
-        const RETRY_DELAY_MS = 1500;
         const MINUTES_THRESHOLD = 20;
+        let currentDelay = 1500;  // Начальная задержка
 
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${attempt} для пары ${pair}`);
 
-                const data = await this.makeHttpRequest(`https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`);
+                // Запрос к API
+                const url = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
+                const response = await this.makeHttpRequest(url);
 
-                logger.info(logger.LOG_MODULES.SYSTEM, `Получены данные: ${JSON.stringify(data, null, 2)}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(response, null, 2)}`);
 
-                // Проверяем, что получили массив и в нем есть элементы
-                if (Array.isArray(data) && data.length > 0 && data[0].onchain_timestamp) {
+                // Проверка данных ответа
+                if (Array.isArray(response) && response.length > 0 && response[0].onchain_timestamp) {
+                    // Проверка, что timestamp был не раньше 20 минут назад
                     const currentTimestamp = Math.floor(Date.now() / 1000);
-                    const timeThresholdInSeconds = MINUTES_THRESHOLD * 60;
-                    const thresholdTimestamp = currentTimestamp - timeThresholdInSeconds;
+                    const twentyMinutesAgo = currentTimestamp - (MINUTES_THRESHOLD * 60);
 
-                    logger.info(
-                        logger.LOG_MODULES.SYSTEM,
-                        `Проверка времени: текущее=${currentTimestamp}, транзакции=${data[0].onchain_timestamp}, пороговое=${thresholdTimestamp}`
-                    );
-
-                    // Проверяем, что транзакция произошла не раньше, чем заданное пороговое время
-                    if (data[0].onchain_timestamp > thresholdTimestamp) {
-                        logger.info(logger.LOG_MODULES.SYSTEM, `Ликвидность подтверждена для пары ${pair}`);
+                    if (response[0].onchain_timestamp > twentyMinutesAgo) {
                         return true;
-                    } else {
-                        logger.info(logger.LOG_MODULES.SYSTEM, `Ликвидность устарела для пары ${pair}`);
                     }
-                } else {
-                    logger.info(logger.LOG_MODULES.SYSTEM, `Нет данных о ликвидности для пары ${pair}`);
                 }
             } catch (error) {
-                const errorMessage = error.message || String(error);
-                logger.info(
-                    logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                    `Ошибка при проверке ликвидности (попытка ${attempt}/${MAX_ATTEMPTS}): ${errorMessage}`
-                );
+                // Логируем ошибку
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${error}`);
 
+                // Если это ограничение по запросам, увеличиваем задержку
+                if (error.message.includes('429')) {
+                    currentDelay = Math.min(currentDelay * 2, 15000);  // Увеличиваем задержку, но не более 15 секунд
+                }
+
+                // Ждем перед следующей попыткой
                 if (attempt < MAX_ATTEMPTS) {
-                    logger.info(logger.LOG_MODULES.SYSTEM, `Ожидание ${RETRY_DELAY_MS}мс перед следующей попыткой...`);
-                    await sleep(RETRY_DELAY_MS);
+                    logger.info(logger.LOG_MODULES.SYSTEM, `Ожидание ${currentDelay}мс перед следующей попыткой...`);
+                    await sleep(currentDelay);
                 }
             }
         }
 
-        logger.info(logger.LOG_MODULES.SYSTEM, `Не удалось подтвердить ликвидность для пары ${pair} после ${MAX_ATTEMPTS} попыток`);
         return false;
     }
 
     /**
-     * Выполняет HTTP запрос с помощью Node.js https модуля
+     * Выполняет HTTP запрос
      * @param {string} url - URL для запроса
-     * @returns {Promise<any>} - Распарсенные JSON данные
+     * @returns {Promise<any>} - JSON ответ
      */
     makeHttpRequest(url) {
         return new Promise((resolve, reject) => {
             https.get(url, {
                 headers: {
                     'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Node.js/16.x'
-                }
+                    'User-Agent': 'Mozilla/5.0 (Node.js)'
+                },
+                timeout: 10000
             }, (res) => {
                 let data = '';
 
-                // В случае редиректа
-                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                    return this.makeHttpRequest(res.headers.location).then(resolve).catch(reject);
+                // Проверка кода ответа
+                if (res.statusCode === 429) {
+                    return reject(new Error('HTTP 429: Too Many Requests'));
                 }
 
-                // В случае ошибки HTTP
                 if (res.statusCode < 200 || res.statusCode >= 300) {
                     return reject(new Error(`HTTP ошибка! Статус: ${res.statusCode}`));
                 }
@@ -685,22 +677,20 @@ class MevLoadBalancer {
 
                 res.on('end', () => {
                     try {
-                        // Проверяем, что данные начинаются как JSON, а не HTML
-                        if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-                            return reject(new Error(`Получен HTML вместо JSON: ${data.substring(0, 100)}...`));
-                        }
-
                         const parsedData = JSON.parse(data);
                         resolve(parsedData);
                     } catch (error) {
-                        reject(new Error(`Ошибка парсинга JSON: ${error.message}, получено: ${data.substring(0, 100)}...`));
+                        reject(new Error(`Ошибка парсинга JSON: ${error.message}`));
                     }
                 });
             }).on('error', (error) => {
-                reject(new Error(`Сетевая ошибка: ${error.message}`));
+                reject(error);
+            }).on('timeout', () => {
+                reject(new Error('Таймаут запроса'));
             });
         });
     }
+
 
 
 
