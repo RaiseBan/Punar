@@ -4,6 +4,7 @@
  * Отвечает за обнаружение сигналов MEV в логах процессов new-token-release,
  * запуск MEV процессов и распределение нагрузки между ними.
  */
+
 const { ipcMain } = require('electron');
 const path = require('path');
 const { app } = require('electron');
@@ -16,6 +17,7 @@ const bs58 = require("bs58");
 const { sleep, getDetailedTokenAccounts, createTokenAccount } = require('../utils/solanaUtils');
 const { Keypair } = require("@solana/web3.js");
 const logger = require('../services/loggerService');
+const axios = require("axios");
 
 
 class MevLoadBalancer {
@@ -596,10 +598,24 @@ class MevLoadBalancer {
 
         for (let i = 0; i < 3; i++) {
             try {
+                const targetUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
 
-                const resp2 = await fetch(`https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`);
 
-                const data2 = await resp2.json()
+
+                logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${i+1} для пары ${pair}`);
+                const resp = await axios.post(
+                    `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`,  // Используем эндпоинт /forward
+                    {
+                        url: targetUrl,
+                        method: "GET",
+                        headers: {'Content-Type': 'application/json'},
+                    }
+                );
+                const data2 = await resp.data;
+
+                logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data2, null, 2)}`);
+
+
                 if (data2[0].onchain_timestamp) {
                     // Проверка, что timestamp был 20 минут назад
                     const currentTimestamp = Math.floor(Date.now() / 1000);
@@ -611,7 +627,7 @@ class MevLoadBalancer {
                 }
             } catch (e) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
-                await sleep(1500);
+                await sleep(6000);
 
             }
         }
