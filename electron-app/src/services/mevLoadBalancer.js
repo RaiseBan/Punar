@@ -600,60 +600,106 @@ class MevLoadBalancer {
     async checkLiquidity(pair) {
         const MINUTES_THRESHOLD = 20;
         const MAX_ATTEMPTS = 30;
-        const RETRY_DELAY = 1500;
+        const INITIAL_RETRY_DELAY = 1500;
+        let retryDelay = INITIAL_RETRY_DELAY;
 
         for (let i = 0; i < MAX_ATTEMPTS; i++) {
             try {
                 // Адрес прокси-сервера из настроек
                 const proxyUrl = `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`;
 
-                // Данные для отправки на прокси-сервер
+                // Добавляем случайный параметр, чтобы избежать кеширования
+                const randomParam = Math.random().toString(36).substring(7);
+                const targetUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1&nocache=${randomParam}`;
+
+                // Данные для отправки на прокси-сервер с расширенными заголовками
                 const requestData = {
-                    url: `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`,
+                    url: targetUrl,
                     method: 'GET',
                     headers: {
                         'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Cache-Control': 'no-cache, no-store',
+                        'Pragma': 'no-cache',
+                        'Referer': 'https://dlmm-api.meteora.ag/swagger-ui/',
+                        'Accept-Language': 'en-US,en;q=0.9'
                     }
                 };
 
-                // Отправляем запрос на прокси-сервер
+                logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${i+1} для пары ${pair}`);
+
+                // Отправляем запрос на прокси-сервер с увеличенным таймаутом
                 const resp = await fetch(proxyUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(requestData)
+                    body: JSON.stringify(requestData),
+                    timeout: 15000 // 15 секунд таймаут
                 });
 
-                // Проверяем статус ответа
-                if (!resp.ok) {
-                    throw new Error(`Proxy response error: ${resp.status} ${resp.statusText}`);
-                }
+                // Читаем тело ответа
+                let responseBody;
+                try {
+                    responseBody = await resp.text();
 
-                // Парсим JSON из ответа
-                const data = await resp.json();
-                logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data, null, 2)}`);
+                    // Пытаемся распарсить как JSON
+                    try {
+                        const data = JSON.parse(responseBody);
 
-                // Проверяем данные
-                if (Array.isArray(data) && data.length > 0 && data[0].onchain_timestamp) {
-                    // Проверка, что timestamp был не раньше 20 минут назад
-                    const currentTimestamp = Math.floor(Date.now() / 1000);
-                    const twentyMinutesAgo = currentTimestamp - (MINUTES_THRESHOLD * 60);
+                        // Проверяем на ошибку Cloudflare
+                        if (data.error && (data.error.includes('1015') || data.error.includes('Cloudflare'))) {
+                            throw new Error(`Cloudflare защита (1015): ${data.error}`);
+                        }
 
-                    if (data[0].onchain_timestamp > twentyMinutesAgo) {
-                        return true;
+                        logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data, null, 2)}`);
+
+                        // Проверяем данные
+                        if (Array.isArray(data) && data.length > 0 && data[0].onchain_timestamp) {
+                            // Проверка, что timestamp был не раньше 20 минут назад
+                            const currentTimestamp = Math.floor(Date.now() / 1000);
+                            const twentyMinutesAgo = currentTimestamp - (MINUTES_THRESHOLD * 60);
+
+                            if (data[0].onchain_timestamp > twentyMinutesAgo) {
+                                return true;
+                            }
+                        }
+                    } catch (jsonError) {
+                        // Проверяем на HTML ответ с ошибкой Cloudflare
+                        if (responseBody.includes('Error 1015') ||
+                            responseBody.includes('Cloudflare') ||
+                            responseBody.includes('rate limited')) {
+                            throw new Error('Cloudflare защита (1015) или ограничение запросов');
+                        } else if (!resp.ok) {
+                            throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}`);
+                        } else {
+                            throw new Error(`Некорректный JSON в ответе: ${jsonError.message}`);
+                        }
                     }
+                } catch (readError) {
+                    throw new Error(`Ошибка чтения ответа: ${readError.message}`);
                 }
             } catch (e) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
+                const errorMessage = e.toString();
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${errorMessage}`);
+
+                // Увеличиваем задержку для Cloudflare ошибок или ошибок 429
+                if (errorMessage.includes('1015') ||
+                    errorMessage.includes('Cloudflare') ||
+                    errorMessage.includes('429') ||
+                    errorMessage.includes('rate limited')) {
+                    retryDelay = Math.min(retryDelay * 2, 15000); // Экспоненциальное увеличение до 15 секунд
+                }
 
                 // Ждем перед следующей попыткой
                 if (i < MAX_ATTEMPTS - 1) {
-                    await sleep(RETRY_DELAY);
+                    logger.info(logger.LOG_MODULES.SYSTEM, `Ожидание ${retryDelay}мс перед следующей попыткой...`);
+                    await sleep(retryDelay);
                 }
             }
         }
 
+        logger.info(logger.LOG_MODULES.SYSTEM, `Не удалось подтвердить ликвидность для пары ${pair} после ${MAX_ATTEMPTS} попыток`);
         return false;
     }
 
