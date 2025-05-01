@@ -16,6 +16,7 @@ const bs58 = require("bs58");
 const { sleep, getDetailedTokenAccounts, createTokenAccount } = require('../utils/solanaUtils');
 const { Keypair } = require("@solana/web3.js");
 const logger = require('../services/loggerService');
+const axios = require("axios");
 
 
 class MevLoadBalancer {
@@ -597,7 +598,8 @@ class MevLoadBalancer {
 
         for (let i = 0; i < 3; i++) {
             try {
-                const targetUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
+                const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
+                const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
 
 
 
@@ -610,7 +612,7 @@ class MevLoadBalancer {
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
-                            url: targetUrl,
+                            url: meteoraUrl,
                             method: "GET",
                             headers: {
                                 'Content-Type': 'application/json'
@@ -622,17 +624,25 @@ class MevLoadBalancer {
                     const errorText = await resp.text();
                     throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}. Текст ответа: ${errorText}`);
                 }
+
+                const dexResponse = await axios.get(dexScreenerUrl);
+                const dexData = dexResponse.data;
+                logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
+
                 const data2 = await resp.json();
 
                 logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data2, null, 2)}`);
 
-
-                if (data2[0].onchain_timestamp) {
+                const pairData = dexData.pair;
+                const buys = pairData.txns.m5.buys;
+                const sells = pairData.txns.m5.sells;
+                if (data2[0].onchain_timestamp && buys && sells) {
                     // Проверка, что timestamp был 20 минут назад
                     const currentTimestamp = Math.floor(Date.now() / 1000);
                     const twentyMinutesAgo = currentTimestamp - (20 * 60); // 20 минут в секундах
-                    // Проверяем, что onchain_timestamp примерно 20 минут назад
-                    return data2[0].onchain_timestamp > twentyMinutesAgo;
+
+
+                    return (data2[0].onchain_timestamp > twentyMinutesAgo) || (buys + sells === 0);
                 }
             } catch (error) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${error}`);
