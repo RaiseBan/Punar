@@ -633,9 +633,7 @@ class MevLoadBalancer {
                     const currentTimestamp = Math.floor(Date.now() / 1000);
                     const twentyMinutesAgo = currentTimestamp - (20 * 60); // 20 минут в секундах
                     // Проверяем, что onchain_timestamp примерно 20 минут назад
-                    if (data2[0].onchain_timestamp > twentyMinutesAgo) {
-                        return true;
-                    }
+                    return data2[0].onchain_timestamp > twentyMinutesAgo;
                 }
             } catch (error) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${error}`);
