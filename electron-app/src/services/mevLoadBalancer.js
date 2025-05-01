@@ -16,7 +16,6 @@ const bs58 = require("bs58");
 
 const { sleep, getDetailedTokenAccounts, createTokenAccount } = require('../utils/solanaUtils');
 const { Keypair } = require("@solana/web3.js");
-const axios = require('axios');
 const { MASTER_NODE_PORT } = require("../utils/constants");
 
 const logger = require('../services/loggerService');
