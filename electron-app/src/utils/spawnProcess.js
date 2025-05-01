@@ -419,14 +419,9 @@ async function spawnProcess(taskConfig, userSettings) {
             console.log(`⚡ SPAWN: Запуск WSL процесса: wsl ${program} ${configFilePathWSL}`);
             // Получаем домашнюю директорию пользователя в WSL
 
-            child = spawn('wsl.exe', [
-                '-e',
-                'bash',
-                '-c',
-                `ulimit -n 65535 && ${program} run "${configFilePathWSL}"`
-            ], {
+            child = spawn('wsl.exe', ['-e', program, "run", configFilePathWSL], {
                 stdio: 'pipe',
-                shell: false,
+                shell: true,
                 detached: false,
                 cwd: userSettings.mevBotDirectory,
             });
