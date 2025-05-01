@@ -20,6 +20,7 @@ const axios = require('axios');
 const { MASTER_NODE_PORT } = require("../utils/constants");
 
 const logger = require('../services/loggerService');
+const axios = require("axios");
 
 
 class MevLoadBalancer {
@@ -601,16 +602,51 @@ class MevLoadBalancer {
 
         for (let i = 0; i < 3; i++) {
             try {
+                const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
+                const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
 
-                const resp2 = await fetch(`https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`);
 
-                const data2 = await resp2.json()
-                if (data2[0].onchain_timestamp) {
+
+                logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${i+1} для пары ${pair}`);
+                const resp = await fetch(
+                    `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            url: meteoraUrl,
+                            method: "GET",
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        })
+                    }
+                );
+                if (!resp.ok) {
+                    const errorText = await resp.text();
+                    throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}. Текст ответа: ${errorText}`);
+                }
+
+                const dexResponse = await axios.get(dexScreenerUrl);
+                const dexData = dexResponse.data;
+                logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
+
+                const data2 = await resp.json();
+
+                logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data2, null, 2)}`);
+
+                const pairData = dexData.pair;
+                const buys = pairData.txns.m5.buys;
+                const sells = pairData.txns.m5.sells;
+                if (data2[0].onchain_timestamp && buys && sells) {
                     // Проверка, что timestamp был 20 минут назад
                     const currentTimestamp = Math.floor(Date.now() / 1000);
                     const twentyMinutesAgo = currentTimestamp - (20 * 60); // 20 минут в секундах
-                    // Проверяем, что onchain_timestamp примерно 20 минут назад
-                    return data2[0].onchain_timestamp > twentyMinutesAgo;
+
+
+                    return (data2[0].onchain_timestamp > twentyMinutesAgo) || (buys + sells === 0);
                 }
             } catch (e) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
