@@ -649,9 +649,8 @@ class MevLoadBalancer {
                 const twentyMinutesAgo = currentTimestamp - (20 * 60); // 20 минут в секундах
 
 
-                return meteoraData[0].onchain_timestamp > twentyMinutesAgo;
+                return meteoraData[0].onchain_timestamp < twentyMinutesAgo;
             } else {
-
                 return false;
             }
 
