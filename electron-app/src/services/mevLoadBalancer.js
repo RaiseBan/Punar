@@ -599,7 +599,7 @@ class MevLoadBalancer {
 
     async checkLiquidity(pair) {
 
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 2; i++) {
             try {
                 const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
                 const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
@@ -607,49 +607,44 @@ class MevLoadBalancer {
 
 
                 logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${i+1} для пары ${pair}`);
-                const resp = await fetch(
-                    `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`,
-                    {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            url: meteoraUrl,
-                            method: "GET",
-                            headers: {
-                                'Content-Type': 'application/json'
-                            }
-                        })
-                    }
-                );
-                if (!resp.ok) {
-                    const errorText = await resp.text();
-                    throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}. Текст ответа: ${errorText}`);
-                }
 
-                const dexResponse = await axios.get(dexScreenerUrl);
-                const dexData = dexResponse.data;
+                const dexData = (await axios.get(dexScreenerUrl)).data;
+                const meteoraData = (await this.forwardRequest(meteoraUrl)).json();
+
                 logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `METEOTA DATA: ${JSON.stringify(meteoraData, null, 2)}`);
 
-                const data2 = await resp.json();
+                let meteoraVerdict = false;
+                let dexscreenerVerdict = false;
 
-                logger.info(logger.LOG_MODULES.SYSTEM, `CHECKING TX: ${JSON.stringify(data2, null, 2)}`);
-
-                const pairData = dexData.pair;
-                const buys = pairData.txns.m5.buys;
-                const sells = pairData.txns.m5.sells;
-                if (data2[0].onchain_timestamp && buys && sells) {
+                if (meteoraData[0].onchain_timestamp) {
                     // Проверка, что timestamp был 20 минут назад
                     const currentTimestamp = Math.floor(Date.now() / 1000);
                     const twentyMinutesAgo = currentTimestamp - (20 * 60); // 20 минут в секундах
 
 
-                    return (data2[0].onchain_timestamp > twentyMinutesAgo) || (buys + sells === 0);
+                    meteoraVerdict =  meteoraData[0].onchain_timestamp > twentyMinutesAgo;
                 }
-            } catch (e) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${e}`);
-                await sleep(1500);
+                if (dexData.pair && dexData.pair.txns.m5) {
+                    const buys = dexData.pair.txns.m5.buys;
+                    const sells = dexData.pair.txns.m5.sells;
+                    if (buys + sells !== 0){
+                        dexscreenerVerdict = true;
+                    }
+                }
+                return dexscreenerVerdict && meteoraVerdict;
+
+            } catch (error) {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${error}`);
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+                if (error.cause) {
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
+                }
+                // Можно добавить дополнительные проверки сетевых ошибок
+                if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сетевая ошибка: не удалось подключиться к серверу');
+                }
+                await sleep(5000);
 
             }
         }
@@ -657,6 +652,34 @@ class MevLoadBalancer {
 
 
     }
+
+
+    dexRequest(url){
+
+    }
+    async forwardRequest(url){ // todo: переделать под разные параметры
+        const resp = await fetch(
+            `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: url,
+                    method: "GET",
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+            }
+        );
+        if (!resp.ok) {
+            const errorText = await resp.text();
+            throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}. Текст ответа: ${errorText}`);
+        }
+    }
+
 
     /**
      * Останавливает MEV процесс
