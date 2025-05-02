@@ -606,7 +606,7 @@ class MevLoadBalancer {
                 logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${i+1} для пары ${pair}`);
 
                 const dexData = (await axios.get(dexScreenerUrl)).data;
-                const meteoraData = (await this.forwardRequest(meteoraUrl)).json();
+                const meteoraData = await (await this.forwardRequest(meteoraUrl)).json();
 
                 logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
                 logger.info(logger.LOG_MODULES.SYSTEM, `METEOTA DATA: ${JSON.stringify(meteoraData, null, 2)}`);
@@ -671,10 +671,11 @@ class MevLoadBalancer {
                 })
             }
         );
-        if (!resp.ok) {
+        if (resp.ok) {
             const errorText = await resp.text();
             throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}. Текст ответа: ${errorText}`);
         }
+        return resp;
     }
 
 
