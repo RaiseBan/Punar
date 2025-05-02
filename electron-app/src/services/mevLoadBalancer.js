@@ -4,13 +4,12 @@
  * Отвечает за обнаружение сигналов MEV в логах процессов new-token-release,
  * запуск MEV процессов и распределение нагрузки между ними.
  */
-
-const { ipcMain } = require('electron');
+const {ipcMain} = require('electron');
 const path = require('path');
-const { app } = require('electron');
-const { spawnProcess, stopMevProcess, forceKillWindowsProcess } = require('../utils/spawnProcess');
-const { generateMevConfig } = require('../utils/generateService');
-const { getSettings } = require('../utils/fsHelper');
+const {app} = require('electron');
+const {spawnProcess, stopMevProcess, forceKillWindowsProcess} = require('../utils/spawnProcess');
+const {generateMevConfig} = require('../utils/generateService');
+const {getSettings} = require('../utils/fsHelper');
 const telegramBotService = require('./telegramBotService');
 const fs = require('fs');
 const bs58 = require("bs58");
@@ -268,7 +267,7 @@ class MevLoadBalancer {
         try {
             if (this.isActive) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик уже запущен');
-                return { success: true, status: 'already_running' };
+                return {success: true, status: 'already_running'};
             }
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Запуск MEV LoadBalancer');
@@ -314,7 +313,7 @@ class MevLoadBalancer {
         try {
             if (!this.isActive) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик уже остановлен');
-                return { success: true, status: 'already_stopped' };
+                return {success: true, status: 'already_stopped'};
             }
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Остановка MEV LoadBalancer');
@@ -595,66 +594,84 @@ class MevLoadBalancer {
     }
 
     async checkLiquidity(pair) {
-
-        for (let i = 0; i < 2; i++) {
-            try {
-                const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
-                const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
+        const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
+        const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
 
 
+        let meteoraVerdict = await this.checkMeteora(meteoraUrl);
+        let dexscreenerVerdict = await this.checkDex(dexScreenerUrl);
 
-                logger.info(logger.LOG_MODULES.SYSTEM, `Попытка проверки ликвидности #${i+1} для пары ${pair}`);
-
-                const dexData = (await axios.get(dexScreenerUrl)).data;
-                const meteoraData = await (await this.forwardRequest(meteoraUrl)).json();
-
-                logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
-                logger.info(logger.LOG_MODULES.SYSTEM, `METEOTA DATA: ${JSON.stringify(meteoraData, null, 2)}`);
-
-                let meteoraVerdict = false;
-                let dexscreenerVerdict = false;
-
-                if (meteoraData[0].onchain_timestamp) {
-                    // Проверка, что timestamp был 20 минут назад
-                    const currentTimestamp = Math.floor(Date.now() / 1000);
-                    const twentyMinutesAgo = currentTimestamp - (20 * 60); // 20 минут в секундах
+        return meteoraVerdict || dexscreenerVerdict;
 
 
-                    meteoraVerdict =  meteoraData[0].onchain_timestamp > twentyMinutesAgo;
-                }
-                if (dexData.pair && dexData.pair.txns.m5) {
-                    const buys = dexData.pair.txns.m5.buys;
-                    const sells = dexData.pair.txns.m5.sells;
-                    if (buys + sells !== 0){
-                        dexscreenerVerdict = true;
-                    }
-                }
-                return dexscreenerVerdict && meteoraVerdict;
+    }
 
-            } catch (error) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checkLiquidity: ${error}`);
-                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
-                if (error.cause) {
-                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
-                }
-                // Можно добавить дополнительные проверки сетевых ошибок
-                if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сетевая ошибка: не удалось подключиться к серверу');
-                }
-                await sleep(5000);
+    async checkDex(dexScreenerUrl) {
+        try {
+            const dexData = (await axios.get(dexScreenerUrl)).data;
+            logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
 
+            if (dexData.pair && dexData.pair.txns.m5) {
+                const buys = dexData.pair.txns.m5.buys;
+                const sells = dexData.pair.txns.m5.sells;
+                return buys + sells !== 0;
             }
+            return false;
+
+        } catch (error) {
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while check for DEX: ${error}`);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+            if (error.cause) {
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
+            }
+            // Можно добавить дополнительные проверки сетевых ошибок
+            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сетевая ошибка: не удалось подключиться к серверу');
+            }
+            return false;
         }
-        return false;
 
 
     }
 
+    async checkMeteora(meteoraUrl) {
+        try {
+            const meteoraData = await (await this.forwardRequest(meteoraUrl)).json();
+            logger.info(logger.LOG_MODULES.SYSTEM, `METEOTA DATA: ${JSON.stringify(meteoraData, null, 2)}`);
 
-    dexRequest(url){
+            if (meteoraData[0].onchain_timestamp) {
+                // Проверка, что timestamp был 20 минут назад
+                const currentTimestamp = Math.floor(Date.now() / 1000);
+                const twentyMinutesAgo = currentTimestamp - (20 * 60); // 20 минут в секундах
+
+
+                return meteoraData[0].onchain_timestamp > twentyMinutesAgo;
+            } else {
+
+                return false;
+            }
+
+        } catch (error) {
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checking Meteora: ${error}`);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+            if (error.cause) {
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
+            }
+            // Можно добавить дополнительные проверки сетевых ошибок
+            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сетевая ошибка: не удалось подключиться к серверу');
+            }
+            return false
+        }
 
     }
-    async forwardRequest(url){ // todo: переделать под разные параметры
+
+
+    dexRequest(url) {
+
+    }
+
+    async forwardRequest(url) { // todo: переделать под разные параметры
         const resp = await fetch(
             `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`,
             {
@@ -828,7 +845,7 @@ class MevLoadBalancer {
             // Создаем директорию для логов, если она еще не существует
             const logDir = path.join(app.getPath('userData'), 'logs');
             if (!fs.existsSync(logDir)) {
-                fs.mkdirSync(logDir, { recursive: true });
+                fs.mkdirSync(logDir, {recursive: true});
             }
 
             // Формируем путь к файлу логов для указанного процесса
@@ -916,7 +933,7 @@ class MevLoadBalancer {
         });
 
         // Добавляем обработчик события завершения процесса
-        ipcMain.on('mev-process-exit', (event, { processId, exitCode, config }) => {
+        ipcMain.on('mev-process-exit', (event, {processId, exitCode, config}) => {
             this.handleProcessExit(processId, exitCode);
         });
 
@@ -928,15 +945,15 @@ class MevLoadBalancer {
         // Новый обработчик для ручного запуска обработки буфера сигналов
         ipcMain.handle('mev-loadbalancer:process-buffer', async () => {
             if (!this.isActive) {
-                return { success: false, message: 'Балансировщик неактивен' };
+                return {success: false, message: 'Балансировщик неактивен'};
             }
 
             if (this.signalBuffer.length === 0) {
-                return { success: true, message: 'Буфер сигналов пуст' };
+                return {success: true, message: 'Буфер сигналов пуст'};
             }
 
             await this.processSignalBuffer();
-            return { success: true, message: 'Запущена обработка буфера сигналов' };
+            return {success: true, message: 'Запущена обработка буфера сигналов'};
         });
     }
 
@@ -951,7 +968,7 @@ class MevLoadBalancer {
                 return;
             }
 
-            const { processId, message, level, config } = logData;
+            const {processId, message, level, config} = logData;
             if (!processId || !message) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Получен некорректный лог без processId или message');
                 return;
@@ -1100,7 +1117,10 @@ class MevLoadBalancer {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `После обработки: tokenAddress="${tokenAddress}", meteoraPool="${meteoraPool}", pumpSwapPool="${pumpSwapPool || 'не указан'}"`);
 
             if (!tokenAddress || !meteoraPool) {
-                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Не удалось извлечь токен или пул:', { tokenAddress, meteoraPool });
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Не удалось извлечь токен или пул:', {
+                    tokenAddress,
+                    meteoraPool
+                });
                 return null;
             }
 
@@ -1170,7 +1190,7 @@ class MevLoadBalancer {
 
             // Шаг 1: Проверяем все сигналы на валидность
             const validSignals = signals.filter(signal => {
-                const { tokenAddress, meteoraPool } = signal;
+                const {tokenAddress, meteoraPool} = signal;
                 if (!tokenAddress || !meteoraPool) {
                     logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Сигнал не содержит необходимых данных (tokenAddress или meteoraPool)`);
                     this.stats.failedSignals++;
@@ -1203,7 +1223,7 @@ class MevLoadBalancer {
             const processConfigs = [];
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = { ...processData.config, process_delay: processDelay };
+                const config = {...processData.config, process_delay: processDelay};
                 // Сохраняем также время первоначального создания процесса
                 const initialCreationTime = processData.initialCreationTime || processData.startTime;
 
@@ -1221,7 +1241,7 @@ class MevLoadBalancer {
             let newProcessConfigs = [];
 
             for (const signal of validSignals) {
-                const { tokenAddress, meteoraPool, pumpSwapPool } = signal;
+                const {tokenAddress, meteoraPool, pumpSwapPool} = signal;
                 for (let i = 0; i < jitoValues.length; i++) {
                     newProcessConfigs.push({
                         tokenAddress,
@@ -1239,7 +1259,7 @@ class MevLoadBalancer {
 
             // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
             const restartedProcesses = [];
-            for (const { config, initialCreationTime } of processConfigs) {
+            for (const {config, initialCreationTime} of processConfigs) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
                 // Передаем флаг, что это перезапуск и оригинальное время создания
                 const restartedProcessId = await this.startMevProcess(config, {
@@ -1326,7 +1346,7 @@ class MevLoadBalancer {
             const processConfigs = [];
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = { ...processData.config, process_delay: processDelay };
+                const config = {...processData.config, process_delay: processDelay};
                 // Сохраняем также время первоначального создания процесса
                 const initialCreationTime = processData.initialCreationTime || processData.startTime;
 
@@ -1342,7 +1362,7 @@ class MevLoadBalancer {
             }
 
             const restartedProcesses = [];
-            for (const { config, initialCreationTime } of processConfigs) {
+            for (const {config, initialCreationTime} of processConfigs) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
                 const restartedProcessId = await this.startMevProcess(config, {
                     isRestart: true,
