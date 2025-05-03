@@ -17,7 +17,8 @@ interface AppSettings {
     proxy_server_ip?: string;
     proxy_server_port?: number;
     primary_ip?: string;
-    requests_per_second?: number
+    requests_per_second?: number;
+    token_release_port?: number;
 
     thor_streamer_address?: string;
     thor_streamer_token?: string;
@@ -167,6 +168,14 @@ export default function Settings() {
                         fullWidth
                         value={settings.requests_per_second || ""}
                         onChange={handleChange('requests_per_second')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="Token release port"
+                        fullWidth
+                        value={settings.token_release_port || ""}
+                        onChange={handleChange('token_release_port')}
                         margin="normal"
                     />
 

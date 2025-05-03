@@ -8,7 +8,7 @@ const { initializeApiHandlers } = require("./ipcHandlers/tensorApiHandler");
 const { spawnProcess, stopMevProcess } = require("./utils/spawnProcess");
 const telegramBotService = require('./services/telegramBotService');
 const mevLoadBalancer = require('./services/mevLoadBalancer');
-
+const config = require('./config/config');
 let mainWindow;
 
 function createWindow() {
@@ -36,7 +36,7 @@ function createWindow() {
   mainWindow.loadURL(
     app.isPackaged
       ? `file://${path.join(app.getAppPath(), "react-app", "build", "index.html")}`
-      : "http://localhost:3001"
+      : `http://localhost:${config.port}`
   );
 }
 

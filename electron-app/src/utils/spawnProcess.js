@@ -367,7 +367,7 @@ async function spawnProcess(taskConfig, userSettings) {
             console.log(`✅ SPAWN: Python процесс запущен, PID: ${child.pid}`);
         } else if (moduleDir === "new-token-release") {
             const exePath = path.join(userSettings.scriptDirectory, moduleDir, "new-token-release.exe");
-            child = spawn(exePath, ["--port", "5001"], {
+            child = spawn(exePath, ["--port", userSettings.token_release_port], {
                 stdio: "pipe",
                 shell: true,
                 detached: false,

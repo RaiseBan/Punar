@@ -56,7 +56,6 @@ class MevLoadBalancer {
 
         // Настройки
         this.settings = {
-            maxSignalsPerProcess: 50,    // Максимальное количество сигналов на процесс
             notifyTelegram: true,        // Отправлять уведомления в Telegram
             processingInterval: 10000,    // Интервал обработки буфера сигналов (5 секунд)
             liquidityCheckInterval: 4 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
