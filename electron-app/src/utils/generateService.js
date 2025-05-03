@@ -189,8 +189,8 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
 
         // Параметры Jito
         const useJito = config.useJito !== undefined ? config.useJito : true;
-        const jito_lower_bound = config.jito_lower_bound || 100000;
-        const jito_upper_bound = config.jito_upper_bound || 200000;
+        const jito_lower_bound = Number(userSetting.jito_lower_bound) || 100000;
+        const jito_upper_bound = Number(userSetting.jito_upper_bound) || 200000;
 
         // Формируем массив пулов
         const pumpPool = pumpSwapPool ? [pumpSwapPool] : [];
@@ -249,7 +249,7 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
                 enabled: true
             },
             bot: {
-                compute_unit_limit: 650000,
+                compute_unit_limit: Number(userSetting.compute_unit_limit) || 650000,
                 merge_mints: false
             },
             wallet: {}

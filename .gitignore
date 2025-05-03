@@ -19,7 +19,7 @@ electron-app/.env
 electron-app/src/configs
 electron-app/src/globalConfigs
 electron-app/src/scriptConfigs
-
+electron-app/electron-data/
 # React (react-app)
 react-app/node_modules/
 react-app/build/

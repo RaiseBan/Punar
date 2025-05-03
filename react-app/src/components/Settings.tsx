@@ -13,12 +13,23 @@ interface AppSettings {
     tensor_api_token?: string;
     bloxroute_api_token?: string;
 
+    // mev
     migration_wallet?: string;
+    jito_lower_bound?: string;
+    jito_upper_bound?: string;
+    compute_unit_limit?: string;
+
+
     proxy_server_ip?: string;
     proxy_server_port?: number;
     primary_ip?: string;
     requests_per_second?: number;
     token_release_port?: number;
+
+    min_process_age_for_cleanup?: string;
+    processes_check_interval?: string;
+
+
 
     thor_streamer_address?: string;
     thor_streamer_token?: string;
@@ -138,6 +149,28 @@ export default function Settings() {
                         onChange={handleChange('migration_wallet')}
                         margin="normal"
                     />
+                    <TextField
+                        label="Jito lower bound"
+                        fullWidth
+                        value={settings.jito_lower_bound || ""}
+                        onChange={handleChange('jito_lower_bound')}
+                        margin="normal"
+                    />
+                    <TextField
+                        label="Jito upper bound"
+                        fullWidth
+                        value={settings.jito_upper_bound || ""}
+                        onChange={handleChange('jito_upper_bound')}
+                        margin="normal"
+                    />
+                    <TextField
+                        label="Compute units"
+                        fullWidth
+                        value={settings.compute_unit_limit || ""}
+                        onChange={handleChange('compute_unit_limit')}
+                        margin="normal"
+                    />
+
 
                     <TextField
                         label="proxy server ip address"
@@ -184,6 +217,29 @@ export default function Settings() {
             </Box>
 
 
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                    Garbage collector settings
+                    <TextField
+                        label="GC interval (min)"
+                        fullWidth
+                        value={settings.processes_check_interval || ""}
+                        onChange={handleChange('processes_check_interval')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="Minimum process age (min)"
+                        fullWidth
+                        value={settings.min_process_age_for_cleanup || ""}
+                        onChange={handleChange('min_process_age_for_cleanup')}
+                        margin="normal"
+                    />
+
+                </Typography>
+
+
+            </Box>
 
 
 
