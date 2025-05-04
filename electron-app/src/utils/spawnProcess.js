@@ -391,7 +391,7 @@ async function spawnProcess(taskConfig, userSettings) {
                     userSettings.mevBotDirectory,
                     updatedTaskConfig,
                     updatedTaskConfig.tokenAddress,
-                    updatedTaskConfig.meteoraPool || updatedTaskConfig.poolAddress,
+                    updatedTaskConfig.meteoraPools || updatedTaskConfig.poolAddress,
                     userSettings,
                     updatedTaskConfig.pumpSwapPool
                 );

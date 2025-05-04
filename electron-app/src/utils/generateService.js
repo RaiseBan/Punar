@@ -165,21 +165,21 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
  * @param {string} botDir - Директория с MEV ботом
  * @param {Object} config - Конфигурация задачи
  * @param {string} tokenAddress - Адрес токена
- * @param {string} meteoraPool - Адрес пула Meteora
+ * @param {string[]} meteoraPools - Адрес пула Meteora
  * @param {Object} userSetting  - Адрес пула Meteora
  * @param {string} pumpSwapPool - Адрес пула PumpSwap (опционально)
  * @returns {Promise<string>} - Путь к созданному TOML-файлу
  */
-async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool, userSetting, pumpSwapPool = null) {
+async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPools, userSetting, pumpSwapPool = null) {
     try {
         // Проверяем обязательные параметры
         if (!botDir || !tokenAddress || !meteoraPool) {
             console.error(`[TOML Generator] Ошибка: не указаны обязательные параметры для генерации TOML-файла`);
-            console.error(`[TOML Generator] botDir: ${botDir}, token: ${tokenAddress}, pool: ${meteoraPool}`);
+            console.error(`[TOML Generator] botDir: ${botDir}, token: ${tokenAddress}, pool: ${meteoraPools}`);
             return null;
         }
 
-        console.log(`[TOML Generator] Генерация TOML-файла конфигурации MEV для токена ${tokenAddress} и пула ${meteoraPool}`);
+        console.log(`[TOML Generator] Генерация TOML-файла конфигурации MEV для токена ${tokenAddress} и пула ${meteoraPools}`);
 
         // Задержка между процессами (по умолчанию 300ms, если не указано)
         const processDelay = config.process_delay || 300;
@@ -200,7 +200,7 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
             {
                 mint: tokenAddress,
                 pump_pool_list: pumpPool,
-                meteora_dlmm_pool_list: [meteoraPool],
+                meteora_dlmm_pool_list: meteoraPools,
                 lookup_table_accounts: [],
                 process_delay: processDelay
             }

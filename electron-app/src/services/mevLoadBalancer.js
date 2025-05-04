@@ -24,6 +24,7 @@ class MevLoadBalancer {
         // Карта для отслеживания MEV процессов
         // key = processId, value = { process, config, startTime, lastActivity, signals: [], status }
         this.mevProcesses = new Map();
+        this.meteoraPoolsByToken = new Map();
 
         // Карта для отслеживания процессов токен-релиза
         // key = processId, value = true
@@ -69,6 +70,22 @@ class MevLoadBalancer {
         // Инициализация
         this.init();
     }
+
+
+    getConfigs(){
+
+
+        return {
+            configsToAdd: [
+
+            ],
+            toDelete: [
+                //массив id процессов, которые необходимо удалить.
+            ]
+        }
+    }
+
+
 
     /**
      * Инициализирует модуль MEV LoadBalancer
@@ -1213,6 +1230,32 @@ class MevLoadBalancer {
             const currentProcesses = Array.from(this.mevProcesses.entries());
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Текущее количество процессов: ${currentProcesses.length}`);
 
+
+
+            let newProcessConfigs = [];
+            let newTokenPools = new Map();
+            for (const signal of validSignals) {
+                const {tokenAddress, meteoraPool, pumpSwapPool} = signal;
+                for (let i = 0; i < jitoValues.length; i++) {
+                    // const processId = `mev_${tokenAddress.substring(0, 4)}_${meteoraPool.substring(0, 4)}_${this.userSettings.jito_lower_bound}`;
+                    //
+                    this.getConfigs(tokenAddress, meteoraPool, pumpSwapPool);
+
+                    newTokenPools.set(tokenAddress, meteoraPool);
+                    newProcessConfigs.push({
+                        tokenAddress,
+                        meteoraPools: [meteoraPool],
+                        pumpSwapPool,
+                        main_rpc: this.userSettings?.mainRpc || "https://api.mainnet-beta.solana.com",
+                        useJito: true,
+                        jito_lower_bound:  Number(this.userSettings.jito_lower_bound), // deprecated
+                        jito_upper_bound: Number(this.userSettings.jito_upper_bound), // deprecated
+                        process_delay: null,
+                        task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
+                    })
+                }
+            }
+
             // Шаг 3: Рассчитываем новую задержку для всех процессов (текущие + новые)
             const newProcessCount = currentProcesses.length + validSignals.length * jitoValues.length;
             const processDelay = this.calculateProcessDelay(newProcessCount);
@@ -1237,28 +1280,23 @@ class MevLoadBalancer {
                 await this.stopProcess(processId);
             }
 
-            let newProcessConfigs = [];
-
-            for (const signal of validSignals) {
-                const {tokenAddress, meteoraPool, pumpSwapPool} = signal;
-                for (let i = 0; i < jitoValues.length; i++) {
-                    newProcessConfigs.push({
-                        tokenAddress,
-                        meteoraPool,
-                        pumpSwapPool,
-                        main_rpc: this.userSettings?.mainRpc || "https://api.mainnet-beta.solana.com",
-                        useJito: true,
-                        jito_lower_bound: jitoValues[i].jito_lower_bound,
-                        jito_upper_bound: jitoValues[i].jito_upper_bound,
-                        process_delay: processDelay,
-                        task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
-                    })
-                }
-            }
-
             // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
+            // const processMeteoraPool = new Map();
+            const processesToDelete = [];
             const restartedProcesses = [];
-            for (const {config, initialCreationTime} of processConfigs) {
+            for (const {processId, config, initialCreationTime} of processConfigs) {
+                if (newTokenPools.has(config.tokenAddress)){
+                    processesToDelete.push(processId);
+                    if (this.tokenMeteoraPoolsCount.has(config.tokenAddress)){
+                        this.tokenMeteoraPoolsCount.set(config.tokenAddress, this.tokenMeteoraPoolsCount.get(config.tokenAddress) + 1);
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `increment tokenMeteoraPoolsCount: ${this.tokenMeteoraPoolsCount.get(config.tokenAddress)}`);
+
+                    }
+                    // удалить из mevProcesses позже
+                    // обновить счетчик
+                    //
+                    continue
+                }
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
                 // Передаем флаг, что это перезапуск и оригинальное время создания
                 const restartedProcessId = await this.startMevProcess(config, {
@@ -1270,6 +1308,9 @@ class MevLoadBalancer {
                 }
                 // await sleep(1000);
             }
+
+            this.deleteProcesses(processesToDelete);
+
 
             // Шаг 6: Запускаем все новые процессы
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск ${newProcessConfigs.length} новых MEV процессов`);
@@ -1331,6 +1372,12 @@ class MevLoadBalancer {
                 success: false,
                 error: error.message
             };
+        }
+    }
+
+    deleteProcesses(taskIds){
+        for (const taskId of taskIds){
+            this.mevProcesses.delete(taskId);
         }
     }
 
