@@ -2,35 +2,36 @@
   "name": "electron-app",
   "productName": "ElectronApp",
   "version": "1.0.0",
-  "type": "commonjs",
   "description": "My Electron application description",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "scripts": {
+    "prestart": "tsc",
+    "prestart:port": "tsc",
     "start": "cross-env NODE_ENV=development concurrently \"npm run react-start\" \"npm run electron-start\"",
     "start:port": "cross-env NODE_ENV=development PORT=%npm_config_port% concurrently \"npm run react-start:port\" \"npm run electron-start:port\"",
     "react-start": "cd ../react-app && npm start",
     "react-start:port": "cd ../react-app && npm run start:port --port=%npm_config_port%",
-    "electron-start": "wait-on http://localhost:3001 && electron . --disk-cache-dir=./electron-cache --user-data-dir=./electron-data",
-    "electron-start:port": "wait-on http://localhost:%npm_config_port% && electron . --port=%npm_config_port% --disk-cache-dir=./electron-cache --user-data-dir=./electron-data",
+    "electron-start": "wait-on http://localhost:3001 && electron --no-deprecation . --disk-cache-dir=./electron-cache --user-data-dir=./electron-data",
+    "electron-start:port": "wait-on http://localhost:%npm_config_port% && electron --no-deprecation . --port=%npm_config_port% --disk-cache-dir=./electron-cache --user-data-dir=./electron-data",
     "build": "cross-env NODE_ENV=production npm run react-build && npm run electron-build",
     "react-build": "cd ../react-app && npm run build",
-    "electron-build": "electron-builder --win",
-    "clear-cache": "rimraf %LOCALAPPDATA%\\electron-builder\\Cache",
-    "test": "jest"
+    "electron-build": "tsc && electron-builder",
+    "clear-cache": "rimraf %LOCALAPPDATA%\\electron-builder\\Cache dist",
+    "test": "jest",
+    "watch-ts": "tsc --watch"
   },
   "build": {
     "appId": "com.example.electronapp",
     "productName": "ElectronApp",
-    "publish": [],
     "files": [
-      "src/**/*",
+      "dist/**/*",
       "../react-app/build/**/*",
       "node_modules/**/*",
       "package.json"
     ],
     "directories": {
       "buildResources": "assets",
-      "output": "dist"
+      "output": "release"
     },
     "win": {
       "target": "nsis",
@@ -38,15 +39,15 @@
     }
   },
   "devDependencies": {
-    "@jest/globals": "^29.7.0",
+    "@types/electron": "^1.6.12",
+    "@types/node": "^22.15.3",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8",
-    "electron-is-dev": "^3.0.1",
-    "jest": "^29.7.0",
     "rimraf": "^5.0.10",
-    "spectron": "^19.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
     "wait-on": "^8.0.2"
   },
   "dependencies": {
@@ -54,15 +55,6 @@
     "@solana/spl-token": "^0.4.13",
     "@solana/web3.js": "^1.95.4",
     "axios": "^1.8.1",
-    "bs58": "^6.0.0",
-    "buffer": "^6.0.3",
-    "electron-squirrel-startup": "^1.0.1",
-    "tree-kill": "^1.2.2"
-  },
-  "keywords": [],
-  "author": {
-    "name": "Sergey",
-    "email": "shornikov1407@gmail.com"
-  },
-  "license": "MIT"
+    "electron-squirrel-startup": "^1.0.1"
+  }
 }

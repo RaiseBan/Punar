@@ -28,7 +28,7 @@ describe('Функции кошелька', () => {
     process.env.NODE_ENV = 'production';
     
     // Импортируем модуль после изменения окружения
-    const { getGlobalConfigDirectory } = require('../src/utils/wallet');
+    const { getGlobalConfigDirectory } = require('../src/utils/wallet.js');
     
     const configDir = getGlobalConfigDirectory();
     const electron = require('electron');
@@ -43,7 +43,7 @@ describe('Функции кошелька', () => {
     process.env.NODE_ENV = 'development';
     
     // Импортируем модуль после изменения окружения
-    const { getGlobalConfigDirectory } = require('../src/utils/wallet');
+    const { getGlobalConfigDirectory } = require('../src/utils/wallet.js');
     
     const configDir = getGlobalConfigDirectory();
     const electron = require('electron');

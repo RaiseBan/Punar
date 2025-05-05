@@ -1,0 +1,10 @@
+extends: null
+appId: com.example.electronapp
+productName: ElectronApp
+directories:
+  output: dist
+  buildResources: build
+files:
+  - "dist/**/*"
+  - "node_modules/**/*"
+  - "package.json"
