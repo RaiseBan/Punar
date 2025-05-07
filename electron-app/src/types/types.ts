@@ -94,3 +94,7 @@ export interface MevProcess {
     exitTime?: number;
     processTimer?: any;
 }
+export type CheckResult = {
+    pool: string,
+    verdict: boolean,
+}

@@ -18,7 +18,7 @@ import {Keypair} from "@solana/web3.js";
 import logger from '../loggerService';
 import axios from "axios";
 import {
-    AppSettings, MevProcess,
+    AppSettings, CheckResult, MevProcess,
     PairInfo,
     Pools,
     ProcessConfig, ProcessesToManage,
@@ -101,6 +101,34 @@ export class MevLoadBalancer {
     }
     setMeteoraUsagePoolsByToken(token: string, usage: UsageMeteoraPools): void{
         this.meteoraPoolsUsage.set(token, usage);
+    }
+
+    async deleteMeteoraPoolFromProcess(processId: string, meteoraPool: string): Promise<boolean> {
+        const mevProcess = this.mevProcesses.get(processId);
+        if (!mevProcess){
+            return false;
+        }
+        // this.mevProcesses.delete()
+
+        await this.stopProcess(processId);
+        let meteoraPools = mevProcess.meteoraPools.filter(pool => pool !== meteoraPool);
+        const processConfig: ProcessConfig = {
+            tokenAddress: mevProcess.tokenAddress,
+            meteoraPools: meteoraPools,
+            pumpSwapPool: mevProcess.pumpSwapPool,
+            main_rpc: mevProcess.config.main_rpc,
+            useJito: mevProcess.config.useJito,
+            jito_lower_bound: mevProcess.config.jito_lower_bound,
+            jito_upper_bound: mevProcess.config.jito_upper_bound,
+            process_delay: mevProcess.config.process_delay,
+            task_name: mevProcess.config.task_name
+        }
+        await this.startMevProcess(processConfig, {
+            isRestart: false,
+            initialCreationTime: mevProcess.initialCreationTime
+        })
+        return true;
+
     }
 
 
@@ -640,15 +668,25 @@ export class MevLoadBalancer {
         }
     }
 
-    async checkLiquidity(pair) {
-        const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
-        const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
+    async checkLiquidity(pairs: string[]): Promise<CheckResult[]>{
+        let checkResults: CheckResult[] = [];
+        for (const pair of pairs) {
+            const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
+            const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
 
 
-        let meteoraVerdict = await this.checkMeteora(meteoraUrl);
-        let dexscreenerVerdict = await this.checkDex(dexScreenerUrl);
+            let meteoraVerdict = await this.checkMeteora(meteoraUrl);
+            let dexscreenerVerdict = await this.checkDex(dexScreenerUrl);
 
-        return meteoraVerdict || dexscreenerVerdict;
+            // meteoraVerdict || dexscreenerVerdict;
+            checkResults.push({
+                pool: pair,
+                verdict: meteoraVerdict || dexscreenerVerdict
+            })
+        }
+
+        return checkResults
+
 
 
     }
@@ -1484,10 +1522,10 @@ export class MevLoadBalancer {
             // Проходим по всем процессам и проверяем ликвидность их пулов
             for (const [processId, processData] of this.mevProcesses.entries()) {
                 try {
-                    const meteoraPool = processData.meteoraPool || processData.config?.meteoraPool;
+                    const meteoraPools = processData.meteoraPools || processData.config?.meteoraPools;
 
-                    if (!meteoraPool) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для процесса ${processId}: пул не найден`);
+                    if (!meteoraPools) {
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для процесса ${processId}: пулы не найдены`);
                         continue;
                     }
 
@@ -1498,16 +1536,26 @@ export class MevLoadBalancer {
                         continue;
                     }
 
-                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка ликвидности пула ${meteoraPool} для процесса ${processId} (возраст: ${Math.floor(processAge / 1000 / 60)} минут)`);
+                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка ликвидности пулов ${meteoraPools} для процесса ${processId} (возраст: ${Math.floor(processAge / 1000 / 60)} минут)`);
 
                     // Проверяем ликвидность пула
-                    const hasEnoughLiquidity = await this.checkLiquidity(meteoraPool);
+                    const hasEnoughLiquidity: CheckResult[] = await this.checkLiquidity(meteoraPools);
 
                     // Если ликвидность ниже порогового значения, добавляем процесс в список на остановку
-                    if (!hasEnoughLiquidity) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} будет остановлен: ликвидность пула ${meteoraPool} ниже ${this.settings.minimumLiquidity} USD`);
+                    const count = hasEnoughLiquidity.filter(item => item.verdict === false).length;
+
+                    if (count === meteoraPools.length) {
                         processesToStop.push(processId);
-                    } else {
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} будет остановлен: не удолетворены условия check...`);
+                    }else if (count < meteoraPools.length && count !== 0) {
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `удаляем нерабочие пулы`);
+                        const deletePromises = hasEnoughLiquidity
+                    .filter(item => item.verdict === false)
+                            .map(item => this.deleteMeteoraPoolFromProcess(processId, item.pool));
+                        await Promise.all(deletePromises)
+
+
+                    }else if (count === 0){
                         logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} продолжит работу: ликвидность пула достаточна`);
                     }
                 } catch (error) {
@@ -1554,6 +1602,8 @@ export class MevLoadBalancer {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Завершена проверка ликвидности пулов');
         }
     }
+
+
 
     /**
      * Отправляет задачу в обработчик
