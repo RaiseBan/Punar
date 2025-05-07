@@ -672,7 +672,7 @@ class MevLoadBalancer {
 
     async forwardRequest(url) { // todo: переделать под разные параметры
         const resp = await fetch(
-            `http://${this.userSettings.proxy_server_ip}:${this.userSettings.proxy_server_port}/forward`,
+            `http://${this.userSettings.proxy_server_ip}:8082/forward`,
             {
                 method: 'POST',
                 headers: {
