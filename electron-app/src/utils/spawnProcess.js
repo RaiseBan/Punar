@@ -423,10 +423,9 @@ async function spawnProcess(taskConfig, userSettings) {
 
             child = spawn('wsl.exe', [
                 '-e',
-                `${homeDir}/run-with-settings.sh`,
-                `${program}`,
-                'run',
-                `${configFilePathWSL}"`
+                'bash',
+                '-c',
+                `${homeDir}/run-with-settings.sh ${program} run "${configFilePathWSL}"`
             ], {
                 stdio: 'pipe',
                 shell: false,
