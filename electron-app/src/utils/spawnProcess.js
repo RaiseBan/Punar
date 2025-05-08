@@ -421,9 +421,10 @@ async function spawnProcess(taskConfig, userSettings) {
 
             child = spawn('wsl.exe', [
                 '-e',
-                'bash',
-                '-c',
-                `ulimit -n 65535 && ${program} run "${configFilePathWSL}"`
+                '/usr/local/bin/run-with-network.sh',
+                program,
+                'run',
+                configFilePathWSL
             ], {
                 stdio: 'pipe',
                 shell: false,
