@@ -419,13 +419,11 @@ async function spawnProcess(taskConfig, userSettings) {
             console.log(`⚡ SPAWN: Запуск WSL процесса: wsl ${program} ${configFilePathWSL}`);
             // Получаем домашнюю директорию пользователя в WSL
 
-            const homeDir = execSync('wsl -e bash -c "echo $HOME"').toString().trim();
-
             child = spawn('wsl.exe', [
                 '-e',
                 'bash',
                 '-c',
-                `${homeDir}/run-with-settings.sh ${program} run "${configFilePathWSL}"`
+                `ulimit -n 65535 && ${program} run "${configFilePathWSL}"`
             ], {
                 stdio: 'pipe',
                 shell: false,
