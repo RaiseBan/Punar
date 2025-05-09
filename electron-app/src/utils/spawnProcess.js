@@ -421,16 +421,16 @@ async function spawnProcess(taskConfig, userSettings) {
 
             child = spawn('wsl.exe', [
                 '-e',
-                '/usr/local/bin/run-with-network.sh',
-                program,
-                'run',
-                configFilePathWSL
+                'bash',
+                '-c',
+                `ulimit -n 65535 && ${program} run "${configFilePathWSL}"`
             ], {
                 stdio: 'pipe',
                 shell: false,
                 detached: false,
                 cwd: userSettings.mevBotDirectory,
             });
+            console.log(`✅ SPAWN: WSL процесс запущен, PID: ${child.pid}`);
             console.log(`✅ SPAWN: WSL процесс запущен, PID: ${child.pid}`);
 
             // Проверяем, включен ли режим мониторинга
