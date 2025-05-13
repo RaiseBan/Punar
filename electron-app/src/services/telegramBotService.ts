@@ -104,6 +104,7 @@ interface MevStatus {
 
 
 class TelegramBotService {
+    private recentNotifications: Map<string, number> = new Map();
     isActive: boolean;
     botToken: string;
     chatIds: number[];
@@ -641,14 +642,52 @@ class TelegramBotService {
             .replace(/"/g, "&quot;");
     }
 
-    // Модифицируем sendSystemNotification для работы с очередью
+    /**
+     * Отправляет системное уведомление во все разрешенные чаты с защитой от дублирования
+     * @param message - Текст уведомления
+     * @returns true если отправка успешна, false в противном случае
+     */
     async sendSystemNotification(message: string): Promise<boolean> {
         if (!this.botToken || !this.isActive || this.chatIds.length === 0) {
             return false;
         }
 
         try {
-            // Проверяем, содержит ли сообщение информацию об остановке процесса
+            // Создаём уникальный ключ для сообщения, используя первые 50 символов
+            const messageKey = message.substring(0, 50);
+            const now = Date.now();
+
+            // Если у нас нет поля recentNotifications, создаём его
+            if (!this.recentNotifications) {
+                this.recentNotifications = new Map<string, number>();
+            }
+
+            // Проверяем, было ли такое сообщение отправлено за последние 3 секунды
+            if (this.recentNotifications.has(messageKey)) {
+                const lastSentTime = this.recentNotifications.get(messageKey);
+                if (now - lastSentTime! < 3000) { // 3 секунды дедупликации
+                    console.log(`[TG Bot] Предотвращено дублирование сообщения: ${messageKey}...`);
+                    return true; // Считаем сообщение успешно отправленным
+                }
+            }
+
+            // Сохраняем время отправки этого сообщения
+            this.recentNotifications.set(messageKey, now);
+
+            // Очищаем старые записи, если их больше 100
+            if (this.recentNotifications.size > 100) {
+                const keysToDelete = [];
+                for (const [key, time] of this.recentNotifications.entries()) {
+                    if (now - time > 60000) { // Старше 1 минуты
+                        keysToDelete.push(key);
+                    }
+                }
+                for (const key of keysToDelete) {
+                    this.recentNotifications.delete(key);
+                }
+            }
+
+            // Сохраняем существующую логику для уведомлений об остановке процесса
             if (message.includes('Процесс остановлен вручную') || message.includes('Задача ID:')) {
                 // Извлечем taskId из сообщения, чтобы создать уникальный ключ
                 const taskIdMatch = message.match(/Задача ID:\s*(\d+)/i) || message.match(/ID:\s*(\d+)/i);
@@ -675,6 +714,11 @@ class TelegramBotService {
                         this.processStatusTracking.delete(statusKey);
                     }, 10000); // 10 секунд
                 }
+            }
+
+            // Специальная обработка MEV-сообщений
+            if (message.includes('MEV сигнал')) {
+                console.log(`[TG Bot] Отправка MEV-уведомления: ${messageKey}...`);
             }
 
             // Отправка сообщения во все разрешенные чаты

@@ -4,16 +4,16 @@
  * Отвечает за обнаружение сигналов MEV в логах процессов new-token-release,
  * запуск MEV процессов и распределение нагрузки между ними.
  */
-import {ipcMain} from 'electron';
+import { ipcMain } from 'electron';
 import path from 'path';
-import {app} from 'electron';
-import {spawnProcess, forceKillWindowsProcess} from '../../utils/spawnProcess';
-import {getSettings} from '../../utils/fsHelper';
+import { app } from 'electron';
+import { spawnProcess, forceKillWindowsProcess } from '../../utils/spawnProcess';
+import { getSettings } from '../../utils/fsHelper';
 import telegramBotService from '../telegramBotService';
 import fs from 'fs';
 import bs58 from "bs58";
-import {sleep, getDetailedTokenAccounts, createTokenAccount} from '../../utils/solanaUtils';
-import {Keypair} from "@solana/web3.js";
+import { sleep, getDetailedTokenAccounts, createTokenAccount } from '../../utils/solanaUtils';
+import { Keypair } from "@solana/web3.js";
 import logger from '../loggerService';
 import axios from "axios";
 import {
@@ -25,7 +25,7 @@ import {
     SignalWithMeta,
     UsageMeteoraPools
 } from "../../types/types";
-import {formatUsage, structConfig} from "./meteoraPoolsService";
+import { formatUsage, structConfig } from "./meteoraPoolsService";
 
 
 export class MevLoadBalancer {
@@ -99,13 +99,13 @@ export class MevLoadBalancer {
         console.log(this.meteoraPoolsUsage);
         return this.meteoraPoolsUsage.get(token);
     }
-    setMeteoraUsagePoolsByToken(token: string, usage: UsageMeteoraPools): void{
+    setMeteoraUsagePoolsByToken(token: string, usage: UsageMeteoraPools): void {
         this.meteoraPoolsUsage.set(token, usage);
     }
 
     async deleteMeteoraPoolFromProcess(processId: string, meteoraPool: string): Promise<boolean> {
         const mevProcess = this.mevProcesses.get(processId);
-        if (!mevProcess){
+        if (!mevProcess) {
             return false;
         }
         // this.mevProcesses.delete()
@@ -233,11 +233,11 @@ export class MevLoadBalancer {
         const groupPoolsByToken: Map<string, Pools> = new Map<string, Pools>();
         let configsToAdd: ProcessConfig[] = [];
         let configsToDelete: string[] = [];
-        for (const signal of validSignals){
-            if (groupPoolsByToken.has(signal.tokenAddress)){
+        for (const signal of validSignals) {
+            if (groupPoolsByToken.has(signal.tokenAddress)) {
                 const pools: Pools = groupPoolsByToken.get(signal.tokenAddress)!;
                 pools.meteora.push(signal.meteoraPool)
-            }else{
+            } else {
                 groupPoolsByToken.set(signal.tokenAddress, {
                     meteora: [signal.meteoraPool],
                     pump: signal.pumpSwapPool
@@ -248,13 +248,13 @@ export class MevLoadBalancer {
             console.log(`token pools:`)
             console.log(token, pools)
             let meteoraUsageForToken: UsageMeteoraPools | undefined = this.getMeteoraUsagePoolsByToken(token);
-            if (!meteoraUsageForToken){
+            if (!meteoraUsageForToken) {
                 this.setMeteoraUsagePoolsByToken(token, {
                     pairs: new Map<string, PairInfo>(),
                     hasFreeSingleSlot: false
                 })
                 meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
-                if (!meteoraUsageForToken){
+                if (!meteoraUsageForToken) {
                     return;
                 }
             }
@@ -267,26 +267,26 @@ export class MevLoadBalancer {
             let skipShift = false;
             let itemBuffer: string = "";
             console.log(`length: ${poolsDecrementable.length}`)
-            while (poolsDecrementable.length !== 0){
+            while (poolsDecrementable.length !== 0) {
                 console.log(1)
                 let poolHasPlaced = false;
                 let tookPool: string | undefined;
-                if (!skipShift){
+                if (!skipShift) {
                     console.log(2)
                     tookPool = poolsDecrementable.shift();
-                }else{
+                } else {
                     console.log(3)
                     tookPool = itemBuffer;
                 }
 
-                if (!tookPool){
+                if (!tookPool) {
                     logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `watafuk`);
                     return;
                 }
-                if (meteoraUsageForToken.pairs.size === 0){
+                if (meteoraUsageForToken.pairs.size === 0) {
 
 
-                    if (poolsDecrementable.length > 0){
+                    if (poolsDecrementable.length > 0) {
                         console.log(`BIG BOY 000`)
                         // не нужно добавлять, потому что еще есть элементы
                         // configsToAdd.push(structConfig(this, token, [...pairInfo.activePools, tookPool], pools.pump));
@@ -305,7 +305,7 @@ export class MevLoadBalancer {
                         poolHasPlaced = true;
                         skipShift = false;
                         continue
-                    }else if (poolsDecrementable.length === 0){
+                    } else if (poolsDecrementable.length === 0) {
                         console.log(`MET 1: ${formatUsage(meteoraUsageForToken)}`);
                         this.setMeteoraUsagePoolsByToken(token, {
                             pairs: new Map<string, PairInfo>([
@@ -346,7 +346,7 @@ export class MevLoadBalancer {
                     if (pairInfo.activePools.length === 1) { // пока что сделали, что максиамльное кол-во пулов метеоры в одном конфиге - 2
                         console.log(1)
                         pairInfo.activePools.push(tookPool);
-                        if (!pairInfo.isNew){
+                        if (!pairInfo.isNew) {
                             configsToDelete.push(processId);
                         }
                         console.log("BABY: ", pairInfo);
@@ -370,7 +370,7 @@ export class MevLoadBalancer {
                     }
                     if (pairInfo.activePools.length === 0) {
                         console.log("salam")
-                        if (poolsDecrementable.length > 0){
+                        if (poolsDecrementable.length > 0) {
                             console.log(`BIG BOY 000`)
                             pairInfo.activePools.push(tookPool);
                             // не нужно добавлять, потому что еще есть элементы
@@ -392,7 +392,7 @@ export class MevLoadBalancer {
                             poolHasPlaced = true;
                             skipShift = false;
                             break;
-                        }else if (poolsDecrementable.length === 0){
+                        } else if (poolsDecrementable.length === 0) {
                             console.log(`MET 1: ${formatUsage(meteoraUsageForToken)}`);
 
                             configsToAdd.push(structConfig(this, token, [tookPool], pools.pump));
@@ -416,7 +416,7 @@ export class MevLoadBalancer {
 
 
 
-                if (!poolHasPlaced){
+                if (!poolHasPlaced) {
                     meteoraUsageForToken.pairs.set("stub", {
                         activePools: [],
                         isNew: true
@@ -553,7 +553,7 @@ export class MevLoadBalancer {
         try {
             if (this.isActive) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик уже запущен');
-                return {success: true, status: 'already_running'};
+                return { success: true, status: 'already_running' };
             }
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Запуск MEV LoadBalancer');
@@ -599,7 +599,7 @@ export class MevLoadBalancer {
         try {
             if (!this.isActive) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик уже остановлен');
-                return {success: true, status: 'already_stopped'};
+                return { success: true, status: 'already_stopped' };
             }
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Остановка MEV LoadBalancer');
@@ -731,7 +731,7 @@ export class MevLoadBalancer {
     }
 
 
-    getProcesses(): MevProcess[]{
+    getProcesses(): MevProcess[] {
         const processes: MevProcess[] = [];
 
         for (const [processId, processData] of this.mevProcesses.entries()) {
@@ -872,7 +872,7 @@ export class MevLoadBalancer {
         }
     }
 
-    async checkLiquidity(pairs: string[]): Promise<CheckResult[]>{
+    async checkLiquidity(pairs: string[]): Promise<CheckResult[]> {
         let checkResults: CheckResult[] = [];
         for (const pair of pairs) {
             const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
@@ -1133,7 +1133,7 @@ export class MevLoadBalancer {
             // Создаем директорию для логов, если она еще не существует
             const logDir = path.join(app.getPath('userData'), 'logs');
             if (!fs.existsSync(logDir)) {
-                fs.mkdirSync(logDir, {recursive: true});
+                fs.mkdirSync(logDir, { recursive: true });
             }
 
             // Формируем путь к файлу логов для указанного процесса
@@ -1221,7 +1221,7 @@ export class MevLoadBalancer {
         });
 
         // Добавляем обработчик события завершения процесса
-        ipcMain.on('mev-process-exit', (event, {processId, exitCode, config}) => {
+        ipcMain.on('mev-process-exit', (event, { processId, exitCode, config }) => {
             this.handleProcessExit(processId, exitCode);
         });
 
@@ -1239,7 +1239,7 @@ export class MevLoadBalancer {
                 return;
             }
 
-            const {processId, message, level, config} = logData;
+            const { processId, message, level, config } = logData;
             if (!processId || !message) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Получен некорректный лог без processId или message');
                 return;
@@ -1454,7 +1454,7 @@ export class MevLoadBalancer {
 
             // Шаг 1: Проверяем все сигналы на валидность
             const validSignals = signals.filter(signal => {
-                const {tokenAddress, meteoraPool} = signal;
+                const { tokenAddress, meteoraPool } = signal;
                 if (!tokenAddress || !meteoraPool) {
                     logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Сигнал не содержит необходимых данных (tokenAddress или meteoraPool)`);
                     this.stats.failedSignals++;
@@ -1504,7 +1504,7 @@ export class MevLoadBalancer {
             const processConfigs: any[] = [];
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = {...processData.config, process_delay: processDelay};
+                const config = { ...processData.config, process_delay: processDelay };
                 // Сохраняем также время первоначального создания процесса
                 const initialCreationTime = processData.initialCreationTime || processData.startTime;
 
@@ -1523,7 +1523,7 @@ export class MevLoadBalancer {
             // const processMeteoraPool = new Map();
             const processesToDelete: any[] = [];
             const restartedProcesses: any[] = [];
-            for (const {processId, config, initialCreationTime} of processConfigs) {
+            for (const { processId, config, initialCreationTime } of processConfigs) {
                 if (processManageInfo.processIdsToDelete.includes(processId)) {
                     processesToDelete.push(processId);
                     console.log()
@@ -1624,7 +1624,7 @@ export class MevLoadBalancer {
             const processConfigs: any[] = [];
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = {...processData.config, process_delay: processDelay};
+                const config = { ...processData.config, process_delay: processDelay };
                 // Сохраняем также время первоначального создания процесса
                 const initialCreationTime = processData.initialCreationTime || processData.startTime;
 
@@ -1640,7 +1640,7 @@ export class MevLoadBalancer {
             }
 
             const restartedProcesses: any[] = [];
-            for (const {config, initialCreationTime} of processConfigs) {
+            for (const { config, initialCreationTime } of processConfigs) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
                 const restartedProcessId = await this.startMevProcess(config, {
                     isRestart: true,
@@ -1742,15 +1742,15 @@ export class MevLoadBalancer {
                     if (count === meteoraPools.length) {
                         processesToStop.push(processId);
                         logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} будет остановлен: не удолетворены условия check...`);
-                    }else if (count < meteoraPools.length && count !== 0) {
+                    } else if (count < meteoraPools.length && count !== 0) {
                         logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `удаляем нерабочие пулы`);
                         const deletePromises = hasEnoughLiquidity
-                    .filter(item => item.verdict === false)
+                            .filter(item => item.verdict === false)
                             .map(item => this.deleteMeteoraPoolFromProcess(processId, item.pool));
                         await Promise.all(deletePromises)
 
 
-                    }else if (count === 0){
+                    } else if (count === 0) {
                         logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} продолжит работу: ликвидность пула достаточна`);
                     }
                 } catch (error) {
