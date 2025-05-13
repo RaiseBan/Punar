@@ -1482,7 +1482,7 @@ export class MevLoadBalancer {
                 useJito: true,
                 jito_lower_bound: Number(this.userSettings.jito_lower_bound),
                 jito_upper_bound: Number(this.userSettings.jito_upper_bound),
-                process_delay: 2,
+                process_delay: 5,
                 task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
             }
         } else if (type === RAYDIUM_TYPE.CLMM) {
@@ -1494,7 +1494,7 @@ export class MevLoadBalancer {
                 useJito: true,
                 jito_lower_bound: Number(this.userSettings.jito_lower_bound),
                 jito_upper_bound: Number(this.userSettings.jito_upper_bound),
-                process_delay: 2,
+                process_delay: 5,
                 task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
             }
 
@@ -1507,7 +1507,7 @@ export class MevLoadBalancer {
                 useJito: true,
                 jito_lower_bound: Number(this.userSettings.jito_lower_bound),
                 jito_upper_bound: Number(this.userSettings.jito_upper_bound),
-                process_delay: 2,
+                process_delay: 5,
                 task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
             }
         }
