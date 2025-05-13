@@ -4,28 +4,31 @@
  * Отвечает за обнаружение сигналов MEV в логах процессов new-token-release,
  * запуск MEV процессов и распределение нагрузки между ними.
  */
-import { ipcMain } from 'electron';
+import {app, ipcMain} from 'electron';
 import path from 'path';
-import { app } from 'electron';
-import { spawnProcess, forceKillWindowsProcess } from '../../utils/spawnProcess';
-import { getSettings } from '../../utils/fsHelper';
+import {forceKillWindowsProcess, spawnProcess} from '../../utils/spawnProcess';
+import {getSettings} from '../../utils/fsHelper';
 import telegramBotService from '../telegramBotService';
 import fs from 'fs';
 import bs58 from "bs58";
-import { sleep, getDetailedTokenAccounts, createTokenAccount } from '../../utils/solanaUtils';
-import { Keypair } from "@solana/web3.js";
+import {createTokenAccount, getDetailedTokenAccounts, sleep} from '../../utils/solanaUtils';
+import {Keypair} from "@solana/web3.js";
 import logger from '../loggerService';
 import axios from "axios";
 import {
-    AppSettings, CheckResult, MevProcess,
+    AppSettings,
+    CheckResult,
+    MevProcess,
     PairInfo,
     Pools,
-    ProcessConfig, ProcessesToManage,
+    ProcessConfig,
+    ProcessesToManage,
+    RAYDIUM_TYPE,
     Signal,
     SignalWithMeta,
     UsageMeteoraPools
 } from "../../types/types";
-import { formatUsage, structConfig } from "./meteoraPoolsService";
+import {formatUsage, structConfig} from "./meteoraPoolsService";
 
 
 export class MevLoadBalancer {
@@ -983,7 +986,41 @@ export class MevLoadBalancer {
         return resp;
     }
 
+    async addRaydiumPool(processId: string, pool: string, type: RAYDIUM_TYPE): Promise<string | undefined> {
+        let mevProcess: MevProcess = this.mevProcesses.get(processId);
+        if (!mevProcess) {
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Process with id ${processId} not found.`);
+            return;
+        }
+        let mevConfig: ProcessConfig;
+        if (type === RAYDIUM_TYPE.V4){
+            mevConfig = {
+                ...mevProcess.config,
+                v4: pool
+            }
+        }else if (type === RAYDIUM_TYPE.CLMM){
+            mevConfig = {
+                ...mevProcess.config,
+                clmm: pool
+            }
 
+        }else if (type === RAYDIUM_TYPE.CPMM){
+            mevConfig = {
+                ...mevProcess.config,
+                cpmm: pool
+            }
+        }
+        const response = await this.stopProcess(processId, false);
+        if (response.success){
+            return await this.startMevProcess(mevConfig, {
+                isRestart: true,
+                initialCreationTime: mevProcess.initialCreationTime
+            })
+        }else{
+            return undefined
+        }
+
+    }
     /**
      * Останавливает MEV процесс
      * @param {string} processId - Идентификатор процесса

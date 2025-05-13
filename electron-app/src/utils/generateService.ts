@@ -206,23 +206,17 @@ export async function generateMevConfig(
     }
 }
 
-/**
- * Генерирует упрощенный TOML-файл настройки MEV для запуска процесса
- * @param botDir - Директория с MEV ботом
- * @param config - Конфигурация задачи
- * @param tokenAddress - Адрес токена
- * @param meteoraPools - Массив адресов пулов Meteora
- * @param userSetting - Пользовательские настройки
- * @param pumpSwapPool - Адрес пула PumpSwap (опционально)
- * @returns - Путь к созданному TOML-файлу или null в случае ошибки
- */
+
 export async function generateSimpleMevConfig(
     botDir: string,
     config: TaskConfig,
     tokenAddress: string,
     meteoraPools: string[],
     userSetting: UserSettings,
-    pumpSwapPool: string | null = null
+    pumpSwapPool: string | null = null,
+    cpmm?: string | undefined,
+    clmm?: string | undefined,
+    v4?: string | undefined,
 ): Promise<string | null> {
     try {
         // Проверяем обязательные параметры
@@ -255,7 +249,15 @@ export async function generateSimpleMevConfig(
                 pump_pool_list: pumpPool,
                 meteora_dlmm_pool_list: meteoraPools,
                 lookup_table_accounts: [],
-                process_delay: processDelay
+                process_delay: processDelay,
+                // This is the Raydium V4 AMM Pools
+                raydium_pool_list: v4 ? [v4] : [],
+
+                // This is the Raydium CPMM Pools
+                raydium_cp_pool_list: cpmm ? [cpmm] : [],
+
+                // This is the Raydium CLMM(Centralized Liquidity) Pools
+                raydium_clmm_pool_list: clmm ? [clmm] : []
             }
         ];
 

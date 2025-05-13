@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { getGlobalConfigDirectory } from '../utils/wallet';
 import logger from './loggerService';
-import {MevProcess} from "@/types/types";
+import {MevProcess, RAYDIUM_TYPE} from "@/types/types";
 
 // Интерфейсы для типизации
 
@@ -1875,8 +1875,53 @@ class TelegramBotService {
             }
         });
 
+        this.registerCommand('add_pool', async (chatId, args) => {
+            if (!args || args.length < 2) {
+                this.sendMessage(chatId, '❌ Неверный формат команды. Использование: \n/add_pool <processId> <pool> <type>\ntypes: [clmm | cpmm | v4]');
+                return;
+            }
+
+            const processId = args[0]?.trim();
+            const pool = args[1]?.trim();
+            const typeInput = args[2]?.toUpperCase();
+
+            if (!processId || !pool || !typeInput) {
+                throw new Error("Missing required arguments");
+            }
+
+            const validTypes = Object.values(RAYDIUM_TYPE);
+            if (!validTypes.includes(typeInput as RAYDIUM_TYPE)) {
+                throw new Error(`Invalid pool type. Allowed: ${validTypes.join(', ')}`);
+            }
+
+            try {
+                logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, `[TG Bot] Добавление пула ${typeInput}: ${pool}`);
+
+                const result = await mevLoadBalancer.addRaydiumPool(
+                    processId,
+                    pool,
+                    typeInput as RAYDIUM_TYPE
+                );
+
+
+                if (result) {
+                    this.sendMessage(chatId, `✅ Пул успешно добавлен в новый процесс ${result}`);
+                } else {
+                    this.sendMessage(chatId, `❌ Ошибка добавления пула`);
+                }
+            } catch (error) {
+                logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] Ошибка при добавлении пула:', error);
+                this.sendMessage(chatId, `❌ Ошибка: ${(error as Error).message}`);
+            }
+        });
+
+
         logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] MEV команды успешно инициализированы');
     }
+
+
+
+
 
     // Метод для отправки статуса задачи
     async sendTaskStatus(taskId: string | number): Promise<boolean> {

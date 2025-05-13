@@ -60,6 +60,12 @@ export type ProcessConfig = {
     tokenAddress: string;
     meteoraPools: string[];
     pumpSwapPool: string;
+
+    // Raydium pools:
+    clmm?: string;
+    cpmm?: string;
+    v4?: string;
+
     main_rpc: string;
     useJito: boolean;
     jito_lower_bound: number;
@@ -83,6 +89,8 @@ export interface MevProcess {
     tokenAddress: string;
     meteoraPools: string[]; // Замените на ваш реальный тип
     pumpSwapPool: string; // Или конкретный тип, если есть
+
+
     process?: ChildProcess; // Из модуля 'child_process'
     startTime: number;
     initialCreationTime?: number;
@@ -98,3 +106,10 @@ export type CheckResult = {
     pool: string,
     verdict: boolean,
 }
+
+export enum RAYDIUM_TYPE {
+    CLMM = 'CLMM',
+    CPMM = 'CPMM',
+    V4 = 'V4'
+}
+
