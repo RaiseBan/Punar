@@ -32,7 +32,10 @@ export function getConfigs(validSignals: SignalWithMeta[]): ProcessesToManage | 
         }
     }
     for (const [token, pools] of groupPoolsByToken.entries()) {
+        console.log(token, pools);
+
         let meteoraUsageForToken: UsageMeteoraPools | undefined = this.getMeteoraUsagePoolsByToken(token);
+        console.log(meteoraUsageForToken);
         if (!meteoraUsageForToken){
             this.setMeteoraUsagePoolsByToken(token, {
                 pairs: new Map<string, PairInfo>(),

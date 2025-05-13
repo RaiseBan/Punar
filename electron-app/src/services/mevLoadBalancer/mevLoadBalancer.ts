@@ -97,6 +97,7 @@ export class MevLoadBalancer {
     }
 
     getMeteoraUsagePoolsByToken(token: string): UsageMeteoraPools | undefined {
+        console.log(this.meteoraPoolsUsage);
         return this.meteoraPoolsUsage.get(token);
     }
     setMeteoraUsagePoolsByToken(token: string, usage: UsageMeteoraPools): void{
