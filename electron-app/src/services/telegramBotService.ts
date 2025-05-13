@@ -1916,44 +1916,69 @@ class TelegramBotService {
         });
 
 
-        this.registerCommand('add_ray_signal ', async (chatId, args) => {
-            if (!args || args.length < 2) {
-                this.sendMessage(chatId, '❌ Неверный формат команды. Использование: \n/add_pool <token> <["metPool", ...]> <rayPool> <type>\ntypes: [clmm | cpmm | v4]');
+        this.registerCommand('add_ray_signal', async (chatId, args) => {
+            if (!args || args.length < 4) {
+                this.sendMessage(chatId, '❌ Неверный формат команды. Использование: \n/add_ray_signal <token> <["metPool1","metPool2"]> <rayPool> <type>\ntypes: [clmm | cpmm | v4]');
                 return;
             }
 
             const token = args[0]?.trim();
-            const meteoraPools = args[1]?.trim();
-            const rayPools = args[2]?.trim();
+            const meteoraPoolsStr = args[1]?.trim();
+            const rayPool = args[2]?.trim(); // Теперь одиночное значение, не массив
             const typeInput = args[3]?.toUpperCase();
 
-            if (!token || !meteoraPools || !rayPools || !typeInput) {
-                throw new Error("Missing required arguments");
-            }
-
-            const validTypes = Object.values(RAYDIUM_TYPE);
-            if (!validTypes.includes(typeInput as RAYDIUM_TYPE)) {
-                throw new Error(`Invalid pool type. Allowed: ${validTypes.join(', ')}`);
+            if (!token || !meteoraPoolsStr || !rayPool || !typeInput) {
+                this.sendMessage(chatId, '❌ Не хватает обязательных аргументов');
+                return;
             }
 
             try {
-                logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, `[TG Bot] Добавление сигнала ray`);
+                // Парсим массив Meteora pools (как было)
+                const parseMeteoraPools = (str: string): string[] => {
+                    try {
+                        const cleanStr = str.replace(/^\[|\]$/g, '').replace(/"/g, '');
+                        return cleanStr.split(',').map(p => p.trim()).filter(p => p);
+                    } catch (e) {
+                        throw new Error(`Неверный формат списка Meteora пулов. Используйте: ["pool1","pool2"]`);
+                    }
+                };
+
+                const meteoraPools = parseMeteoraPools(meteoraPoolsStr);
+
+                if (meteoraPools.length === 0) {
+                    throw new Error("Список Meteora пулов не может быть пустым");
+                }
+
+                // Проверяем Ray pool (простая строка)
+                if (!rayPool) {
+                    throw new Error("Ray pool не может быть пустым");
+                }
+
+                // Проверяем тип
+                const validTypes = Object.values(RAYDIUM_TYPE);
+                if (!validTypes.includes(typeInput as RAYDIUM_TYPE)) {
+                    throw new Error(`Неверный тип пула. Допустимые значения: ${validTypes.join(', ')}`);
+                }
+
+                logger.info(
+                    logger.LOG_MODULES.TELEGRAM_SERVICE,
+                    `[TG Bot] Добавление Raydium сигнала: ${token}, Meteora pools: ${meteoraPools.join(', ')}, Ray pool: ${rayPool}, тип: ${typeInput}`
+                );
 
                 const result = await mevLoadBalancer.addRaydiumSignal(
                     token,
                     meteoraPools,
-                    rayPools,
+                    rayPool, // Теперь передаем одиночное значение
                     typeInput as RAYDIUM_TYPE
                 );
 
-
                 if (result) {
-                    this.sendMessage(chatId, `✅ Пул успешно добавлен в новый процесс ${result}`);
+                    this.sendMessage(chatId, `✅ Сигнал успешно добавлен в процесс ${result}`);
                 } else {
-                    this.sendMessage(chatId, `❌ Ошибка добавления пула`);
+                    this.sendMessage(chatId, `❌ Ошибка добавления сигнала`);
                 }
             } catch (error) {
-                logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] Ошибка при добавлении пула:', error);
+                logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] Ошибка:', error);
                 this.sendMessage(chatId, `❌ Ошибка: ${(error as Error).message}`);
             }
         });
