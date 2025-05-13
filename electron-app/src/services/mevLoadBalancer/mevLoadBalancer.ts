@@ -252,10 +252,9 @@ export class MevLoadBalancer {
             }
         }
         for (const [token, pools] of groupPoolsByToken.entries()) {
-            console.log(token, pools);
-
+            console.log(`token pools:`)
+            console.log(token, pools)
             let meteoraUsageForToken: UsageMeteoraPools | undefined = this.getMeteoraUsagePoolsByToken(token);
-            console.log(meteoraUsageForToken);
             if (!meteoraUsageForToken){
                 this.setMeteoraUsagePoolsByToken(token, {
                     pairs: new Map<string, PairInfo>(),
@@ -270,15 +269,20 @@ export class MevLoadBalancer {
             // кол-во пулов токена для добавления
             let poolsDecrementable = [...pools.meteora];
             console.log("usage: ", formatUsage(meteoraUsageForToken));
+            console.log(meteoraUsageForToken.pairs)
 
             let skipShift = false;
             let itemBuffer: string = "";
+            console.log(`length: ${poolsDecrementable.length}`)
             while (poolsDecrementable.length !== 0){
+                console.log(1)
                 let poolHasPlaced = false;
                 let tookPool: string | undefined;
                 if (!skipShift){
+                    console.log(2)
                     tookPool = poolsDecrementable.shift();
                 }else{
+                    console.log(3)
                     tookPool = itemBuffer;
                 }
 
@@ -286,11 +290,66 @@ export class MevLoadBalancer {
                     logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `watafuk`);
                     return;
                 }
+                if (meteoraUsageForToken.pairs.size === 0){
+
+
+                    if (poolsDecrementable.length > 0){
+                        console.log(`BIG BOY 000`)
+                        // не нужно добавлять, потому что еще есть элементы
+                        // configsToAdd.push(structConfig(this, token, [...pairInfo.activePools, tookPool], pools.pump));
+                        meteoraUsageForToken.pairs.set(
+                            this.generateProcessId(
+                                token,
+                                [tookPool],
+                                this.userSettings?.jito_lower_bound!),
+                            {
+                                activePools: [tookPool],
+                                isNew: true
+                            }
+                        );
+                        console.log(meteoraUsageForToken.pairs)
+                        console.log(`-----------`)
+                        poolHasPlaced = true;
+                        skipShift = false;
+                        continue
+                    }else if (poolsDecrementable.length === 0){
+                        console.log(`MET 1: ${formatUsage(meteoraUsageForToken)}`);
+                        this.setMeteoraUsagePoolsByToken(token, {
+                            pairs: new Map<string, PairInfo>([
+                                [this.generateProcessId(token, [tookPool], this.userSettings.jito_lower_bound), {
+                                    activePools: [tookPool],
+                                    isNew: false
+                                }]
+                            ]),
+                            hasFreeSingleSlot: false
+                        })
+                        console.log(`MET 2: ${formatUsage(meteoraUsageForToken)}`);
+
+                        configsToAdd.push(structConfig(this, token, [tookPool], pools.pump));
+                        poolHasPlaced = true;
+                        skipShift = false;
+                        break;
+
+                        // meteoraUsageForToken.pairs.set(
+                        //     this.generateProcessId(
+                        //         token,
+                        //         [tookPool],
+                        //         this.userSettings?.jito_lower_bound!),
+                        //     {
+                        //         activePools: [tookPool],
+                        //         isNew: false
+                        //     }
+                        // );
+
+                        // break;
+                    }
 
 
 
+                }
 
                 for (const [processId, pairInfo] of meteoraUsageForToken.pairs.entries()) {
+                    console.log(`entries: ${processId} ${pairInfo}`)
                     if (pairInfo.activePools.length === 1) { // пока что сделали, что максиамльное кол-во пулов метеоры в одном конфиге - 2
                         console.log(1)
                         pairInfo.activePools.push(tookPool);
@@ -317,6 +376,7 @@ export class MevLoadBalancer {
                         break;
                     }
                     if (pairInfo.activePools.length === 0) {
+                        console.log("salam")
                         if (poolsDecrementable.length > 0){
                             console.log(`BIG BOY 000`)
                             pairInfo.activePools.push(tookPool);
@@ -340,12 +400,13 @@ export class MevLoadBalancer {
                             skipShift = false;
                             break;
                         }else if (poolsDecrementable.length === 0){
-                            pairInfo.activePools.push(tookPool);
-                            configsToAdd.push(structConfig(this, token, [...pairInfo.activePools], pools.pump));
+                            console.log(`MET 1: ${formatUsage(meteoraUsageForToken)}`);
+
+                            configsToAdd.push(structConfig(this, token, [tookPool], pools.pump));
                             meteoraUsageForToken.pairs.set(
                                 this.generateProcessId(
                                     token,
-                                    [...pairInfo.activePools],
+                                    [tookPool],
                                     this.userSettings?.jito_lower_bound!),
                                 {
                                     activePools: [...pairInfo.activePools],
@@ -360,6 +421,8 @@ export class MevLoadBalancer {
                     }
                 }
 
+
+
                 if (!poolHasPlaced){
                     meteoraUsageForToken.pairs.set("stub", {
                         activePools: [],
@@ -373,7 +436,7 @@ export class MevLoadBalancer {
 
 
         }
-
+        console.log(JSON.stringify(this.meteoraPoolsUsage, null, 2));
         return {
             configsToAdd: configsToAdd,
             processIdsToDelete: configsToDelete
@@ -1443,7 +1506,7 @@ export class MevLoadBalancer {
 
 
             // Шаг 3: Рассчитываем новую задержку для всех процессов (текущие + новые)
-            console.log(`РАССЧЕТ: ${currentProcesses.length} - ${processManageInfo.processIdsToDelete} + (${processManageInfo.configsToAdd.length} * ${jitoValues.length}) `);
+            console.log(`РАССЧЕТ: ${currentProcesses.length} - ${processManageInfo.processIdsToDelete.length} + (${processManageInfo.configsToAdd.length} * ${jitoValues.length}) `);
             const newProcessCount = currentProcesses.length - processManageInfo.processIdsToDelete.length + (processManageInfo.configsToAdd.length * jitoValues.length);
             const processDelay = this.calculateProcessDelay(newProcessCount);
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
