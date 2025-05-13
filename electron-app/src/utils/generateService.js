@@ -1,8 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const { updateIfNotExistsAndGet, getRaydiumPair, getFilteredPairs, sortPairsByParameter } = require("./solanaUtils");
+const {updateIfNotExistsAndGet, getRaydiumPair, getFilteredPairs, sortPairsByParameter} = require("./solanaUtils");
 const TOML = require('@iarna/toml');
-const { PRIMARY_IP, RAYDIUM_OWNER, METEORA_OWNER, RAYDIUM_AMM_OWNER, RAYDIUM_CPMM_OWNER } = require("./constants");
+const {PRIMARY_IP, RAYDIUM_OWNER, METEORA_OWNER, RAYDIUM_AMM_OWNER, RAYDIUM_CPMM_OWNER} = require("./constants");
 
 /**
  * Генерирует конфигурацию для MEV процесса
@@ -134,7 +134,7 @@ async function generateMevConfig(targetDir, tokensDirPath, config, specificMeteo
 
     // Создаем директорию, если она не существует
     if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
+        fs.mkdirSync(targetDir, {recursive: true});
     }
 
     // Формируем имя файла и путь для сохранения
@@ -243,7 +243,10 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
                     from: jito_lower_bound,
                     to: jito_upper_bound,
                     count: 1
-                }
+                },
+                use_separate_tip_account: true,
+                min_profit: 10000,
+                use_min_profit: true,
             },
             kamino_flashloan: {
                 enabled: true
@@ -258,7 +261,7 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
         // Создаем директорию, если она не существует
         const configDir = path.join(botDir, 'config');
         if (!fs.existsSync(configDir)) {
-            fs.mkdirSync(configDir, { recursive: true });
+            fs.mkdirSync(configDir, {recursive: true});
         }
 
         // Формируем имя файла
@@ -282,4 +285,4 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
     }
 }
 
-module.exports = { generateMevConfig, generateSimpleMevConfig };
+module.exports = {generateMevConfig, generateSimpleMevConfig};
