@@ -1,6 +1,6 @@
 import {PairInfo, Pools, ProcessConfig, ProcessesToManage, SignalWithMeta, UsageMeteoraPools} from "@/types/types";
 import {MevLoadBalancer} from "./mevLoadBalancer";
-import logger from "@/services/loggerService";
+import logger from "../loggerService";
 
 export function structConfig<T extends MevLoadBalancer>(target: T, tokenAddress: string, meteoraPools: string[], pumpSwapPool: string): ProcessConfig{
     return {
