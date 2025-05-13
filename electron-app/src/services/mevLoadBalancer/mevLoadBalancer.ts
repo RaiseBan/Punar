@@ -134,21 +134,14 @@ export class MevLoadBalancer {
 
 
     generateProcessId(token: string, meteoraPools: string[], jito_lower_bound: string): string {
-        let meteoraPoolsPart = "";
-        meteoraPools.forEach((pool: string, index: number) => {
-            if (meteoraPools.length === 1){
-                meteoraPoolsPart = pool
-            }
-            if (meteoraPoolsPart.length === index + 1) {
-                meteoraPoolsPart = meteoraPoolsPart + pool.substring(0, 4);
-            }else{
-                meteoraPoolsPart = meteoraPoolsPart + pool.substring(0, 4) + "_";
-            }
+        const tokenPart = token.substring(0, 4);
 
+        // Обрабатываем пулы
+        const meteoraPoolsPart = meteoraPools
+            .map(pool => pool.substring(0, 4))
+            .join('_');
 
-        })
-        return `mev_${token.substring(0, 4)}_${meteoraPoolsPart}_${jito_lower_bound}`; // TODO: возможно по другому id задать
-
+        return `mev_${tokenPart}_${meteoraPoolsPart}_${jito_lower_bound}`;
     }
 
 
