@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { getGlobalConfigDirectory } from '../utils/wallet';
 import logger from './loggerService';
-import {MevProcess, RAYDIUM_TYPE} from "@/types/types";
+import {MevProcess, RAYDIUM_TYPE} from "../types/types";
 
 // Интерфейсы для типизации
 
