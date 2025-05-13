@@ -1,8 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
-import { getFilteredPairs, sortPairsByParameter } from "./solanaUtils";
+import {getFilteredPairs, sortPairsByParameter} from "./solanaUtils";
 import TOML from '@iarna/toml';
-import { PRIMARY_IP, METEORA_OWNER} from "./constants";
+import {PRIMARY_IP, METEORA_OWNER} from "./constants";
 
 /**
  * Интерфейс для конфигурации задачи
@@ -24,6 +24,7 @@ interface TokenConfig {
     token_address: string;
     meteora_pairs: string[];
     pump_swap_pairs: string[];
+
     [key: string]: any;
 }
 
@@ -177,7 +178,7 @@ export async function generateMevConfig(
 
     // Создаем директорию, если она не существует
     if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
+        fs.mkdirSync(targetDir, {recursive: true});
     }
 
     // Формируем имя файла и путь для сохранения
@@ -295,7 +296,11 @@ export async function generateSimpleMevConfig(
                     from: jito_lower_bound,
                     to: jito_upper_bound,
                     count: 1
-                }
+                },
+                use_separate_tip_account: true,
+                min_profit: 10000,
+                use_min_profit: true,
+
             },
             kamino_flashloan: {
                 enabled: true
@@ -310,7 +315,7 @@ export async function generateSimpleMevConfig(
         // Создаем директорию, если она не существует
         const configDir = path.join(botDir, 'config');
         if (!fs.existsSync(configDir)) {
-            fs.mkdirSync(configDir, { recursive: true });
+            fs.mkdirSync(configDir, {recursive: true});
         }
 
         // Формируем имя файла
