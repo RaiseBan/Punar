@@ -59,7 +59,7 @@ export type SignalWithMeta = {
 export type ProcessConfig = {
     tokenAddress: string;
     meteoraPools: string[];
-    pumpSwapPool: string;
+    pumpSwapPool?: string;
 
     // Raydium pools:
     clmm?: string;

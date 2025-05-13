@@ -461,7 +461,8 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                         ? updatedTaskConfig.poolAddress
                         : [updatedTaskConfig.poolAddress as string]),
                     userSettings,
-                    updatedTaskConfig.pumpSwapPool || null
+                    updatedTaskConfig.pumpSwapPool || undefined,
+
                 );
             } else {
                 // Иначе используем старый способ через rowData

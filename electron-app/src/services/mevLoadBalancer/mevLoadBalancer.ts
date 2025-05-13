@@ -102,6 +102,7 @@ export class MevLoadBalancer {
         console.log(this.meteoraPoolsUsage);
         return this.meteoraPoolsUsage.get(token);
     }
+
     setMeteoraUsagePoolsByToken(token: string, usage: UsageMeteoraPools): void {
         this.meteoraPoolsUsage.set(token, usage);
     }
@@ -133,7 +134,6 @@ export class MevLoadBalancer {
         return true;
 
     }
-
 
 
     generateProcessId(token: string, meteoraPools: string[], jito_lower_bound: string): string {
@@ -341,7 +341,6 @@ export class MevLoadBalancer {
                     }
 
 
-
                 }
 
                 for (const [processId, pairInfo] of meteoraUsageForToken.pairs.entries()) {
@@ -416,7 +415,6 @@ export class MevLoadBalancer {
 
                     }
                 }
-
 
 
                 if (!poolHasPlaced) {
@@ -556,7 +554,7 @@ export class MevLoadBalancer {
         try {
             if (this.isActive) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик уже запущен');
-                return { success: true, status: 'already_running' };
+                return {success: true, status: 'already_running'};
             }
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Запуск MEV LoadBalancer');
@@ -602,7 +600,7 @@ export class MevLoadBalancer {
         try {
             if (!this.isActive) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик уже остановлен');
-                return { success: true, status: 'already_stopped' };
+                return {success: true, status: 'already_stopped'};
             }
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Остановка MEV LoadBalancer');
@@ -772,7 +770,7 @@ export class MevLoadBalancer {
             // Проверяем обязательные параметры
             const tokenAddress = config.tokenAddress;
             const meteoraPools = config.meteoraPools
-            let pumpSwapPool = config.pumpSwapPool || null;
+            let pumpSwapPool = config.pumpSwapPool || undefined;
 
             if (!tokenAddress || !meteoraPools) {
                 logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Не указаны обязательные параметры токена или пула.`);
@@ -895,7 +893,6 @@ export class MevLoadBalancer {
         return checkResults
 
 
-
     }
 
     async checkDex(dexScreenerUrl) {
@@ -993,34 +990,35 @@ export class MevLoadBalancer {
             return;
         }
         let mevConfig: ProcessConfig;
-        if (type === RAYDIUM_TYPE.V4){
+        if (type === RAYDIUM_TYPE.V4) {
             mevConfig = {
                 ...mevProcess.config,
                 v4: pool
             }
-        }else if (type === RAYDIUM_TYPE.CLMM){
+        } else if (type === RAYDIUM_TYPE.CLMM) {
             mevConfig = {
                 ...mevProcess.config,
                 clmm: pool
             }
 
-        }else if (type === RAYDIUM_TYPE.CPMM){
+        } else if (type === RAYDIUM_TYPE.CPMM) {
             mevConfig = {
                 ...mevProcess.config,
                 cpmm: pool
             }
         }
         const response = await this.stopProcess(processId, false);
-        if (response.success){
+        if (response.success) {
             return await this.startMevProcess(mevConfig, {
                 isRestart: true,
                 initialCreationTime: mevProcess.initialCreationTime
             })
-        }else{
+        } else {
             return undefined
         }
 
     }
+
     /**
      * Останавливает MEV процесс
      * @param {string} processId - Идентификатор процесса
@@ -1170,7 +1168,7 @@ export class MevLoadBalancer {
             // Создаем директорию для логов, если она еще не существует
             const logDir = path.join(app.getPath('userData'), 'logs');
             if (!fs.existsSync(logDir)) {
-                fs.mkdirSync(logDir, { recursive: true });
+                fs.mkdirSync(logDir, {recursive: true});
             }
 
             // Формируем путь к файлу логов для указанного процесса
@@ -1258,7 +1256,7 @@ export class MevLoadBalancer {
         });
 
         // Добавляем обработчик события завершения процесса
-        ipcMain.on('mev-process-exit', (event, { processId, exitCode, config }) => {
+        ipcMain.on('mev-process-exit', (event, {processId, exitCode, config}) => {
             this.handleProcessExit(processId, exitCode);
         });
 
@@ -1276,7 +1274,7 @@ export class MevLoadBalancer {
                 return;
             }
 
-            const { processId, message, level, config } = logData;
+            const {processId, message, level, config} = logData;
             if (!processId || !message) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Получен некорректный лог без processId или message');
                 return;
@@ -1468,6 +1466,57 @@ export class MevLoadBalancer {
         return delay;
     }
 
+    async addRaydiumSignal(token: string,
+                           meteoraPools: string[],
+                           rayPool: string,
+                           type: RAYDIUM_TYPE
+    ): Promise<string | undefined> {
+
+        let procConfig: ProcessConfig;
+        if (type === RAYDIUM_TYPE.V4) {
+            procConfig = {
+                tokenAddress: token,
+                meteoraPools: meteoraPools,
+                v4: rayPool,
+                main_rpc: this.userSettings.mainRpc,
+                useJito: true,
+                jito_lower_bound: Number(this.userSettings.jito_lower_bound),
+                jito_upper_bound: Number(this.userSettings.jito_upper_bound),
+                process_delay: 2,
+                task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
+            }
+        } else if (type === RAYDIUM_TYPE.CLMM) {
+            procConfig = {
+                tokenAddress: token,
+                meteoraPools: meteoraPools,
+                clmm: rayPool,
+                main_rpc: this.userSettings.mainRpc,
+                useJito: true,
+                jito_lower_bound: Number(this.userSettings.jito_lower_bound),
+                jito_upper_bound: Number(this.userSettings.jito_upper_bound),
+                process_delay: 2,
+                task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
+            }
+
+        } else if (type === RAYDIUM_TYPE.CPMM) {
+            procConfig = {
+                tokenAddress: token,
+                meteoraPools: meteoraPools,
+                cpmm: rayPool,
+                main_rpc: this.userSettings.mainRpc,
+                useJito: true,
+                jito_lower_bound: Number(this.userSettings.jito_lower_bound),
+                jito_upper_bound: Number(this.userSettings.jito_upper_bound),
+                process_delay: 2,
+                task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
+            }
+        }
+        return await this.startMevProcess(procConfig, {
+            isRestart: true,
+            initialCreationTime: Date.now()
+        })
+
+    }
 
     async handleMevSignal(signals: SignalWithMeta[]) {
         try {
@@ -1491,7 +1540,7 @@ export class MevLoadBalancer {
 
             // Шаг 1: Проверяем все сигналы на валидность
             const validSignals = signals.filter(signal => {
-                const { tokenAddress, meteoraPool } = signal;
+                const {tokenAddress, meteoraPool} = signal;
                 if (!tokenAddress || !meteoraPool) {
                     logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Сигнал не содержит необходимых данных (tokenAddress или meteoraPool)`);
                     this.stats.failedSignals++;
@@ -1541,7 +1590,7 @@ export class MevLoadBalancer {
             const processConfigs: any[] = [];
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = { ...processData.config, process_delay: processDelay };
+                const config = {...processData.config, process_delay: processDelay};
                 // Сохраняем также время первоначального создания процесса
                 const initialCreationTime = processData.initialCreationTime || processData.startTime;
 
@@ -1560,7 +1609,7 @@ export class MevLoadBalancer {
             // const processMeteoraPool = new Map();
             const processesToDelete: any[] = [];
             const restartedProcesses: any[] = [];
-            for (const { processId, config, initialCreationTime } of processConfigs) {
+            for (const {processId, config, initialCreationTime} of processConfigs) {
                 if (processManageInfo.processIdsToDelete.includes(processId)) {
                     processesToDelete.push(processId);
                     console.log()
@@ -1661,7 +1710,7 @@ export class MevLoadBalancer {
             const processConfigs: any[] = [];
             for (const [processId, processData] of currentProcesses) {
                 // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = { ...processData.config, process_delay: processDelay };
+                const config = {...processData.config, process_delay: processDelay};
                 // Сохраняем также время первоначального создания процесса
                 const initialCreationTime = processData.initialCreationTime || processData.startTime;
 
@@ -1677,7 +1726,7 @@ export class MevLoadBalancer {
             }
 
             const restartedProcesses: any[] = [];
-            for (const { config, initialCreationTime } of processConfigs) {
+            for (const {config, initialCreationTime} of processConfigs) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
                 const restartedProcessId = await this.startMevProcess(config, {
                     isRestart: true,
@@ -1834,7 +1883,6 @@ export class MevLoadBalancer {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Завершена проверка ликвидности пулов');
         }
     }
-
 
 
     /**

@@ -1916,6 +1916,49 @@ class TelegramBotService {
         });
 
 
+        this.registerCommand('add_ray_signal ', async (chatId, args) => {
+            if (!args || args.length < 2) {
+                this.sendMessage(chatId, '❌ Неверный формат команды. Использование: \n/add_pool <token> <["metPool", ...]> <rayPool> <type>\ntypes: [clmm | cpmm | v4]');
+                return;
+            }
+
+            const token = args[0]?.trim();
+            const meteoraPools = args[1]?.trim();
+            const rayPools = args[2]?.trim();
+            const typeInput = args[3]?.toUpperCase();
+
+            if (!token || !meteoraPools || !rayPools || !typeInput) {
+                throw new Error("Missing required arguments");
+            }
+
+            const validTypes = Object.values(RAYDIUM_TYPE);
+            if (!validTypes.includes(typeInput as RAYDIUM_TYPE)) {
+                throw new Error(`Invalid pool type. Allowed: ${validTypes.join(', ')}`);
+            }
+
+            try {
+                logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, `[TG Bot] Добавление сигнала ray`);
+
+                const result = await mevLoadBalancer.addRaydiumSignal(
+                    token,
+                    meteoraPools,
+                    rayPools,
+                    typeInput as RAYDIUM_TYPE
+                );
+
+
+                if (result) {
+                    this.sendMessage(chatId, `✅ Пул успешно добавлен в новый процесс ${result}`);
+                } else {
+                    this.sendMessage(chatId, `❌ Ошибка добавления пула`);
+                }
+            } catch (error) {
+                logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] Ошибка при добавлении пула:', error);
+                this.sendMessage(chatId, `❌ Ошибка: ${(error as Error).message}`);
+            }
+        });
+
+
         logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] MEV команды успешно инициализированы');
     }
 
