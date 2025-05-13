@@ -492,6 +492,7 @@ export class MevLoadBalancer {
      * Обрабатывает буфер MEV сигналов
      */
     async processSignalBuffer() {
+        console.log("-------------------------BUFFER------------------------")
         // Если уже обрабатываем сигналы или буфер пуст, выходим
         if (this.processingSignals || this.signalBuffer.length === 0) {
             return;
@@ -1224,19 +1225,7 @@ export class MevLoadBalancer {
             this.handleProcessExit(processId, exitCode);
         });
 
-        // Новый обработчик для ручного запуска обработки буфера сигналов
-        ipcMain.handle('mev-loadbalancer:process-buffer', async () => {
-            if (!this.isActive) {
-                return {success: false, message: 'Балансировщик неактивен'};
-            }
 
-            if (this.signalBuffer.length === 0) {
-                return {success: true, message: 'Буфер сигналов пуст'};
-            }
-
-            await this.processSignalBuffer();
-            return {success: true, message: 'Запущена обработка буфера сигналов'};
-        });
     }
 
     /**
@@ -1537,6 +1526,7 @@ export class MevLoadBalancer {
             for (const {processId, config, initialCreationTime} of processConfigs) {
                 if (processManageInfo.processIdsToDelete.includes(processId)) {
                     processesToDelete.push(processId);
+                    console.log()
                     continue
                 }
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
