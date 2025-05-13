@@ -25,7 +25,7 @@ import {
     SignalWithMeta,
     UsageMeteoraPools
 } from "../../types/types";
-import {structConfig} from "./meteoraPoolsService";
+import {formatUsage, structConfig} from "./meteoraPoolsService";
 
 
 export class MevLoadBalancer {
@@ -269,8 +269,7 @@ export class MevLoadBalancer {
 
             // кол-во пулов токена для добавления
             let poolsDecrementable = [...pools.meteora];
-            console.log("usage: ", JSON.stringify(meteoraUsageForToken, null, 2));
-            console.log(meteoraUsageForToken.pairs)
+            console.log("usage: ", formatUsage(meteoraUsageForToken));
 
             let skipShift = false;
             let itemBuffer: string = "";
@@ -1439,10 +1438,12 @@ export class MevLoadBalancer {
             let newTokenPools = new Map();
 
             const processManageInfo: ProcessesToManage | undefined = this.getConfigs(validSignals);
+            console.log(`processManagerInfo: ${JSON.stringify(processManageInfo, null, 2)}`)
             newProcessConfigs.push(...processManageInfo.configsToAdd);
 
 
             // Шаг 3: Рассчитываем новую задержку для всех процессов (текущие + новые)
+            console.log(`РАССЧЕТ: ${currentProcesses.length} - ${processManageInfo.processIdsToDelete} + (${processManageInfo.configsToAdd.length} * ${jitoValues.length}) `);
             const newProcessCount = currentProcesses.length - processManageInfo.processIdsToDelete.length + (processManageInfo.configsToAdd.length * jitoValues.length);
             const processDelay = this.calculateProcessDelay(newProcessCount);
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);

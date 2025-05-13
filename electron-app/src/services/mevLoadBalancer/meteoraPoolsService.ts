@@ -16,5 +16,12 @@ export function structConfig<T extends MevLoadBalancer>(target: T, tokenAddress:
     }
 }
 
+export function formatUsage(usage: UsageMeteoraPools): string {
+    return JSON.stringify({
+        hasFreeSingleSlot: usage.hasFreeSingleSlot,
+        pairs: Object.fromEntries(usage.pairs)
+    }, null, 2);
+}
+
 
 
