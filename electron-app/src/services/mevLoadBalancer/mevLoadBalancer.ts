@@ -1612,7 +1612,7 @@ export class MevLoadBalancer {
             const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 1000;
 
             // Определяем максимальное количество запросов на один процесс с задержкой 1мс
-            const MAX_REQUESTS_PER_PROCESS_1MS = 1000; // 1000 запросов/с с задержкой 1мс
+            const MAX_REQUESTS_PER_PROCESS_1MS = 350; // 1000 запросов/с с задержкой 1мс
 
             // Определяем общее количество процессов, которые мы можем создать
             // для оптимального использования ресурсов
