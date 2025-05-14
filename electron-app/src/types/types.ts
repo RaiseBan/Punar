@@ -101,6 +101,7 @@ export interface MevProcess {
     exitCode?: any;
     exitTime?: number;
     processTimer?: any;
+    instanceNumber?: number;
 }
 export type CheckResult = {
     pool: string,

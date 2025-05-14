@@ -138,7 +138,15 @@ export class MevLoadBalancer {
     }
 
 
-    generateProcessId(token: string, meteoraPools: string[], jito_lower_bound: string): string {
+    /**
+     * Генерирует уникальный ID для процесса
+     * @param token - Адрес токена
+     * @param meteoraPools - Массив пулов Meteora
+     * @param jito_lower_bound - Нижняя граница Jito
+     * @param instanceNumber - Номер экземпляра процесса (для создания нескольких копий)
+     * @returns Уникальный ID процесса
+     */
+    generateProcessId(token: string, meteoraPools: string[], jito_lower_bound: string, instanceNumber: number = 0): string {
         const tokenPart = token.substring(0, 4);
 
         // Обрабатываем пулы
@@ -146,7 +154,10 @@ export class MevLoadBalancer {
             .map(pool => pool.substring(0, 4))
             .join('_');
 
-        return `mev_${tokenPart}_${meteoraPoolsPart}_${jito_lower_bound}`;
+        // Добавляем instanceNumber для разделения экземпляров одного процесса
+        const instanceSuffix = instanceNumber > 0 ? `_inst${instanceNumber}` : '';
+
+        return `mev_${tokenPart}_${meteoraPoolsPart}_${jito_lower_bound}${instanceSuffix}`;
     }
 
 
@@ -753,22 +764,28 @@ export class MevLoadBalancer {
     }
 
 
+    /**
+     * Запускает MEV процесс
+     * @param config - Конфигурация процесса
+     * @param options - Дополнительные опции
+     * @returns ID запущенного процесса или null в случае ошибки
+     */
     async startMevProcess(config: ProcessConfig, options: {
         isRestart?: boolean,
-        initialCreationTime?: number
+        initialCreationTime?: number,
+        instanceNumber?: number
     } = {}) {
         try {
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ckeck token exists on "${config.tokenAddress}"`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка токена "${config.tokenAddress}"`);
             if (!this.userTokens.has(config.tokenAddress.trim())) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `NO TOKEN ACCOUNT, CREATING...`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Токен не найден, создаем...`);
                 this.userTokens.set(config.tokenAddress.trim(), (await createTokenAccount(this.userSettings?.mainRpc!, config.tokenAddress.trim(), this.USER, this.userTokens))!);
                 await sleep(21000);
             }
 
-
             // Проверяем обязательные параметры
             const tokenAddress = config.tokenAddress;
-            const meteoraPools = config.meteoraPools
+            const meteoraPools = config.meteoraPools;
             let pumpSwapPool = config.pumpSwapPool || undefined;
 
             if (!tokenAddress || !meteoraPools) {
@@ -777,8 +794,14 @@ export class MevLoadBalancer {
                 return null;
             }
 
-            // Генерируем уникальный ID для процесса
-            const processId = this.generateProcessId(tokenAddress, meteoraPools, this.userSettings.jito_lower_bound); // TODO: возможно по другому id задать
+            // Генерируем уникальный ID для процесса с учетом номера экземпляра
+            const instanceNumber = options.instanceNumber || 0;
+            const processId = this.generateProcessId(
+                tokenAddress,
+                meteoraPools,
+                this.userSettings.jito_lower_bound,
+                instanceNumber
+            );
 
             // Формируем конфигурацию процесса
             const processConfig = {
@@ -790,7 +813,7 @@ export class MevLoadBalancer {
                 task_name: config.task_name || `MEV Process ${processId}`,
             };
 
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск MEV процесса с конфигурацией: ${JSON.stringify(processConfig)}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск MEV процесса [экземпляр ${instanceNumber}] с задержкой ${config.process_delay}мс: ${JSON.stringify(processConfig)}`);
 
             // Отправка процесса на запуск - передаем userSettings
             const childProcess = await spawnProcess(processConfig, this.userSettings!);
@@ -802,17 +825,10 @@ export class MevLoadBalancer {
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Успешно запущен MEV процесс ${processId}`);
 
-            // Добавляем обработчики для логирования вывода процесса (ПОТОМ УБРАТЬ консольный вывод)
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `(ПОТОМ УБРАТЬ) Настраиваем перехват вывода для процесса ${processId}`);
-
-            // Обработка стандартного вывода (stdout)
+            // Добавляем обработчики для логирования вывода процесса
             childProcess.stdout.on("data", (data: any) => {
                 const output = data.toString().trim();
                 if (output) {
-                    // // Временно выводим в консоль для отладки (ПОТОМ УБРАТЬ)
-                    // console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) STDOUT: ${output}`);
-
-                    // Записываем лог в файл
                     this.writeProcessLog(processId, output, 'info');
                 }
             });
@@ -821,22 +837,14 @@ export class MevLoadBalancer {
             childProcess.stderr.on("data", (data) => {
                 const output = data.toString().trim();
                 if (output) {
-                    // // Временно выводим в консоль для отладки (ПОТОМ УБРАТЬ)
-                    // console.error(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) STDERR: ${output}`);
-
-                    // Записываем лог в файл
                     this.writeProcessLog(processId, output, 'error');
                 }
             });
 
             // Добавляем обработчик завершения процесса
             childProcess.on("exit", (code) => {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `(ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) завершился с кодом ${code}`);
-
-                // Записываем информацию о завершении в лог
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `MEV процесс ${processId} (PID: ${childProcess.pid}) завершился с кодом ${code}`);
                 this.writeProcessLog(processId, `Процесс завершен с кодом ${code}`, code === 0 ? 'info' : 'error');
-
-                // Обновляем статус процесса
                 this.handleProcessExit(processId, code);
             });
 
@@ -858,10 +866,8 @@ export class MevLoadBalancer {
                 lastActivity: currentTime,
                 signals: [],
                 config: processConfig,
+                instanceNumber: instanceNumber
             });
-
-            // Создаем числовой ID для React UI
-            const numericTaskId = Date.now() + Math.floor(Math.random() * 1000);
 
             this.stats.totalProcesses++;
 
@@ -1460,29 +1466,65 @@ export class MevLoadBalancer {
         }
     }
 
+
+    /**
+     * Рассчитывает оптимальное распределение задержек для максимального использования доступных ресурсов
+     * @param totalProcesses - Общее количество процессов
+     * @param requestsPerSecond - Максимальное количество запросов в секунду
+     * @returns Массив задержек для каждого процесса
+     */
+    calculateOptimalDelays(totalProcesses: number, requestsPerSecond: number): number[] {
+        // Если нет процессов, возвращаем пустой массив
+        if (totalProcesses <= 0) return [];
+
+        // Сначала рассчитаем оптимальную задержку как если бы все процессы имели одинаковую задержку
+        let baseDelay = Math.ceil(totalProcesses * 1000 / requestsPerSecond);
+
+        // Рассчитаем, сколько запросов в секунду мы получим с этой задержкой
+        const requestsWithBaseDelay = Math.floor(totalProcesses * 1000 / baseDelay);
+
+        // Находим, сколько не используемых запросов в секунду остается
+        const unusedRequests = requestsPerSecond - requestsWithBaseDelay;
+
+        // Если неиспользуемых запросов нет, все процессы получат одинаковую задержку
+        if (unusedRequests <= 0) {
+            return Array(totalProcesses).fill(baseDelay);
+        }
+
+        // Иначе, мы можем ускорить некоторые процессы
+        // Рассчитаем, сколько процессов можно ускорить на одну единицу задержки
+        const fasterDelayProcesses = Math.floor(unusedRequests / (1000 / baseDelay - 1000 / (baseDelay - 1)));
+
+        // Если мы можем ускорить все процессы, то снижаем базовую задержку
+        if (fasterDelayProcesses >= totalProcesses) {
+            return Array(totalProcesses).fill(baseDelay - 1);
+        }
+
+        // Создаем массив задержек: часть процессов с меньшей задержкой, часть с большей
+        const delays = Array(totalProcesses).fill(baseDelay);
+        for (let i = 0; i < fasterDelayProcesses; i++) {
+            delays[i] = baseDelay - 1;
+        }
+
+        return delays;
+    }
+
     /**
      * Рассчитывает задержку для процессов на основе их количества
      * @param {number} processCount - Количество процессов
      * @returns {number} - Задержка в миллисекундах
      */
-    calculateProcessDelay(processCount) {
+    calculateProcessDelays(totalConfigs: number): number[] {
         // Проверяем входные данные
-        if (!processCount || processCount <= 0) {
-            processCount = 1;
+        if (totalConfigs <= 0) {
+            return [1]; // По умолчанию, если нет конфигураций
         }
 
-        // Общая нагрузка - 170 запросов в секунду
-        const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second);
+        // Общая нагрузка - получаем из настроек пользователя
+        const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 1000;
 
-        // Расчет запросов в секунду на процесс
-        const requestsPerProcess = TOTAL_REQUESTS_PER_SECOND / processCount;
-
-        // Расчет задержки по формуле: Math.ceil(1000 / requestsPerProcess) + 1
-        let delay = Math.ceil(1000 / requestsPerProcess) + 1;
-
-        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Расчет задержки: ${TOTAL_REQUESTS_PER_SECOND} req/s / ${processCount} процессов = ${requestsPerProcess} req/s на процесс`);
-        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Итоговая задержка: ${delay}ms`);
-        return delay;
+        // Используем наш алгоритм оптимизации
+        return this.calculateOptimalDelays(totalConfigs, TOTAL_REQUESTS_PER_SECOND);
     }
 
     async addRaydiumSignal(token: string,
@@ -1510,6 +1552,11 @@ export class MevLoadBalancer {
 
     }
 
+    /**
+     * Обрабатывает MEV сигналы
+     * @param signals - Массив сигналов для обработки
+     * @returns Результат обработки сигналов
+     */
     async handleMevSignal(signals: SignalWithMeta[]) {
         try {
             // Проверяем, идет ли очистка процессов
@@ -1545,45 +1592,71 @@ export class MevLoadBalancer {
                 throw new Error('Нет валидных сигналов для обработки');
             }
 
-            const jitoValues = [
-                {
-                    jito_lower_bound: 10_000,
-                    jito_upper_bound: 100_000,
-                }
-            ]
-
             // Шаг 2: Сохраняем текущие процессы для последующего перезапуска
             const currentProcesses = Array.from(this.mevProcesses.entries());
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Текущее количество процессов: ${currentProcesses.length}`);
 
-
-            let newProcessConfigs: ProcessConfig[] = [];
-            let newTokenPools = new Map();
-
+            // Шаг 3: Получаем новые конфигурации и процессы, которые нужно удалить
             const processManageInfo: ProcessesToManage | undefined = this.getConfigs(validSignals);
-            console.log(`processManagerInfo: ${JSON.stringify(processManageInfo, null, 2)}`)
-            newProcessConfigs.push(...processManageInfo.configsToAdd);
-
-
-            // Шаг 3: Рассчитываем новую задержку для всех процессов (текущие + новые)
-            console.log(`РАССЧЕТ: ${currentProcesses.length} - ${processManageInfo.processIdsToDelete.length} + (${processManageInfo.configsToAdd.length} * ${jitoValues.length}) `);
-            const newProcessCount = currentProcesses.length - processManageInfo.processIdsToDelete.length + (processManageInfo.configsToAdd.length * jitoValues.length);
-            const processDelay = this.calculateProcessDelay(newProcessCount);
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
-
-            // обновим задержку для новых процессов, так как до этого мы не ставили. ref: getConfigs();
-            for (const processConfig of newProcessConfigs) {
-                processConfig.process_delay = processDelay;
+            if (!processManageInfo) {
+                throw new Error('Не удалось получить информацию о конфигурациях процессов');
             }
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, JSON.stringify(newProcessConfigs, null, 2));
 
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Анализ конфигураций: ${processManageInfo.configsToAdd.length} новых, ${processManageInfo.processIdsToDelete.length} на удаление`);
 
-            // Шаг 4: Сохраняем конфигурации текущих процессов с временем их создания
+            // Шаг 4: Рассчитываем общее количество уникальных конфигураций
+            const uniqueConfigsCount = processManageInfo.configsToAdd.length +
+                (currentProcesses.length - processManageInfo.processIdsToDelete.length);
+
+            // Шаг 5: Рассчитываем оптимальное количество экземпляров для каждой конфигурации
+            const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 1000;
+
+            // Определяем максимальное количество запросов на один процесс с задержкой 1мс
+            const MAX_REQUESTS_PER_PROCESS_1MS = 1000; // 1000 запросов/с с задержкой 1мс
+
+            // Определяем общее количество процессов, которые мы можем создать
+            // для оптимального использования ресурсов
+            const totalOptimalProcessCount = Math.max(uniqueConfigsCount, Math.floor(TOTAL_REQUESTS_PER_SECOND / MAX_REQUESTS_PER_PROCESS_1MS * 1.2)); // +20% для запаса
+
+            // Рассчитываем, сколько экземпляров каждой конфигурации нам нужно создать
+            const instancesPerConfig = Math.max(1, Math.floor(totalOptimalProcessCount / uniqueConfigsCount));
+
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Оптимизация: ${uniqueConfigsCount} уникальных конфигураций, ` +
+                `${instancesPerConfig} экземпляров каждой, всего будет ${uniqueConfigsCount * instancesPerConfig} процессов`
+            );
+
+            // Шаг 6: Рассчитываем распределение задержек для всех процессов
+            const totalProcesses = uniqueConfigsCount * instancesPerConfig;
+            const delays = this.calculateOptimalDelays(totalProcesses, TOTAL_REQUESTS_PER_SECOND);
+
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Распределение задержек: ${JSON.stringify(this.countDelays(delays))} для ${totalProcesses} процессов`
+            );
+
+            // Шаг 7: Останавливаем все текущие процессы
+            const processesToDelete: any[] = [];
+
+            // Останавливаем процессы, которые нужно удалить по запросу
+            for (const processId of processManageInfo.processIdsToDelete) {
+                processesToDelete.push(processId);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Останавливаем процесс ${processId}, который был отмечен для удаления`);
+                await this.stopProcess(processId);
+            }
+
+            // Сохраняем конфигурации процессов, которые нужно перезапустить
             const processConfigs: any[] = [];
             for (const [processId, processData] of currentProcesses) {
-                // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = {...processData.config, process_delay: processDelay};
-                // Сохраняем также время первоначального создания процесса
+                // Пропускаем процессы, которые нужно удалить
+                if (processManageInfo.processIdsToDelete.includes(processId)) {
+                    continue;
+                }
+
+                // Сохраняем конфигурацию процесса
+                const config = {...processData.config}; // Задержка будет установлена позже
+                // Сохраняем время первоначального создания процесса
                 const initialCreationTime = processData.initialCreationTime || processData.startTime;
 
                 processConfigs.push({
@@ -1597,63 +1670,94 @@ export class MevLoadBalancer {
                 await this.stopProcess(processId);
             }
 
-            // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
-            // const processMeteoraPool = new Map();
-            const processesToDelete: any[] = [];
+            // Шаг 8: Запускаем все процессы с оптимальными задержками
+            let delayIndex = 0;
             const restartedProcesses: any[] = [];
-            for (const {processId, config, initialCreationTime} of processConfigs) {
-                if (processManageInfo.processIdsToDelete.includes(processId)) {
-                    processesToDelete.push(processId);
-                    console.log()
-                    continue
+            const newProcesses: any[] = [];
+
+            // Запускаем сначала существующие процессы
+            for (const {config, initialCreationTime} of processConfigs) {
+                // Создаем несколько экземпляров каждого процесса
+                for (let i = 0; i < instancesPerConfig; i++) {
+                    if (delayIndex >= delays.length) break;
+
+                    const delay = delays[delayIndex++];
+                    const instanceConfig = {
+                        ...config,
+                        process_delay: delay
+                    };
+
+                    const restartedProcessId = await this.startMevProcess(
+                        instanceConfig,
+                        {
+                            isRestart: true,
+                            initialCreationTime: initialCreationTime,
+                            instanceNumber: i
+                        }
+                    );
+
+                    if (restartedProcessId) {
+                        restartedProcesses.push(restartedProcessId);
+                    }
+
+                    // Небольшая задержка между запусками процессов
+                    // для предотвращения проблем с синхронизацией
+                    await sleep(50);
                 }
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
-                // Передаем флаг, что это перезапуск и оригинальное время создания
-                const restartedProcessId = await this.startMevProcess(config, {
-                    isRestart: true,
-                    initialCreationTime: initialCreationTime
-                });
-                if (restartedProcessId) {
-                    restartedProcesses.push(restartedProcessId);
-                }
-                // await sleep(1000);
             }
 
+            // Запускаем новые процессы
+            for (const config of processManageInfo.configsToAdd) {
+                // Создаем несколько экземпляров каждого процесса
+                for (let i = 0; i < instancesPerConfig; i++) {
+                    if (delayIndex >= delays.length) break;
+
+                    const delay = delays[delayIndex++];
+                    const instanceConfig = {
+                        ...config,
+                        process_delay: delay
+                    };
+
+                    const processId = await this.startMevProcess(
+                        instanceConfig,
+                        {
+                            instanceNumber: i
+                        }
+                    );
+
+                    if (processId) {
+                        newProcesses.push(processId);
+                    }
+
+                    // Небольшая задержка между запусками процессов
+                    await sleep(50);
+                }
+            }
+
+            // Очищаем информацию об удаленных процессах
             this.deleteProcesses(processesToDelete);
 
-
-            // Шаг 6: Запускаем все новые процессы
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск ${newProcessConfigs.length} новых MEV процессов`);
-            const newProcesses: any[] = [];
-            for (const config of newProcessConfigs) {
-                // Для новых процессов не передаем флаг перезапуска
-                const processId = await this.startMevProcess(config);
-                if (processId) {
-                    newProcesses.push(processId);
-                }
-                await sleep(1000);
-            }
-
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
-
-            // Статистика и уведомления
+            // Шаг 9: Обновляем статистику
             this.stats.totalMevActions += validSignals.length;
             this.stats.successfulSignals += validSignals.length;
 
+            // Шаг 10: Отправляем уведомление о результатах
             if (this.settings.notifyTelegram) {
+                // Информация о распределении задержек
+                const delayStats = this.countDelays(delays);
+                let delayInfo = Object.entries(delayStats)
+                    .map(([delay, count]) => `${count} процессов с задержкой ${delay}мс`)
+                    .join(', ');
+
                 // Информация о процессах
-                let processesInfo = `Новые процессы: ${newProcesses.join(', ')}\n`;
-
-                if (restartedProcesses.length > 0) {
-                    processesInfo += `Перезапущенные процессы: ${restartedProcesses.join(', ')}\n`;
-                }
-
-                processesInfo += `Всего процессов: ${newProcessCount}\n`;
-                processesInfo += `Задержка: ${processDelay}ms\n`;
+                let processesInfo = `Новые процессы: ${newProcesses.length}\n`;
+                processesInfo += `Перезапущенные процессы: ${restartedProcesses.length}\n`;
+                processesInfo += `Всего запущено: ${delayIndex} процессов\n`;
+                processesInfo += `Распределение задержек: ${delayInfo}\n`;
 
                 const message = `🚀 Обработано ${validSignals.length} MEV сигналов:\n` +
                     `\n⚖️ Параметры:\n` +
-                    `Задержка: ${processDelay}ms\n` +
+                    `Доступная нагрузка: ${TOTAL_REQUESTS_PER_SECOND} запросов/с\n` +
                     `\n📊 Процессы:\n${processesInfo}`;
 
                 telegramBotService.sendSystemNotification(message);
@@ -1663,8 +1767,8 @@ export class MevLoadBalancer {
                 success: true,
                 newProcesses,
                 restartedProcesses,
-                processDelay,
-                totalProcesses: newProcessCount
+                totalProcesses: delayIndex,  // фактическое количество запущенных процессов
+                delays: this.countDelays(delays) // распределение задержек
             };
         } catch (error) {
             logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при обработке MEV сигналов:', error);
@@ -1685,84 +1789,177 @@ export class MevLoadBalancer {
         }
     }
 
+    /**
+     * Подсчитывает количество процессов с каждой задержкой
+     * @param delays - Массив задержек
+     * @returns Объект, где ключи - это задержки, а значения - количество процессов с такой задержкой
+     */
+    countDelays(delays: number[]): {[key: string]: number} {
+        const result: {[key: string]: number} = {};
+
+        for (const delay of delays) {
+            if (!result[delay]) {
+                result[delay] = 0;
+            }
+            result[delay]++;
+        }
+
+        return result;
+    }
+
     deleteProcesses(taskIds: string[]) {
         for (const taskId of taskIds) {
             this.mevProcesses.delete(taskId);
         }
     }
 
+    /**
+     * Перезапускает все активные процессы с новыми оптимальными задержками
+     * @returns Результат перезапуска процессов
+     */
     async restartProcesses() {
         try {
             const currentProcesses = Array.from(this.mevProcesses.entries());
+            if (currentProcesses.length === 0) {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Нет активных процессов для перезапуска`);
+                return {
+                    success: true,
+                    message: 'Нет активных процессов для перезапуска'
+                };
+            }
 
-            const newProcessCount = currentProcesses.length;
-            const processDelay = this.calculateProcessDelay(newProcessCount);
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
+            // Рассчитываем оптимальное количество процессов и распределение задержек
+            const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 1000;
+            const MAX_REQUESTS_PER_PROCESS_1MS = 1000; // 1000 запросов/с с задержкой 1мс
 
+            // Рассчитываем количество уникальных конфигураций
+            const uniqueConfigs = new Map();
+            for (const [processId, processData] of currentProcesses) {
+                const key = `${processData.tokenAddress}_${processData.meteoraPools.join('_')}`;
+                uniqueConfigs.set(key, processData);
+            }
+
+            const uniqueConfigsCount = uniqueConfigs.size;
+
+            // Определяем оптимальное общее количество процессов
+            const totalOptimalProcessCount = Math.max(uniqueConfigsCount, Math.floor(TOTAL_REQUESTS_PER_SECOND / MAX_REQUESTS_PER_PROCESS_1MS * 1.2)); // +20% для запаса
+
+            // Рассчитываем, сколько экземпляров каждой конфигурации нам нужно создать
+            const instancesPerConfig = Math.max(1, Math.floor(totalOptimalProcessCount / uniqueConfigsCount));
+
+            // Рассчитываем распределение задержек
+            const totalProcesses = uniqueConfigsCount * instancesPerConfig;
+            const delays = this.calculateOptimalDelays(totalProcesses, TOTAL_REQUESTS_PER_SECOND);
+
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Перезапуск ${uniqueConfigsCount} конфигураций, ${instancesPerConfig} экземпляров каждой, ` +
+                `всего ${totalProcesses} процессов с распределением задержек: ${JSON.stringify(this.countDelays(delays))}`
+            );
+
+            // Сохраняем конфигурации и останавливаем процессы
             const processConfigs: any[] = [];
             for (const [processId, processData] of currentProcesses) {
-                // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = {...processData.config, process_delay: processDelay};
-                // Сохраняем также время первоначального создания процесса
+                // Сохраняем конфигурацию процесса (задержка будет установлена позже)
+                const config = {...processData.config};
+                // Сохраняем время первоначального создания процесса
                 const initialCreationTime = processData.initialCreationTime || processData.startTime;
 
                 processConfigs.push({
                     processId,
                     config,
-                    initialCreationTime
+                    initialCreationTime,
+                    tokenAddress: processData.tokenAddress,
+                    meteoraPools: processData.meteoraPools
                 });
 
                 // Останавливаем текущий процесс
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Останавливаем процесс ${processId} для перезапуска с новыми параметрами`);
                 await this.stopProcess(processId);
             }
 
+            // Запускаем процессы с новыми задержками
+            let delayIndex = 0;
             const restartedProcesses: any[] = [];
-            for (const {config, initialCreationTime} of processConfigs) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
-                const restartedProcessId = await this.startMevProcess(config, {
-                    isRestart: true,
-                    initialCreationTime: initialCreationTime
-                });
-                if (restartedProcessId) {
-                    restartedProcesses.push(restartedProcessId);
+
+            // Группируем конфигурации по токенам и пулам для оптимизации
+            const configGroups = new Map();
+            for (const config of processConfigs) {
+                const key = `${config.tokenAddress}_${config.meteoraPools.join('_')}`;
+                if (!configGroups.has(key)) {
+                    configGroups.set(key, []);
                 }
-                // await sleep(1000);
+                configGroups.get(key).push(config);
             }
 
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
+            // Запускаем по одной конфигурации из каждой группы с нужным количеством экземпляров
+            for (const [key, configs] of configGroups.entries()) {
+                if (configs.length === 0) continue;
 
+                // Берем первую конфигурацию из группы
+                const baseConfig = configs[0];
 
-            if (this.settings.notifyTelegram) {
-                // Информация о процессах
-                let processesInfo = "";
+                // Создаем нужное количество экземпляров
+                for (let i = 0; i < instancesPerConfig; i++) {
+                    if (delayIndex >= delays.length) break;
 
-                if (restartedProcesses.length > 0) {
-                    processesInfo += `Перезапущенные процессы: ${restartedProcesses.join(', ')}\n`;
+                    const delay = delays[delayIndex++];
+                    const instanceConfig = {
+                        ...baseConfig.config,
+                        process_delay: delay
+                    };
+
+                    const restartedProcessId = await this.startMevProcess(
+                        instanceConfig,
+                        {
+                            isRestart: true,
+                            initialCreationTime: baseConfig.initialCreationTime,
+                            instanceNumber: i
+                        }
+                    );
+
+                    if (restartedProcessId) {
+                        restartedProcesses.push(restartedProcessId);
+                    }
+
+                    // Небольшая задержка между запусками
+                    await sleep(50);
                 }
-                processesInfo += `Задержка: ${processDelay}ms\n`;
+            }
+
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Успешно перезапущено ${restartedProcesses.length} процессов из ${uniqueConfigsCount} конфигураций`);
+
+            // Отправляем уведомление о перезапуске
+            if (this.settings.notifyTelegram) {
+                // Информация о распределении задержек
+                const delayStats = this.countDelays(delays);
+                let delayInfo = Object.entries(delayStats)
+                    .map(([delay, count]) => `${count} процессов с задержкой ${delay}мс`)
+                    .join(', ');
 
                 const message = `🔄 Перезапуск MEV процессов:\n` +
                     `\n⚖️ Параметры:\n` +
-                    `Задержка: ${processDelay}ms\n` +
-                    `\n📊 Процессы:\n${processesInfo}`;
+                    `Доступная нагрузка: ${TOTAL_REQUESTS_PER_SECOND} запросов/с\n` +
+                    `\n📊 Процессы:\n` +
+                    `Запущено процессов: ${restartedProcesses.length}\n` +
+                    `Распределение задержек: ${delayInfo}`;
 
                 telegramBotService.sendSystemNotification(message);
-                return {
-                    success: true,
-                    restartedProcesses,
-                    processDelay,
-                };
             }
+
+            return {
+                success: true,
+                restartedProcesses,
+                totalProcesses: delayIndex,
+                delays: this.countDelays(delays)
+            };
         } catch (e) {
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while restring: ${e}`);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при перезапуске процессов: ${e}`);
             return {
                 success: false,
                 error: e.message
             };
         }
-
-
     }
 
     /**
