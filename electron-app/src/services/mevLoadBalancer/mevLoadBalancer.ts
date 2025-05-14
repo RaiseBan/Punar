@@ -1549,90 +1549,94 @@ export class MevLoadBalancer {
     /**
      * Рассчитывает оптимальное распределение задержек для максимального использования доступных ресурсов
      */
-    calculateOptimalDelays(totalProcesses: number, requestsPerSecond: number): number[] {
-        // Если нет процессов, возвращаем пустой массив
-        if (totalProcesses <= 0) return [];
-
-        // Начинаем с минимальной задержки (0 мс) для всех процессов
-        const delays = Array(totalProcesses).fill(0);
-
-        // Рассчитываем общую производительность
-        let totalReqPerSec = totalProcesses * this.DELAY_PERFORMANCE[0];
-
-        // Если общая производительность не превышает лимит, все процессы работают на 0 мс
-        if (totalReqPerSec <= requestsPerSecond) {
-            logger.info(
-                logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                `Оптимальные задержки: все ${totalProcesses} процессов с задержкой 0мс ` +
-                `(${totalReqPerSec} из ${requestsPerSecond} запросов/сек)`
-            );
-            return delays;
+    /**
+     * Рассчитывает оптимальное количество процессов и их задержки для каждого сигнала
+     * @param signalCount - Количество сигналов
+     * @param totalRequestsPerSecond - Максимальное количество запросов в секунду
+     * @returns Объект с количеством инстансов и массивом задержек
+     */
+    calculateOptimalProcessDistribution(signalCount: number, totalRequestsPerSecond: number): {
+        instancesPerSignal: number;
+        totalProcesses: number;
+        delays: number[];
+    } {
+        // Если нет сигналов, возвращаем пустой результат
+        if (signalCount <= 0) {
+            return { instancesPerSignal: 0, totalProcesses: 0, delays: [] };
         }
 
-        // Оптимизируем задержки: сначала делаем все процессы с максимально возможной задержкой,
-        // а затем снижаем задержки для максимального использования ресурсов
+        // Расчет максимального количества процессов, которые могут быть запущены
+        // Начинаем с процессов с задержкой 0 мс (самые эффективные)
+        let remainingCapacity = totalRequestsPerSecond;
+        let processDelays: number[] = [];
 
-        // Определяем максимальную нужную задержку (начинаем с 5 мс и снижаем)
-        let maxDelay = 5;
-        while (maxDelay > 0) {
-            const totalWithMaxDelay = totalProcesses * this.DELAY_PERFORMANCE[maxDelay];
-            if (totalWithMaxDelay < requestsPerSecond) {
-                break;
-            }
-            maxDelay--;
-        }
+        // Жадный алгоритм: добавляем процессы, начиная с самой низкой задержки
+        const delays = [0, 1, 2, 3, 4, 5]; // Доступные задержки в порядке предпочтения
 
-        // Заполняем все процессы максимальной задержкой
-        for (let i = 0; i < totalProcesses; i++) {
-            delays[i] = maxDelay;
-        }
+        // Продолжаем добавлять процессы, пока есть достаточно ресурсов
+        let currentDelayIndex = 0;
 
-        // Рассчитываем текущую производительность
-        totalReqPerSec = totalProcesses * this.DELAY_PERFORMANCE[maxDelay];
+        while (remainingCapacity > 0 && currentDelayIndex < delays.length) {
+            const currentDelay = delays[currentDelayIndex];
+            const reqsPerProcess = this.DELAY_PERFORMANCE[currentDelay] || 160; // Минимальное значение по умолчанию
 
-        // Снижаем задержки по одной для максимального использования ресурсов
-        let processIndex = 0;
-        while (totalReqPerSec < requestsPerSecond && processIndex < totalProcesses) {
-            const currentDelay = delays[processIndex];
-
-            if (currentDelay > 0) {
-                const newDelay = currentDelay - 1;
-                const reqDifference = this.DELAY_PERFORMANCE[newDelay] - this.DELAY_PERFORMANCE[currentDelay];
-
-                // Проверяем, не превысим ли лимит
-                if (totalReqPerSec + reqDifference <= requestsPerSecond) {
-                    delays[processIndex] = newDelay;
-                    totalReqPerSec += reqDifference;
-                }
+            // Если текущая задержка использует слишком много ресурсов, переходим к следующей
+            if (reqsPerProcess > remainingCapacity) {
+                currentDelayIndex++;
+                continue;
             }
 
-            processIndex++;
+            // Добавляем процесс с текущей задержкой
+            processDelays.push(currentDelay);
+            remainingCapacity -= reqsPerProcess;
+        }
 
-            // Если прошли все процессы и еще есть запас, снова с начала
-            if (processIndex >= totalProcesses && totalReqPerSec < requestsPerSecond) {
-                processIndex = 0;
+        // Количество созданных процессов
+        const totalProcesses = processDelays.length;
+
+        // Распределяем процессы между сигналами равномерно (минимум 1 на сигнал)
+        let instancesPerSignal = Math.max(1, Math.floor(totalProcesses / signalCount));
+
+        // Если сигналов больше, чем процессов, каждый сигнал получает 1 процесс
+        if (signalCount > totalProcesses) {
+            instancesPerSignal = 1;
+        }
+
+        // Корректируем общее количество процессов, чтобы вместить все сигналы
+        const finalTotalProcesses = instancesPerSignal * signalCount;
+
+        // Если нам нужно больше процессов, чем рассчитано, просто дублируем существующие
+        // с более высокими задержками
+        if (finalTotalProcesses > totalProcesses) {
+            // Дублируем задержки, предпочитая более высокие
+            while (processDelays.length < finalTotalProcesses) {
+                // Если у нас закончились задержки, начинаем добавлять с самой высокой
+                const delayToAdd = (delays.length - 1);
+                processDelays.push(delayToAdd);
             }
         }
 
-        // Подсчитываем статистику для логирования
-        const delayCounts = {};
-        for (const delay of delays) {
-            delayCounts[delay] = (delayCounts[delay] || 0) + 1;
+        // Если нам нужно меньше процессов, выбираем самые эффективные
+        else if (finalTotalProcesses < totalProcesses) {
+            processDelays = processDelays.slice(0, finalTotalProcesses);
         }
 
-        const delayInfo = Object.entries(delayCounts)
-            .map(([delay, count]) => `${count} процессов с задержкой ${delay}мс (${this.DELAY_PERFORMANCE[delay]} req/s)`)
-            .join(', ');
-
-        const actualReqPerSec = delays.reduce((total, delay) => total + this.DELAY_PERFORMANCE[delay], 0);
+        // Рассчитываем итоговую производительность
+        const totalPerformance = processDelays.reduce((sum, delay) => sum + this.DELAY_PERFORMANCE[delay], 0);
+        const utilizationPercent = (totalPerformance / totalRequestsPerSecond * 100).toFixed(1);
 
         logger.info(
             logger.LOG_MODULES.MEV_LOAD_BALANCER,
-            `Оптимальные задержки: ${delayInfo}, всего ${actualReqPerSec} из ${requestsPerSecond} запросов/сек ` +
-            `(${(actualReqPerSec/requestsPerSecond*100).toFixed(1)}% использования)`
+            `Оптимизация: ${signalCount} сигналов, ${instancesPerSignal} инстансов на сигнал, ` +
+            `всего ${finalTotalProcesses} процессов, ожидаемая производительность ${totalPerformance} req/s ` +
+            `(${utilizationPercent}% от ${totalRequestsPerSecond} req/s)`
         );
 
-        return delays;
+        return {
+            instancesPerSignal,
+            totalProcesses: finalTotalProcesses,
+            delays: processDelays
+        };
     }
     /**
      * Генерирует уникальный ID для сигнала на основе токена и пулов
@@ -1648,23 +1652,6 @@ export class MevLoadBalancer {
     }
 
 
-    /**
-     * Рассчитывает задержку для процессов на основе их количества
-     * @param {number} processCount - Количество процессов
-     * @returns {number} - Задержка в миллисекундах
-     */
-    calculateProcessDelays(totalConfigs: number): number[] {
-        // Проверяем входные данные
-        if (totalConfigs <= 0) {
-            return [1]; // По умолчанию, если нет конфигураций
-        }
-
-        // Общая нагрузка - получаем из настроек пользователя
-        const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 1000;
-
-        // Используем наш алгоритм оптимизации
-        return this.calculateOptimalDelays(totalConfigs, TOTAL_REQUESTS_PER_SECOND);
-    }
 
     async addRaydiumSignal(token: string,
                            meteoraPools: string[],
@@ -1771,20 +1758,17 @@ export class MevLoadBalancer {
             // Шаг 7: Рассчитываем оптимальное распределение инстансов и задержек
             const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
 
-            // Определяем базовое количество инстансов, исходя из количества доступных запросов
-            // при задержке 0 мс (самой эффективной)
-            const totalOptimalProcesses = Math.floor(TOTAL_REQUESTS_PER_SECOND / this.DELAY_PERFORMANCE[0]);
+// Рассчитываем оптимальное распределение процессов
+            const distribution = this.calculateOptimalProcessDistribution(
+                allSignalIds.length,
+                TOTAL_REQUESTS_PER_SECOND
+            );
 
-            // Рассчитываем, сколько инстансов можем выделить на каждый сигнал (минимум 1)
-            const instancesPerSignal = Math.max(1, Math.floor(totalOptimalProcesses / allSignalIds.length));
+            const instancesPerSignal = distribution.instancesPerSignal;
+            const totalProcessesToLaunch = distribution.totalProcesses;
+            const delays = distribution.delays;
 
-            // Общее количество процессов, которые будут запущены
-            const totalProcessesToLaunch = instancesPerSignal * allSignalIds.length;
-
-            // Рассчитываем оптимальные задержки для всех процессов
-            const delays = this.calculateOptimalDelays(totalProcessesToLaunch, TOTAL_REQUESTS_PER_SECOND);
-
-            // Рассчитываем суммарную производительность
+// Рассчитываем суммарную производительность
             const expectedPerformance = delays.reduce((total, delay) => total + this.DELAY_PERFORMANCE[delay], 0);
             const performancePercent = (expectedPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
 
@@ -1965,6 +1949,9 @@ export class MevLoadBalancer {
     /**
      * Перезапускает все процессы с оптимальными задержками
      */
+    /**
+     * Перезапускает все процессы с оптимальными задержками
+     */
     async restartProcesses() {
         try {
             const activeSignalIds = this.getActiveSignalIds();
@@ -1978,22 +1965,26 @@ export class MevLoadBalancer {
 
             // Рассчитываем оптимальное распределение
             const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
-            const MAX_REQUESTS_PER_PROCESS_1MS = 350;
 
-            // Количество инстансов на каждый сигнал
-            const totalProcessesAvailable = Math.floor(TOTAL_REQUESTS_PER_SECOND / MAX_REQUESTS_PER_PROCESS_1MS);
-            const instancesPerSignal = Math.max(1, Math.floor(totalProcessesAvailable / activeSignalIds.length));
+            // Используем новый алгоритм для оптимального распределения процессов
+            const distribution = this.calculateOptimalProcessDistribution(
+                activeSignalIds.length,
+                TOTAL_REQUESTS_PER_SECOND
+            );
 
-            // Общее количество процессов
-            const totalProcesses = instancesPerSignal * activeSignalIds.length;
+            const instancesPerSignal = distribution.instancesPerSignal;
+            const totalProcessesToLaunch = distribution.totalProcesses;
+            const delays = distribution.delays;
 
-            // Рассчитываем оптимальные задержки
-            const delays = this.calculateOptimalDelays(totalProcesses, TOTAL_REQUESTS_PER_SECOND);
+            // Рассчитываем суммарную производительность
+            const expectedPerformance = delays.reduce((total, delay) => total + this.DELAY_PERFORMANCE[delay], 0);
+            const performancePercent = (expectedPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
 
             logger.info(
                 logger.LOG_MODULES.MEV_LOAD_BALANCER,
                 `Перезапуск процессов: ${activeSignalIds.length} сигналов, ${instancesPerSignal} инстансов на сигнал, ` +
-                `всего ${totalProcesses} процессов, задержки: ${JSON.stringify(this.countDelays(delays))}`
+                `всего ${totalProcessesToLaunch} процессов, ожидаемая производительность: ${expectedPerformance} req/s ` +
+                `(${performancePercent}% от доступных ${TOTAL_REQUESTS_PER_SECOND} req/s)`
             );
 
             // Останавливаем все процессы
@@ -2049,7 +2040,7 @@ export class MevLoadBalancer {
                 // Информация о распределении задержек
                 const delayBreakdown = this.countDelays(delays);
                 const delayLines = Object.entries(delayBreakdown)
-                    .map(([delay, count]) => `- ${count} процессов с задержкой ${delay}мс`)
+                    .map(([delay, count]) => `- ${count} процессов с задержкой ${delay}мс (${this.DELAY_PERFORMANCE[delay]} req/s)`)
                     .join('\n');
 
                 // Информация о сигналах
@@ -2075,11 +2066,13 @@ export class MevLoadBalancer {
                     .filter(line => line !== null)
                     .join('\n');
 
+                // Добавляем информацию о суммарной производительности
                 const message = `🔄 Перезапуск MEV процессов\n\n` +
                     `✅ Новое распределение ресурсов:\n` +
                     `- Всего активных сигналов: ${activeSignalIds.length}\n` +
                     `- Инстансов на сигнал: ${instancesPerSignal}\n` +
-                    `- Всего запущено процессов: ${delayIndex}\n\n` +
+                    `- Всего запущено процессов: ${delayIndex}\n` +
+                    `- Суммарная производительность: ${expectedPerformance} из ${TOTAL_REQUESTS_PER_SECOND} req/s (${performancePercent}%)\n\n` +
                     `📊 Распределение задержек:\n${delayLines}\n\n` +
                     `🔄 Активные сигналы:\n${signalLines}`;
 
@@ -2090,6 +2083,11 @@ export class MevLoadBalancer {
                 success: true,
                 newProcesses,
                 totalProcesses: delayIndex,
+                performance: {
+                    actual: expectedPerformance,
+                    total: TOTAL_REQUESTS_PER_SECOND,
+                    percent: performancePercent
+                },
                 delays: this.countDelays(delays)
             };
         } catch (e) {
