@@ -29,6 +29,7 @@ import {
     UsageMeteoraPools
 } from "../../types/types";
 import {formatUsage, structConfig} from "./meteoraPoolsService";
+import {MASTER_NODE_PORT} from "../../config/config";
 
 
 export class MevLoadBalancer {
@@ -1319,6 +1320,19 @@ export class MevLoadBalancer {
             if (signalData) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Обнаружен MEV сигнал в логе процесса ${processId}, данные: ${JSON.stringify(signalData)}`);
 
+                const {tokenAddress, meteoraPool, pumpSwapPool, raydiumPool, type} = signalData;
+                axios.post(`http://localhost:${MASTER_NODE_PORT}/broadcast`, {
+                    token: tokenAddress,
+                    meteora: meteoraPool,
+                    targetPool: pumpSwapPool ? pumpSwapPool : raydiumPool,
+                    type: type
+                })
+                    .then(response => {
+                        console.log(`Сигнал успешно отправлен на веб-сервер: ${tokenAddress}`);
+                    })
+                    .catch(error => {
+                        console.error(`Ошибка при отправке сигнала для ${tokenAddress}:`, error.message);
+                    });
                 // Вместо непосредственной обработки, добавляем сигнал в буфер
                 this.addSignalToBuffer(signalData, processId);
             } else {

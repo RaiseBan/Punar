@@ -11,5 +11,5 @@ const config: Config = {
     port,
     isDev: process.env.NODE_ENV === 'development'
 };
-
+export const MASTER_NODE_PORT = "8080"
 export default config;
