@@ -224,9 +224,9 @@ export async function generateSimpleMevConfig(
         }
 
         console.log(`[TOML Generator] Генерация TOML-файла конфигурации MEV для токена ${tokenAddress} и пула ${meteoraPools}`);
-
+        console.log(`PROCESS DELAY::::::::${config.process_delay}`)
         // Задержка между процессами (по умолчанию 300ms, если не указано)
-        const processDelay = config.process_delay || 300;
+        const processDelay = config.process_delay;
 
         // Основные данные RPC
         const main_rpc = config.main_rpc || "https://api.mainnet-beta.solana.com";
