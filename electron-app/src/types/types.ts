@@ -83,25 +83,25 @@ export type ProcessesToManage = {
     processIdsToDelete: string[]
 }
 
+// В файле с определением типов:
 export interface MevProcess {
     id?: string;
     pid: number;
     tokenAddress: string;
-    meteoraPools: string[]; // Замените на ваш реальный тип
-    pumpSwapPool: string; // Или конкретный тип, если есть
-
-
-    process?: ChildProcess; // Из модуля 'child_process'
+    meteoraPools: string[];
+    pumpSwapPool: string;
+    process?: ChildProcess;
     startTime: number;
     initialCreationTime?: number;
     status: 'running' | 'stopped' | 'error' | 'completed';
     lastActivity: number;
-    signals: any; // Замените на ваш тип сигналов
+    signals: any;
     config?: ProcessConfig;
     exitCode?: any;
     exitTime?: number;
     processTimer?: any;
     instanceNumber?: number;
+    signalId?: string; // Новое поле для группировки процессов
 }
 export type CheckResult = {
     pool: string,
