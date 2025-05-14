@@ -1696,11 +1696,9 @@ export class MevLoadBalancer {
      * @param signals - Массив сигналов для обработки
      * @returns Результат обработки сигналов
      */
-    /**
-     * Обрабатывает MEV сигналы
-     */
     async handleMevSignal(signals: SignalWithMeta[]) {
         try {
+            // Проверяем, идет ли очистка процессов
             if (this.isCleaningProcesses) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Нельзя обработать сигналы: идет очистка процессов`);
                 this.signalBuffer.push(...signals);
@@ -1714,13 +1712,14 @@ export class MevLoadBalancer {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `НАЧАЛО ОБРАБОТКИ ${signals.length} MEV сигналов`);
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `=====================================================`);
 
+            // Увеличиваем счетчик обработанных сигналов
             this.stats.processedSignals += signals.length;
 
-            // Проверяем все сигналы на валидность
+            // Шаг 1: Проверяем все сигналы на валидность
             const validSignals = signals.filter(signal => {
                 const {tokenAddress, meteoraPool} = signal;
                 if (!tokenAddress || !meteoraPool) {
-                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Сигнал не содержит необходимых данных`);
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Сигнал не содержит необходимых данных (tokenAddress или meteoraPool)`);
                     this.stats.failedSignals++;
                     return false;
                 }
@@ -1731,18 +1730,15 @@ export class MevLoadBalancer {
                 throw new Error('Нет валидных сигналов для обработки');
             }
 
-            // Получаем конфигурации для новых сигналов
+            // Шаг 2: Получаем конфигурации для новых сигналов
             const processManageInfo: ProcessesToManage | undefined = this.getConfigs(validSignals);
             if (!processManageInfo) {
                 throw new Error('Не удалось получить информацию о конфигурациях процессов');
             }
 
-            // Сначала останавливаем процессы, которые нужно удалить
-            const processesToDelete: string[] = [...processManageInfo.processIdsToDelete];
-
-            // Для каждого процесса на удаление, останавливаем все его инстансы по signalId
+            // Шаг 3: Останавливаем и удаляем процессы, которые нужно удалить
             const deletedSignalIds = new Set<string>();
-            for (const processId of processesToDelete) {
+            for (const processId of processManageInfo.processIdsToDelete) {
                 const process = this.mevProcesses.get(processId);
                 if (process && process.signalId && !deletedSignalIds.has(process.signalId)) {
                     // Останавливаем все процессы этого сигнала
@@ -1754,10 +1750,10 @@ export class MevLoadBalancer {
                 }
             }
 
-            // Получаем все активные signalIds после удаления
+            // Шаг 4: Получаем все активные signalIds после удаления
             const activeSignalIds = this.getActiveSignalIds();
 
-            // Добавляем новые signalIds
+            // Шаг 5: Добавляем новые signalIds
             const newSignalIds: string[] = [];
             const newConfigs: Map<string, ProcessConfig> = new Map();
 
@@ -1769,16 +1765,18 @@ export class MevLoadBalancer {
                 }
             }
 
-            // Объединяем существующие и новые signalIds
+            // Шаг 6: Объединяем существующие и новые signalIds
             const allSignalIds = [...activeSignalIds, ...newSignalIds];
 
-            // Рассчитываем оптимальное распределение инстансов и задержек
+            // Шаг 7: Рассчитываем оптимальное распределение инстансов и задержек
             const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
-            const MAX_REQUESTS_PER_PROCESS_1MS = 350; // 350 запросов/с при задержке 1 мс
 
-            // Рассчитываем, сколько инстансов можем выделить на каждый сигнал
-            const totalProcessesAvailable = Math.floor(TOTAL_REQUESTS_PER_SECOND / MAX_REQUESTS_PER_PROCESS_1MS);
-            const instancesPerSignal = Math.max(1, Math.floor(totalProcessesAvailable / allSignalIds.length));
+            // Определяем базовое количество инстансов, исходя из количества доступных запросов
+            // при задержке 0 мс (самой эффективной)
+            const totalOptimalProcesses = Math.floor(TOTAL_REQUESTS_PER_SECOND / this.DELAY_PERFORMANCE[0]);
+
+            // Рассчитываем, сколько инстансов можем выделить на каждый сигнал (минимум 1)
+            const instancesPerSignal = Math.max(1, Math.floor(totalOptimalProcesses / allSignalIds.length));
 
             // Общее количество процессов, которые будут запущены
             const totalProcessesToLaunch = instancesPerSignal * allSignalIds.length;
@@ -1786,18 +1784,23 @@ export class MevLoadBalancer {
             // Рассчитываем оптимальные задержки для всех процессов
             const delays = this.calculateOptimalDelays(totalProcessesToLaunch, TOTAL_REQUESTS_PER_SECOND);
 
+            // Рассчитываем суммарную производительность
+            const expectedPerformance = delays.reduce((total, delay) => total + this.DELAY_PERFORMANCE[delay], 0);
+            const performancePercent = (expectedPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
+
             logger.info(
                 logger.LOG_MODULES.MEV_LOAD_BALANCER,
                 `Оптимизация: ${allSignalIds.length} сигналов, ${instancesPerSignal} инстансов на сигнал, ` +
-                `всего процессов: ${totalProcessesToLaunch}, задержки: ${JSON.stringify(this.countDelays(delays))}`
+                `всего процессов: ${totalProcessesToLaunch}, ожидаемая производительность: ${expectedPerformance} req/s ` +
+                `(${performancePercent}% от доступных ${TOTAL_REQUESTS_PER_SECOND} req/s)`
             );
 
-            // Останавливаем все существующие процессы для перераспределения
+            // Шаг 8: Останавливаем все существующие процессы для перераспределения
             for (const signalId of activeSignalIds) {
                 await this.stopAllProcessesBySignalId(signalId);
             }
 
-            // Запускаем все процессы с новыми задержками
+            // Шаг 9: Запускаем все процессы с новыми задержками
             let delayIndex = 0;
             const newProcesses: string[] = [];
             const signalInstances: Map<string, string[]> = new Map();
@@ -1833,7 +1836,7 @@ export class MevLoadBalancer {
                 return instanceIds;
             };
 
-            // Запускаем существующие сигналы
+            // Шаг 10: Запускаем существующие сигналы
             for (const signalId of activeSignalIds) {
                 const processes = this.getProcessesBySignalId(signalId);
                 if (processes.length > 0) {
@@ -1843,23 +1846,30 @@ export class MevLoadBalancer {
                 }
             }
 
-            // Запускаем новые сигналы
+            // Шаг 11: Запускаем новые сигналы
             for (const signalId of newSignalIds) {
                 const config = newConfigs.get(signalId)!;
                 const instanceIds = await launchProcessesForSignal(signalId, config);
                 signalInstances.set(signalId, instanceIds);
             }
 
-            // Обновляем статистику
+            // Шаг 12: Обновляем статистику и отправляем уведомления
             this.stats.totalMevActions += validSignals.length;
             this.stats.successfulSignals += validSignals.length;
+
+            // Вычисляем реальную производительность запущенных процессов
+            const actualProcesses = newProcesses.map(id => this.mevProcesses.get(id))
+                .filter(p => p !== undefined);
+            const actualDelays = actualProcesses.map(p => p!.config!.process_delay || 0);
+            const actualPerformance = actualDelays.reduce((total, delay) => total + this.DELAY_PERFORMANCE[delay], 0);
+            const actualPercent = (actualPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
 
             // Отправляем уведомление в Telegram
             if (this.settings.notifyTelegram) {
                 // Информация о распределении задержек
-                const delayBreakdown = this.countDelays(delays);
+                const delayBreakdown = this.countDelays(actualDelays);
                 const delayLines = Object.entries(delayBreakdown)
-                    .map(([delay, count]) => `- ${count} процессов с задержкой ${delay}мс`)
+                    .map(([delay, count]) => `- ${count} процессов с задержкой ${delay}мс (${this.DELAY_PERFORMANCE[delay]} req/s)`)
                     .join('\n');
 
                 // Информация о сигналах и инстансах
@@ -1870,7 +1880,7 @@ export class MevLoadBalancer {
 
                         // Собираем информацию о задержках для этого сигнала
                         const instanceDelays = instanceIds
-                            .map(id => this.mevProcesses.get(id)?.config?.process_delay || '?')
+                            .map(id => this.mevProcesses.get(id)?.config?.process_delay || 0)
                             .reduce((acc, delay) => {
                                 acc[delay] = (acc[delay] || 0) + 1;
                                 return acc;
@@ -1889,7 +1899,8 @@ export class MevLoadBalancer {
                     `✅ Результаты перераспределения ресурсов:\n` +
                     `- Всего активных сигналов: ${allSignalIds.length}\n` +
                     `- Инстансов на сигнал: ${instancesPerSignal}\n` +
-                    `- Всего запущено процессов: ${delayIndex}\n\n` +
+                    `- Всего запущено процессов: ${newProcesses.length}\n` +
+                    `- Суммарная производительность: ${actualPerformance} из ${TOTAL_REQUESTS_PER_SECOND} req/s (${actualPercent}%)\n\n` +
                     `📊 Распределение задержек:\n${delayLines}\n\n` +
                     `🔄 Активные сигналы:\n${signalLines}`;
 
@@ -1900,8 +1911,13 @@ export class MevLoadBalancer {
                 success: true,
                 totalSignals: allSignalIds.length,
                 instancesPerSignal,
-                totalProcesses: delayIndex,
-                delays: this.countDelays(delays)
+                totalProcesses: newProcesses.length,
+                delays: this.countDelays(actualDelays),
+                performance: {
+                    actual: actualPerformance,
+                    total: TOTAL_REQUESTS_PER_SECOND,
+                    percent: actualPercent
+                }
             };
         } catch (error) {
             logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при обработке MEV сигналов:', error);
