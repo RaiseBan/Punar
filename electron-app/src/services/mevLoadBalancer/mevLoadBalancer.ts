@@ -120,6 +120,8 @@ export class MevLoadBalancer {
             tokenAddress: mevProcess.tokenAddress,
             meteoraPools: meteoraPools,
             pumpSwapPool: mevProcess.pumpSwapPool,
+            type: mevProcess.config.type,
+            raydiumPool: mevProcess.config.raydiumPool,
             main_rpc: mevProcess.config.main_rpc,
             useJito: mevProcess.config.useJito,
             jito_lower_bound: mevProcess.config.jito_lower_bound,
@@ -243,7 +245,9 @@ export class MevLoadBalancer {
             } else {
                 groupPoolsByToken.set(signal.tokenAddress, {
                     meteora: [signal.meteoraPool],
-                    pump: signal.pumpSwapPool
+                    pump: signal.pumpSwapPool,
+                    raydium: signal.raydiumPool,
+                    type: signal.type
                 })
             }
         }
@@ -321,7 +325,7 @@ export class MevLoadBalancer {
                         })
                         console.log(`MET 2: ${formatUsage(meteoraUsageForToken)}`);
 
-                        configsToAdd.push(structConfig(this, token, [tookPool], pools.pump));
+                        configsToAdd.push(structConfig(this, token, [tookPool], pools.pump, pools.raydium, pools.type));
                         poolHasPlaced = true;
                         skipShift = false;
                         break;
@@ -352,7 +356,7 @@ export class MevLoadBalancer {
                             configsToDelete.push(processId);
                         }
                         console.log("BABY: ", pairInfo);
-                        configsToAdd.push(structConfig(this, token, [...pairInfo.activePools], pools.pump));
+                        configsToAdd.push(structConfig(this, token, [...pairInfo.activePools], pools.pump, pools.raydium, pools.type));
 
                         meteoraUsageForToken.pairs.delete(processId);
                         meteoraUsageForToken.pairs.set(
@@ -397,7 +401,7 @@ export class MevLoadBalancer {
                         } else if (poolsDecrementable.length === 0) {
                             console.log(`MET 1: ${formatUsage(meteoraUsageForToken)}`);
 
-                            configsToAdd.push(structConfig(this, token, [tookPool], pools.pump));
+                            configsToAdd.push(structConfig(this, token, [tookPool], pools.pump, pools.raydium, pools.type));
                             meteoraUsageForToken.pairs.set(
                                 this.generateProcessId(
                                     token,
@@ -449,13 +453,8 @@ export class MevLoadBalancer {
         }
     }
 
-    /**
-     * Добавляет MEV сигнал в буфер для последующей обработки
-     * @param {Object} signal - Данные сигнала (tokenAddress, meteoraPool, pumpSwapPool)
-     * @param {string} sourceProcessId - ID процесса, от которого получен сигнал
-     * @returns {Object} - Результат добавления в буфер
-     */
-    addSignalToBuffer(signal, sourceProcessId) {
+
+    addSignalToBuffer(signal: Signal, sourceProcessId: string) {
         try {
             if (!this.isActive) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Балансировщик неактивен, сигнал игнорируется');
@@ -993,18 +992,21 @@ export class MevLoadBalancer {
         if (type === RAYDIUM_TYPE.V4) {
             mevConfig = {
                 ...mevProcess.config,
-                v4: pool
+                type: "v4",
+                raydiumPool: pool
             }
         } else if (type === RAYDIUM_TYPE.CLMM) {
             mevConfig = {
                 ...mevProcess.config,
-                clmm: pool
+                type: "clmm",
+                raydiumPool: pool
             }
 
         } else if (type === RAYDIUM_TYPE.CPMM) {
             mevConfig = {
                 ...mevProcess.config,
-                cpmm: pool
+                type: "cpmm",
+                raydiumPool: pool
             }
         }
         const response = await this.stopProcess(processId, false);
@@ -1327,12 +1329,8 @@ export class MevLoadBalancer {
         }
     }
 
-    /**
-     * Анализирует лог на наличие MEV сигнала
-     * @param {string} logMessage - Сообщение лога
-     * @returns {Object|null} - Объект с данными о сигнале или null, если сигнал не обнаружен
-     */
-    parseLogForMevSignal(logMessage) {
+
+    parseLogForMevSignal(logMessage: string) {
         try {
             // Проверяем, содержит ли сообщение MEV сигнал
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка на наличие '[PERFORM_MEV_ACTION]' в логе`);
@@ -1360,12 +1358,8 @@ export class MevLoadBalancer {
         }
     }
 
-    /**
-     * Извлекает данные о токене и пуле из текста сигнала
-     * @param {string} logMessage - Сообщение с сигналом
-     * @returns {Object|null} - Объект с данными сигнала или null при ошибке парсинга
-     */
-    extractSignalDataFromText(logMessage) {
+
+    extractSignalDataFromText(logMessage: string) {
         try {
             // Находим содержимое между [PERFORM_MEV_ACTION] и [END]
             const startMarker = '[PERFORM_MEV_ACTION]';
@@ -1417,24 +1411,49 @@ export class MevLoadBalancer {
             const tokenAddress = parts[0];
             const meteoraPool = parts[1];
 
-            // Извлекаем опциональный третий параметр (пул pumpSwap), если он есть
-            const pumpSwapPool = parts.length > 2 ? parts[2] : null;
+            // Создаем результат
+            const result: any = {
+                tokenAddress,
+                meteoraPool,
+                timestamp: Date.now()
+            };
 
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `После обработки: tokenAddress="${tokenAddress}", meteoraPool="${meteoraPool}", pumpSwapPool="${pumpSwapPool || 'не указан'}"`);
+            // Обрабатываем новый формат (4 параметра)
+            if (parts.length >= 4) {
+                const poolAddress = parts[2];
+                const poolType = parts[3];
+
+                // Определяем, к какому типу пула относится адрес (Raydium или PumpSwap)
+                if (poolType.toLowerCase().includes('pumpswap')) {
+                    result.pumpSwapPool = poolAddress;
+                } else {
+                    result.raydiumPool = poolAddress;
+                }
+
+                // Добавляем тип пула
+                result.type = poolType;
+
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                    `Успешно извлечены данные: Токен=${tokenAddress}, MeteoraPуул=${meteoraPool}, ` +
+                    `${result.pumpSwapPool ? 'PumpSwap' : 'Raydium'}=${poolAddress}, Тип=${poolType}`);
+            }
+            // Обрабатываем старый формат для обратной совместимости (3 параметра, где третий - пул pumpSwap)
+            else if (parts.length === 3 && parts[2]) {
+                result.pumpSwapPool = parts[2];
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                    `Успешно извлечены данные (старый формат): Токен=${tokenAddress}, ` +
+                    `Пул=${meteoraPool}, PumpSwap=${parts[2]}`);
+            } else {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                    `Успешно извлечены данные: Токен=${tokenAddress}, Пул=${meteoraPool}`);
+            }
 
             if (!tokenAddress || !meteoraPool) {
                 logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Не удалось извлечь токен или пул: ${tokenAddress} ${meteoraPool}`);
                 return null;
             }
 
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Успешно извлечены данные: Токен=${tokenAddress}, Пул=${meteoraPool}, PumpSwap=${pumpSwapPool || 'не указан'}`);
-
-            return {
-                tokenAddress,
-                meteoraPool,
-                pumpSwapPool,
-                timestamp: Date.now()
-            };
+            return result;
         } catch (error) {
             logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при извлечении данных из сигнала:', error);
             return null;
@@ -1472,12 +1491,11 @@ export class MevLoadBalancer {
                            type: RAYDIUM_TYPE
     ): Promise<string | undefined> {
 
-        let procConfig: ProcessConfig;
-        if (type === RAYDIUM_TYPE.V4) {
-            procConfig = {
+        let procConfig: ProcessConfig = {
                 tokenAddress: token,
                 meteoraPools: meteoraPools,
-                v4: rayPool,
+                raydiumPool: rayPool,
+                type: type,
                 main_rpc: this.userSettings.mainRpc,
                 useJito: true,
                 jito_lower_bound: Number(this.userSettings.jito_lower_bound),
@@ -1485,32 +1503,6 @@ export class MevLoadBalancer {
                 process_delay: 5,
                 task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
             }
-        } else if (type === RAYDIUM_TYPE.CLMM) {
-            procConfig = {
-                tokenAddress: token,
-                meteoraPools: meteoraPools,
-                clmm: rayPool,
-                main_rpc: this.userSettings.mainRpc,
-                useJito: true,
-                jito_lower_bound: Number(this.userSettings.jito_lower_bound),
-                jito_upper_bound: Number(this.userSettings.jito_upper_bound),
-                process_delay: 5,
-                task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
-            }
-
-        } else if (type === RAYDIUM_TYPE.CPMM) {
-            procConfig = {
-                tokenAddress: token,
-                meteoraPools: meteoraPools,
-                cpmm: rayPool,
-                main_rpc: this.userSettings.mainRpc,
-                useJito: true,
-                jito_lower_bound: Number(this.userSettings.jito_lower_bound),
-                jito_upper_bound: Number(this.userSettings.jito_upper_bound),
-                process_delay: 5,
-                task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
-            }
-        }
         return await this.startMevProcess(procConfig, {
             isRestart: true,
             initialCreationTime: Date.now()
@@ -1904,13 +1896,8 @@ export class MevLoadBalancer {
         return Array.from(this.tokenReleaseProcesses.keys());
     }
 
-    /**
-     * Обрабатывает MEV сигнал из внешнего источника
-     * @param {Object} signal - Данные сигнала (tokenAddress, meteoraPool, pumpSwapPool)
-     * @param {string} sourceId - ID источника сигнала (например, 'telegram')
-     * @returns {Object} - Результат добавления сигнала в буфер
-     */
-    handleExternalMevSignal(signal, sourceId = 'external') {
+
+    handleExternalMevSignal(signal: Signal, sourceId = 'external') {
         try {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Получен внешний MEV сигнал от ${sourceId}: ${JSON.stringify(signal)}`);
 

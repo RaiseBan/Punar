@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { getGlobalConfigDirectory } from '../utils/wallet';
 import logger from './loggerService';
-import {MevProcess, RAYDIUM_TYPE} from "../types/types";
+import {MevProcess, RAYDIUM_TYPE, Signal} from "../types/types";
 
 // Интерфейсы для типизации
 
@@ -1841,26 +1841,66 @@ class TelegramBotService {
             }
         });
 
-        // Команда для добавления MEV сигнала
         this.registerCommand('mev_add_signal', async (chatId, args) => {
-            if (!args || args.length < 2) {
-                this.sendMessage(chatId, '❌ Неверный формат команды. Использование: \n/mev_add_signal <token_address> <meteora_pool> [pumpswap_pool]');
+            if (!args || args.length < 3) {
+                this.sendMessage(chatId, '❌ Неверный формат команды. Использование: \n/mev_add_signal <token_address> <["meteoraPool1", "meteoraPool2"]> <pump/ray pool> <type>\ntypes: [clmm | cpmm | v4 | pumpswap]');
                 return;
             }
 
-            const tokenAddress = args[0];
-            const meteoraPool = args[1];
-            const pumpSwapPool = args.length > 2 ? args[2] : null;
+            const tokenAddress = args[0]?.trim();
+            const meteoraPoolsStr = args[1]?.trim();
+            const targetPool = args[2]?.trim();
+            const poolType = args.length > 3 ? args[3]?.toLowerCase() : null;
+
+            if (!tokenAddress || !meteoraPoolsStr || !targetPool || !poolType) {
+                this.sendMessage(chatId, '❌ Не хватает обязательных аргументов');
+                return;
+            }
+
+            // Проверка типа пула, если указан
+            if (poolType) {
+                const validTypes = ["clmm", "cpmm", "v4", "pumpswap"];
+                if (!validTypes.includes(poolType)) {
+                    this.sendMessage(chatId, `❌ Неверный тип пула. Допустимые значения: ${validTypes.join(', ')}`);
+                    return;
+                }
+            }
 
             try {
-                logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, `[TG Bot] Добавление MEV сигнала: ${tokenAddress}, ${meteoraPool}${pumpSwapPool ? ', ' + pumpSwapPool : ''}`);
-
-                const signal: MevSignal = {
-                    tokenAddress,
-                    meteoraPool,
-                    pumpSwapPool,
-                    timestamp: Date.now()
+                // Парсим массив Meteora pools
+                const parseMeteoraPools = (str: string): string[] => {
+                    try {
+                        const cleanStr = str.replace(/^\[|\]$/g, '').replace(/"/g, '');
+                        return cleanStr.split(',').map(p => p.trim()).filter(p => p);
+                    } catch (e) {
+                        throw new Error(`Неверный формат списка Meteora пулов. Используйте: ["pool1","pool2"]`);
+                    }
                 };
+
+                const meteoraPools = parseMeteoraPools(meteoraPoolsStr);
+                if (meteoraPools.length === 0) {
+                    throw new Error("Список Meteora пулов не может быть пустым");
+                }
+
+                logger.info(
+                    logger.LOG_MODULES.TELEGRAM_SERVICE,
+                    `[TG Bot] Добавление MEV сигнала: ${tokenAddress}, Meteora pools: ${meteoraPools.join(', ')}, Target pool: ${targetPool}${poolType ? ', тип: ' + poolType : ''}`
+                );
+
+                // Создаем сигнал с учетом типа пула
+                const signal: Signal = {
+                    tokenAddress: tokenAddress,
+                    meteoraPool: meteoraPools[0], // Для обратной совместимости оставляем первый пул
+                    timestamp: Date.now(),
+                    type: poolType || '' // Добавляем тип пула
+                };
+
+                // Определяем, куда сохранить адрес пула на основе типа
+                if (poolType === 'pumpswap') {
+                    signal.pumpSwapPool = targetPool;
+                } else {
+                    signal.raydiumPool = targetPool;
+                }
 
                 const result = mevLoadBalancer.handleExternalMevSignal(signal, 'telegram_' + chatId);
 
@@ -1924,16 +1964,23 @@ class TelegramBotService {
 
             const token = args[0]?.trim();
             const meteoraPoolsStr = args[1]?.trim();
-            const rayPool = args[2]?.trim(); // Теперь одиночное значение, не массив
-            const typeInput = args[3]?.toUpperCase();
+            const rayPool = args[2]?.trim();
+            const typeInput = args[3]?.toLowerCase(); // Преобразуем к нижнему регистру для проверки
 
             if (!token || !meteoraPoolsStr || !rayPool || !typeInput) {
                 this.sendMessage(chatId, '❌ Не хватает обязательных аргументов');
                 return;
             }
 
+            // Проверяем тип - только базовая проверка на допустимые значения
+            const validTypes = ["clmm", "cpmm", "v4"];
+            if (!validTypes.includes(typeInput)) {
+                this.sendMessage(chatId, `❌ Неверный тип пула. Допустимые значения: ${validTypes.join(', ')}`);
+                return;
+            }
+
             try {
-                // Парсим массив Meteora pools (как было)
+                // Парсим массив Meteora pools
                 const parseMeteoraPools = (str: string): string[] => {
                     try {
                         const cleanStr = str.replace(/^\[|\]$/g, '').replace(/"/g, '');
@@ -1944,20 +1991,13 @@ class TelegramBotService {
                 };
 
                 const meteoraPools = parseMeteoraPools(meteoraPoolsStr);
-
                 if (meteoraPools.length === 0) {
                     throw new Error("Список Meteora пулов не может быть пустым");
                 }
 
-                // Проверяем Ray pool (простая строка)
+                // Проверяем Ray pool
                 if (!rayPool) {
                     throw new Error("Ray pool не может быть пустым");
-                }
-
-                // Проверяем тип
-                const validTypes = Object.values(RAYDIUM_TYPE);
-                if (!validTypes.includes(typeInput as RAYDIUM_TYPE)) {
-                    throw new Error(`Неверный тип пула. Допустимые значения: ${validTypes.join(', ')}`);
                 }
 
                 logger.info(
@@ -1965,11 +2005,12 @@ class TelegramBotService {
                     `[TG Bot] Добавление Raydium сигнала: ${token}, Meteora pools: ${meteoraPools.join(', ')}, Ray pool: ${rayPool}, тип: ${typeInput}`
                 );
 
+                // Передаем тип как строку, без приведения к enum
                 const result = await mevLoadBalancer.addRaydiumSignal(
                     token,
                     meteoraPools,
-                    rayPool, // Теперь передаем одиночное значение
-                    typeInput as RAYDIUM_TYPE
+                    rayPool,
+                    typeInput // Теперь просто передаем строку
                 );
 
                 if (result) {

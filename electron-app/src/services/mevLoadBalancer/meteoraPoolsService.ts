@@ -2,11 +2,20 @@ import {PairInfo, Pools, ProcessConfig, ProcessesToManage, SignalWithMeta, Usage
 import {MevLoadBalancer} from "./mevLoadBalancer";
 import logger from "../loggerService";
 
-export function structConfig<T extends MevLoadBalancer>(target: T, tokenAddress: string, meteoraPools: string[], pumpSwapPool: string): ProcessConfig{
+export function structConfig<T extends MevLoadBalancer>(target: T,
+                                                        tokenAddress: string,
+                                                        meteoraPools: string[],
+                                                        pumpSwapPool?: string,
+                                                        raydiumPool?: string,
+                                                        type?: string
+): ProcessConfig{
+
     return {
         tokenAddress,
         meteoraPools: meteoraPools,
-        pumpSwapPool,
+        pumpSwapPool: pumpSwapPool ? pumpSwapPool : undefined,
+        raydiumPool: raydiumPool ? raydiumPool : undefined,
+        type: type,
         main_rpc: target.userSettings?.mainRpc || "https://api.mainnet-beta.solana.com",
         useJito: true,
         jito_lower_bound:  Number(target.userSettings!.jito_lower_bound), // deprecated

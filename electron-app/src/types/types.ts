@@ -41,17 +41,17 @@ export type UsageMeteoraPools = {
     hasFreeSingleSlot: boolean;
 };
 
-export type Signal = {
+export interface Signal {
     tokenAddress: string;
     meteoraPool: string;
-    pumpSwapPool: string;
+    pumpSwapPool?: string;
+    raydiumPool?: string;
+
+    type: string;
+
     timestamp: number;
 }
-export type SignalWithMeta = {
-    tokenAddress: string;
-    meteoraPool: string;
-    pumpSwapPool: string;
-    timestamp: number;
+export interface SignalWithMeta extends Signal{
     sourceProcessId: string;
     addedTime: number;
 }
@@ -60,11 +60,9 @@ export type ProcessConfig = {
     tokenAddress: string;
     meteoraPools: string[];
     pumpSwapPool?: string;
-
+    raydiumPool?: string;
     // Raydium pools:
-    clmm?: string;
-    cpmm?: string;
-    v4?: string;
+    type: string;
 
     main_rpc: string;
     useJito: boolean;
@@ -75,7 +73,9 @@ export type ProcessConfig = {
 }
 export type Pools = {
     meteora: string[];
-    pump: string;
+    pump?: string;
+    raydium?: string;
+    type?: string;
 }
 
 export type ProcessesToManage = {

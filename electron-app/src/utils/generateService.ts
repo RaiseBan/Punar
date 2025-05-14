@@ -237,24 +237,23 @@ export async function generateSimpleMevConfig(
         const jito_upper_bound = Number(userSetting.jito_upper_bound) || 200000;
 
         // Формируем массив пулов
-        const pumpPool = pumpSwapPool ? [pumpSwapPool] : [];
 
         // Формируем конфигурацию для mint_config_list
         const mint_config_list = [
             {
                 mint: tokenAddress,
-                pump_pool_list: pumpPool,
+                pump_pool_list: pumpSwapPool ? [pumpSwapPool] : [],
                 meteora_dlmm_pool_list: meteoraPools,
                 lookup_table_accounts: [],
                 process_delay: processDelay,
                 // This is the Raydium V4 AMM Pools
-                raydium_pool_list: config.v4 ? [config.v4] : [],
+                raydium_pool_list: config.type === "v4" ? [config.raydiumPool] : [],
 
                 // This is the Raydium CPMM Pools
-                raydium_cp_pool_list: config.cpmm ? [config.cpmm] : [],
+                raydium_cp_pool_list: config.type === "cpmm" ? [config.raydiumPool] : [],
 
                 // This is the Raydium CLMM(Centralized Liquidity) Pools
-                raydium_clmm_pool_list: config.clmm ? [config.clmm] : []
+                raydium_clmm_pool_list: config.type === "clmm" ? [config.raydiumPool] : []
             }
         ];
 
