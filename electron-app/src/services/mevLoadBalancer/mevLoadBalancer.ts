@@ -251,211 +251,172 @@ export class MevLoadBalancer {
     }
 
 
+    /**
+     * Группирует пулы по токенам и создает конфигурации для процессов
+     * @param validSignals - Валидные сигналы для обработки
+     * @returns Конфигурации для добавления и идентификаторы процессов для удаления
+     */
     getConfigs(validSignals: SignalWithMeta[]): ProcessesToManage | undefined {
+        try {
+            // Группируем пулы по токенам
+            const groupPoolsByToken = new Map<string, Pools>();
+            const configsToAdd: ProcessConfig[] = [];
+            const configsToDelete: string[] = [];
 
-        const groupPoolsByToken: Map<string, Pools> = new Map<string, Pools>();
-        let configsToAdd: ProcessConfig[] = [];
-        let configsToDelete: string[] = [];
-        for (const signal of validSignals) {
-            if (groupPoolsByToken.has(signal.tokenAddress)) {
-                const pools: Pools = groupPoolsByToken.get(signal.tokenAddress)!;
-                pools.meteora.push(signal.meteoraPool)
-            } else {
-                groupPoolsByToken.set(signal.tokenAddress, {
-                    meteora: [signal.meteoraPool],
-                    pump: signal.pumpSwapPool,
-                    raydium: signal.raydiumPool,
-                    type: signal.type
-                })
-            }
-        }
-        for (const [token, pools] of groupPoolsByToken.entries()) {
-            console.log(`token pools:`)
-            console.log(token, pools)
-            let meteoraUsageForToken: UsageMeteoraPools | undefined = this.getMeteoraUsagePoolsByToken(token);
-            if (!meteoraUsageForToken) {
-                this.setMeteoraUsagePoolsByToken(token, {
-                    pairs: new Map<string, PairInfo>(),
-                    hasFreeSingleSlot: false
-                })
-                meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
-                if (!meteoraUsageForToken) {
-                    return;
-                }
-            }
-
-            // кол-во пулов токена для добавления
-            let poolsDecrementable = [...pools.meteora];
-            console.log("usage: ", formatUsage(meteoraUsageForToken));
-            console.log(meteoraUsageForToken.pairs)
-
-            let skipShift = false;
-            let itemBuffer: string = "";
-            console.log(`length: ${poolsDecrementable.length}`)
-            while (poolsDecrementable.length !== 0) {
-                console.log(1)
-                let poolHasPlaced = false;
-                let tookPool: string | undefined;
-                if (!skipShift) {
-                    console.log(2)
-                    tookPool = poolsDecrementable.shift();
+            // Шаг 1: Группируем все пулы по токенам
+            for (const signal of validSignals) {
+                if (groupPoolsByToken.has(signal.tokenAddress)) {
+                    // Если токен уже есть, добавляем новый пул Meteora
+                    const pools = groupPoolsByToken.get(signal.tokenAddress)!;
+                    // Добавляем только уникальные пулы
+                    if (!pools.meteora.includes(signal.meteoraPool)) {
+                        pools.meteora.push(signal.meteoraPool);
+                    }
                 } else {
-                    console.log(3)
-                    tookPool = itemBuffer;
+                    // Создаем новую запись для токена
+                    groupPoolsByToken.set(signal.tokenAddress, {
+                        meteora: [signal.meteoraPool],
+                        pump: signal.pumpSwapPool,
+                        raydium: signal.raydiumPool,
+                        type: signal.type
+                    });
                 }
+            }
 
-                if (!tookPool) {
-                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `watafuk`);
-                    return;
-                }
-                if (meteoraUsageForToken.pairs.size === 0) {
+            // Шаг 2: Для каждого токена распределяем пулы по процессам
+            for (const [token, pools] of groupPoolsByToken.entries()) {
+                logger.info(
+                    logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                    `Распределение пулов для токена ${token}: ${pools.meteora.length} пулов Meteora`
+                );
 
-
-                    if (poolsDecrementable.length > 0) {
-                        console.log(`BIG BOY 000`)
-                        // не нужно добавлять, потому что еще есть элементы
-                        // configsToAdd.push(structConfig(this, token, [...pairInfo.activePools, tookPool], pools.pump));
-                        meteoraUsageForToken.pairs.set(
-                            this.generateProcessId(
-                                token,
-                                [tookPool],
-                                this.userSettings?.jito_lower_bound!),
-                            {
-                                activePools: [tookPool],
-                                isNew: true
-                            }
+                // Получаем или создаем структуру для отслеживания пулов токена
+                let meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
+                if (!meteoraUsageForToken) {
+                    this.setMeteoraUsagePoolsByToken(token, {
+                        pairs: new Map<string, PairInfo>(),
+                        hasFreeSingleSlot: false
+                    });
+                    meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
+                    if (!meteoraUsageForToken) {
+                        logger.error(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Не удалось создать структуру распределения пулов для токена ${token}`
                         );
-                        console.log(meteoraUsageForToken.pairs)
-                        console.log(`-----------`)
-                        poolHasPlaced = true;
-                        skipShift = false;
-                        continue
-                    } else if (poolsDecrementable.length === 0) {
-                        console.log(`MET 1: ${formatUsage(meteoraUsageForToken)}`);
-                        this.setMeteoraUsagePoolsByToken(token, {
-                            pairs: new Map<string, PairInfo>([
-                                [this.generateProcessId(token, [tookPool], this.userSettings.jito_lower_bound), {
-                                    activePools: [tookPool],
-                                    isNew: false
-                                }]
-                            ]),
-                            hasFreeSingleSlot: false
-                        })
-                        console.log(`MET 2: ${formatUsage(meteoraUsageForToken)}`);
+                        return undefined;
+                    }
+                }
 
-                        configsToAdd.push(structConfig(this, token, [tookPool], pools.pump, pools.raydium, pools.type));
-                        poolHasPlaced = true;
-                        skipShift = false;
-                        break;
+                // Копируем список пулов, чтобы не изменять оригинал
+                const poolsToDistribute = [...pools.meteora];
 
-                        // meteoraUsageForToken.pairs.set(
-                        //     this.generateProcessId(
-                        //         token,
-                        //         [tookPool],
-                        //         this.userSettings?.jito_lower_bound!),
-                        //     {
-                        //         activePools: [tookPool],
-                        //         isNew: false
-                        //     }
-                        // );
-
-                        // break;
+                // Шаг 2.1: Сначала пытаемся добавить пулы к существующим процессам с одним пулом
+                for (const [processId, pairInfo] of meteoraUsageForToken.pairs.entries()) {
+                    // Пропускаем stub и процессы, которые уже имеют 2 пула
+                    if (processId === "stub" || pairInfo.activePools.length >= 2) {
+                        continue;
                     }
 
+                    // Если у процесса 1 пул и есть пулы для распределения
+                    if (pairInfo.activePools.length === 1 && poolsToDistribute.length > 0) {
+                        // Берем первый пул из списка
+                        const poolToAdd = poolsToDistribute.shift()!;
 
-                }
+                        // Добавляем пул к существующему процессу
+                        pairInfo.activePools.push(poolToAdd);
 
-                for (const [processId, pairInfo] of meteoraUsageForToken.pairs.entries()) {
-                    console.log(`entries: ${processId} ${pairInfo}`)
-                    if (pairInfo.activePools.length === 1) { // пока что сделали, что максиамльное кол-во пулов метеоры в одном конфиге - 2
-                        console.log(1)
-                        pairInfo.activePools.push(tookPool);
+                        // Если процесс не новый, помечаем его для удаления и последующего пересоздания
                         if (!pairInfo.isNew) {
                             configsToDelete.push(processId);
                         }
-                        console.log("BABY: ", pairInfo);
-                        configsToAdd.push(structConfig(this, token, [...pairInfo.activePools], pools.pump, pools.raydium, pools.type));
 
+                        // Создаем новую конфигурацию с обновленным списком пулов
+                        configsToAdd.push(structConfig(
+                            this,
+                            token,
+                            [...pairInfo.activePools],
+                            pools.pump,
+                            pools.raydium,
+                            pools.type
+                        ));
+
+                        // Обновляем запись в структуре с новым ID процесса
                         meteoraUsageForToken.pairs.delete(processId);
-                        meteoraUsageForToken.pairs.set(
-                            this.generateProcessId(
-                                token,
-                                [...pairInfo.activePools],
-                                this.userSettings?.jito_lower_bound!),
-                            {
-                                activePools: [...pairInfo.activePools],
-                                // isModified: false, // потому что этот процесс уже не будет изменяться при этом проходе добавления
-                                isNew: false
-                            }
+                        const newProcessId = this.generateProcessId(
+                            token,
+                            [...pairInfo.activePools],
+                            this.userSettings?.jito_lower_bound!
                         );
-                        poolHasPlaced = true;
-                        skipShift = false;
-                        break;
-                    }
-                    if (pairInfo.activePools.length === 0) {
-                        console.log("salam")
-                        if (poolsDecrementable.length > 0) {
-                            console.log(`BIG BOY 000`)
-                            pairInfo.activePools.push(tookPool);
-                            // не нужно добавлять, потому что еще есть элементы
-                            // configsToAdd.push(structConfig(this, token, [...pairInfo.activePools, tookPool], pools.pump));
-                            console.log(pairInfo.activePools);
-                            meteoraUsageForToken.pairs.delete(processId);
-                            meteoraUsageForToken.pairs.set(
-                                this.generateProcessId(
-                                    token,
-                                    [...pairInfo.activePools],
-                                    this.userSettings?.jito_lower_bound!),
-                                {
-                                    activePools: [...pairInfo.activePools],
-                                    isNew: true
-                                }
-                            );
-                            console.log(meteoraUsageForToken.pairs)
-                            console.log(`-----------`)
-                            poolHasPlaced = true;
-                            skipShift = false;
-                            break;
-                        } else if (poolsDecrementable.length === 0) {
-                            console.log(`MET 1: ${formatUsage(meteoraUsageForToken)}`);
 
-                            configsToAdd.push(structConfig(this, token, [tookPool], pools.pump, pools.raydium, pools.type));
-                            meteoraUsageForToken.pairs.set(
-                                this.generateProcessId(
-                                    token,
-                                    [tookPool],
-                                    this.userSettings?.jito_lower_bound!),
-                                {
-                                    activePools: [...pairInfo.activePools],
-                                    isNew: false
-                                }
-                            );
-                            poolHasPlaced = true;
-                            skipShift = false;
-                            break;
-                        }
+                        meteoraUsageForToken.pairs.set(newProcessId, {
+                            activePools: [...pairInfo.activePools],
+                            isNew: false
+                        });
 
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Добавлен пул ${poolToAdd} к существующему процессу ${processId} -> ${newProcessId}`
+                        );
                     }
                 }
 
+                // Шаг 2.2: Создаем новые процессы для оставшихся пулов
+                while (poolsToDistribute.length > 0) {
+                    // Определяем, сколько пулов добавить в процесс (1 или 2)
+                    const poolsForProcess: string[] = [];
 
-                if (!poolHasPlaced) {
-                    meteoraUsageForToken.pairs.set("stub", {
-                        activePools: [],
-                        isNew: true
-                    })
-                    skipShift = true
-                    itemBuffer = tookPool;
+                    // Добавляем первый пул
+                    poolsForProcess.push(poolsToDistribute.shift()!);
+
+                    // Если есть еще пулы, добавляем второй
+                    if (poolsToDistribute.length > 0) {
+                        poolsForProcess.push(poolsToDistribute.shift()!);
+                    }
+
+                    // Создаем новую конфигурацию
+                    configsToAdd.push(structConfig(
+                        this,
+                        token,
+                        poolsForProcess,
+                        pools.pump,
+                        pools.raydium,
+                        pools.type
+                    ));
+
+                    // Добавляем запись в структуру
+                    const processId = this.generateProcessId(
+                        token,
+                        poolsForProcess,
+                        this.userSettings?.jito_lower_bound!
+                    );
+
+                    meteoraUsageForToken.pairs.set(processId, {
+                        activePools: poolsForProcess,
+                        isNew: false
+                    });
+
+                    logger.info(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Создан новый процесс ${processId} с ${poolsForProcess.length} пулами: ${poolsForProcess.join(', ')}`
+                    );
                 }
-
             }
 
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Результат распределения пулов: ${configsToAdd.length} процессов для создания, ${configsToDelete.length} для удаления`
+            );
 
-        }
-        console.log(JSON.stringify(this.meteoraPoolsUsage, null, 2));
-        return {
-            configsToAdd: configsToAdd,
-            processIdsToDelete: configsToDelete
+            return {
+                configsToAdd,
+                processIdsToDelete: configsToDelete
+            };
+        } catch (error) {
+            logger.error(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Ошибка при распределении пулов: ${error.message}`
+            );
+            return undefined;
         }
     }
 
