@@ -1541,103 +1541,162 @@ export class MevLoadBalancer {
 
 
     /**
-     * Рассчитывает оптимальное распределение задержек для максимального использования доступных ресурсов
-     * @param totalProcesses - Общее количество процессов
-     * @param requestsPerSecond - Максимальное количество запросов в секунду
-     * @returns Массив задержек для каждого процесса
-     */
-    /**
-     * Рассчитывает оптимальное распределение задержек для максимального использования доступных ресурсов
-     */
-    /**
      * Рассчитывает оптимальное количество процессов и их задержки для каждого сигнала
      * @param signalCount - Количество сигналов
      * @param totalRequestsPerSecond - Максимальное количество запросов в секунду
-     * @returns Объект с количеством инстансов и массивом задержек
+     * @returns Объект с информацией о распределении ресурсов по сигналам
      */
-    calculateOptimalProcessDistribution(signalCount: number, totalRequestsPerSecond: number): {
-        instancesPerSignal: number;
+    calculateOptimalProcessDistribution(
+        signalIds: string[],
+        totalRequestsPerSecond: number
+    ): {
+        signalDistribution: Map<string, { delays: number[], totalPerformance: number }>;
         totalProcesses: number;
-        delays: number[];
+        avgInstancesPerSignal: number;
+        expectedPerformance: number;
     } {
         // Если нет сигналов, возвращаем пустой результат
-        if (signalCount <= 0) {
-            return { instancesPerSignal: 0, totalProcesses: 0, delays: [] };
+        if (signalIds.length === 0) {
+            return {
+                signalDistribution: new Map(),
+                totalProcesses: 0,
+                avgInstancesPerSignal: 0,
+                expectedPerformance: 0
+            };
         }
 
-        // Расчет максимального количества процессов, которые могут быть запущены
-        // Начинаем с процессов с задержкой 0 мс (самые эффективные)
-        let remainingCapacity = totalRequestsPerSecond;
-        let processDelays: number[] = [];
-
-        // Жадный алгоритм: добавляем процессы, начиная с самой низкой задержки
-        const delays = [0, 1, 2, 3, 4, 5]; // Доступные задержки в порядке предпочтения
-
-        // Продолжаем добавлять процессы, пока есть достаточно ресурсов
-        let currentDelayIndex = 0;
-
-        while (remainingCapacity > 0 && currentDelayIndex < delays.length) {
-            const currentDelay = delays[currentDelayIndex];
-            const reqsPerProcess = this.DELAY_PERFORMANCE[currentDelay] || 160; // Минимальное значение по умолчанию
-
-            // Если текущая задержка использует слишком много ресурсов, переходим к следующей
-            if (reqsPerProcess > remainingCapacity) {
-                currentDelayIndex++;
-                continue;
-            }
-
-            // Добавляем процесс с текущей задержкой
-            processDelays.push(currentDelay);
-            remainingCapacity -= reqsPerProcess;
-        }
-
-        // Количество созданных процессов
-        const totalProcesses = processDelays.length;
-
-        // Распределяем процессы между сигналами равномерно (минимум 1 на сигнал)
-        let instancesPerSignal = Math.max(1, Math.floor(totalProcesses / signalCount));
-
-        // Если сигналов больше, чем процессов, каждый сигнал получает 1 процесс
-        if (signalCount > totalProcesses) {
-            instancesPerSignal = 1;
-        }
-
-        // Корректируем общее количество процессов, чтобы вместить все сигналы
-        const finalTotalProcesses = instancesPerSignal * signalCount;
-
-        // Если нам нужно больше процессов, чем рассчитано, просто дублируем существующие
-        // с более высокими задержками
-        if (finalTotalProcesses > totalProcesses) {
-            // Дублируем задержки, предпочитая более высокие
-            while (processDelays.length < finalTotalProcesses) {
-                // Если у нас закончились задержки, начинаем добавлять с самой высокой
-                const delayToAdd = (delays.length - 1);
-                processDelays.push(delayToAdd);
-            }
-        }
-
-        // Если нам нужно меньше процессов, выбираем самые эффективные
-        else if (finalTotalProcesses < totalProcesses) {
-            processDelays = processDelays.slice(0, finalTotalProcesses);
-        }
-
-        // Рассчитываем итоговую производительность
-        const totalPerformance = processDelays.reduce((sum, delay) => sum + this.DELAY_PERFORMANCE[delay], 0);
-        const utilizationPercent = (totalPerformance / totalRequestsPerSecond * 100).toFixed(1);
+        // Запас производительности для каждого сигнала (делим поровну)
+        const requestsPerSignal = Math.floor(totalRequestsPerSecond / signalIds.length);
 
         logger.info(
             logger.LOG_MODULES.MEV_LOAD_BALANCER,
-            `Оптимизация: ${signalCount} сигналов, ${instancesPerSignal} инстансов на сигнал, ` +
-            `всего ${finalTotalProcesses} процессов, ожидаемая производительность ${totalPerformance} req/s ` +
+            `Распределение ресурсов: ${signalIds.length} сигналов, ${requestsPerSignal} req/s на сигнал (всего ${totalRequestsPerSecond} req/s)`
+        );
+
+        // Доступные задержки и их производительность (отсортированы от самой эффективной к наименее эффективной)
+        const delayOptions = Object.entries(this.DELAY_PERFORMANCE)
+            .map(([delay, performance]) => ({ delay: parseInt(delay), performance }))
+            .sort((a, b) => b.performance - a.performance);
+
+        // Функция для рассчета оптимальной комбинации процессов для заданного запаса производительности
+        const calculateProcessesForCapacity = (targetCapacity: number): number[] => {
+            const selectedDelays: number[] = [];
+            let remainingCapacity = targetCapacity;
+
+            // Жадный алгоритм - выбираем процессы с наибольшей производительностью
+            for (const option of delayOptions) {
+                // Пока можем добавлять процессы с текущей задержкой - добавляем
+                while (option.performance <= remainingCapacity) {
+                    selectedDelays.push(option.delay);
+                    remainingCapacity -= option.performance;
+                }
+            }
+
+            // Если у нас осталась неиспользованная ёмкость, но она недостаточна для самого "лёгкого" процесса,
+            // но нам всё равно нужен хотя бы один процесс:
+            if (selectedDelays.length === 0) {
+                // Найдем вариант с минимальной производительностью
+                const leastPerformantOption = delayOptions[delayOptions.length - 1];
+                selectedDelays.push(leastPerformantOption.delay);
+            }
+
+            return selectedDelays;
+        };
+
+        // Рассчитываем оптимальные комбинации для каждого сигнала и сохраняем их в Map
+        const signalDistribution = new Map<string, { delays: number[], totalPerformance: number }>();
+
+        for (const signalId of signalIds) {
+            const delays = calculateProcessesForCapacity(requestsPerSignal);
+            const totalPerformance = delays.reduce(
+                (sum, delay) => sum + (this.DELAY_PERFORMANCE[delay] || 0), 0
+            );
+
+            signalDistribution.set(signalId, { delays, totalPerformance });
+        }
+
+        // Если у нас осталась неиспользованная ёмкость из-за округления,
+        // распределим её между сигналами с наименьшей производительностью
+        const totalAllocated = Array.from(signalDistribution.values())
+            .reduce((total, { totalPerformance }) => total + totalPerformance, 0);
+
+        const remainingCapacity = totalRequestsPerSecond - totalAllocated;
+
+        if (remainingCapacity > 0) {
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Осталась неиспользованная мощность: ${remainingCapacity} req/s. Попытка распределения.`
+            );
+
+            // Находим наиболее эффективный процесс, который можно добавить с оставшейся мощностью
+            for (const option of delayOptions) {
+                if (option.performance <= remainingCapacity) {
+                    // Ищем сигнал с наименьшей производительностью
+                    let minSignalId = signalIds[0];
+                    let minPerformance = Number.MAX_SAFE_INTEGER;
+
+                    for (const [signalId, { totalPerformance }] of signalDistribution.entries()) {
+                        if (totalPerformance < minPerformance) {
+                            minPerformance = totalPerformance;
+                            minSignalId = signalId;
+                        }
+                    }
+
+                    // Добавляем процесс к сигналу с наименьшей производительностью
+                    const signalInfo = signalDistribution.get(minSignalId)!;
+                    signalInfo.delays.push(option.delay);
+                    signalInfo.totalPerformance += option.performance;
+
+                    break;
+                }
+            }
+        }
+
+        // Собираем статистику для обратной совместимости и логирования
+        let totalProcesses = 0;
+        let expectedPerformance = 0;
+
+        for (const { delays, totalPerformance } of signalDistribution.values()) {
+            totalProcesses += delays.length;
+            expectedPerformance += totalPerformance;
+        }
+
+        const avgInstancesPerSignal = Math.ceil(totalProcesses / signalIds.length);
+        const utilizationPercent = (expectedPerformance / totalRequestsPerSecond * 100).toFixed(1);
+
+        // Логируем итоговую информацию о распределении
+        logger.info(
+            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+            `Оптимизация: ${signalIds.length} сигналов, в среднем ${avgInstancesPerSignal} инстансов на сигнал, ` +
+            `всего ${totalProcesses} процессов, ожидаемая производительность ${expectedPerformance} req/s ` +
             `(${utilizationPercent}% от ${totalRequestsPerSecond} req/s)`
         );
 
+        // Детализация по сигналам для отладки
+        for (const [signalId, { delays, totalPerformance }] of signalDistribution.entries()) {
+            const delayBreakdown = delays.reduce((acc, delay) => {
+                acc[delay] = (acc[delay] || 0) + 1;
+                return acc;
+            }, {});
+
+            const delayInfo = Object.entries(delayBreakdown)
+                .map(([delay, count]) => `${count}x${delay}мс`)
+                .join(', ');
+
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Сигнал ${signalId.substring(0, 8)}...: ${delays.length} процессов, ${totalPerformance} req/s, задержки: ${delayInfo}`
+            );
+        }
+
         return {
-            instancesPerSignal,
-            totalProcesses: finalTotalProcesses,
-            delays: processDelays
+            signalDistribution,
+            totalProcesses,
+            avgInstancesPerSignal,
+            expectedPerformance
         };
     }
+
     /**
      * Генерирует уникальный ID для сигнала на основе токена и пулов
      */
@@ -1723,7 +1782,18 @@ export class MevLoadBalancer {
                 throw new Error('Не удалось получить информацию о конфигурациях процессов');
             }
 
-            // Шаг 3: Останавливаем и удаляем процессы, которые нужно удалить
+            // Шаг 3: Сохраняем конфигурации существующих сигналов ДО остановки процессов
+            const existingConfigs = new Map<string, ProcessConfig>();
+            const activeSignalIds = this.getActiveSignalIds();
+
+            for (const signalId of activeSignalIds) {
+                const processes = this.getProcessesBySignalId(signalId);
+                if (processes.length > 0 && processes[0].config) {
+                    existingConfigs.set(signalId, processes[0].config);
+                }
+            }
+
+            // Шаг 4: Останавливаем и удаляем процессы, которые нужно удалить
             const deletedSignalIds = new Set<string>();
             for (const processId of processManageInfo.processIdsToDelete) {
                 const process = this.mevProcesses.get(processId);
@@ -1737,115 +1807,86 @@ export class MevLoadBalancer {
                 }
             }
 
-            // Шаг 4: Получаем все активные signalIds после удаления
-            const activeSignalIds = this.getActiveSignalIds();
+            // Шаг 5: Обновляем список активных сигналов после удаления
+            const updatedActiveSignalIds = activeSignalIds.filter(id => !deletedSignalIds.has(id));
 
-            // Шаг 5: Добавляем новые signalIds
+            // Шаг 6: Добавляем новые signalIds
             const newSignalIds: string[] = [];
-            const newConfigs: Map<string, ProcessConfig> = new Map();
+            const newConfigs = new Map<string, ProcessConfig>();
 
             for (const config of processManageInfo.configsToAdd) {
                 const signalId = this.generateSignalId(config.tokenAddress, config.meteoraPools);
-                if (!newSignalIds.includes(signalId) && !activeSignalIds.includes(signalId)) {
+                if (!newSignalIds.includes(signalId) && !updatedActiveSignalIds.includes(signalId)) {
                     newSignalIds.push(signalId);
                     newConfigs.set(signalId, config);
                 }
             }
 
-            // Шаг 6: Объединяем существующие и новые signalIds
-            const allSignalIds = [...activeSignalIds, ...newSignalIds];
+            // Шаг 7: Объединяем существующие и новые signalIds
+            const allSignalIds = [...updatedActiveSignalIds, ...newSignalIds];
 
-            // Шаг 7: Рассчитываем оптимальное распределение инстансов и задержек
+            // Шаг 8: Рассчитываем оптимальное распределение инстансов и задержек
             const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
 
-// Рассчитываем оптимальное распределение процессов
+            // Используем новую функцию с распределением по сигналам
             const distribution = this.calculateOptimalProcessDistribution(
-                allSignalIds.length,
+                allSignalIds,
                 TOTAL_REQUESTS_PER_SECOND
             );
 
-            const instancesPerSignal = distribution.instancesPerSignal;
-            const totalProcessesToLaunch = distribution.totalProcesses;
-            const delays = distribution.delays;
-
-// Рассчитываем суммарную производительность
-            const expectedPerformance = delays.reduce((total, delay) => total + this.DELAY_PERFORMANCE[delay], 0);
+            const signalDistribution = distribution.signalDistribution;
+            const expectedPerformance = distribution.expectedPerformance;
             const performancePercent = (expectedPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
 
-            logger.info(
-                logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                `Оптимизация: ${allSignalIds.length} сигналов, ${instancesPerSignal} инстансов на сигнал, ` +
-                `всего процессов: ${totalProcessesToLaunch}, ожидаемая производительность: ${expectedPerformance} req/s ` +
-                `(${performancePercent}% от доступных ${TOTAL_REQUESTS_PER_SECOND} req/s)`
-            );
-
-            // Шаг 8: Останавливаем все существующие процессы для перераспределения
-            for (const signalId of activeSignalIds) {
-                await this.stopAllProcessesBySignalId(signalId);
+            // Шаг 9: Останавливаем все существующие процессы для перераспределения
+            for (const signalId of updatedActiveSignalIds) {
+                await this.stopAllProcessesBySignalId(signalId, false);
             }
 
-            // Шаг 9: Запускаем все процессы с новыми задержками
-            let delayIndex = 0;
+            // Шаг 10: Запускаем все процессы с новыми задержками
             const newProcesses: string[] = [];
-            const signalInstances: Map<string, string[]> = new Map();
+            const signalInstances = new Map<string, string[]>();
 
-            // Функция для запуска процессов с оптимальными задержками
-            const launchProcessesForSignal = async (signalId: string, config: ProcessConfig) => {
-                const instanceIds: string[] = [];
+            // Шаг 11: Запускаем существующие сигналы с новыми задержками
+            for (const signalId of updatedActiveSignalIds) {
+                const config = existingConfigs.get(signalId);
+                if (!config) continue;
 
-                for (let i = 0; i < instancesPerSignal; i++) {
-                    if (delayIndex >= delays.length) break;
+                const signalConfig = signalDistribution.get(signalId);
+                if (!signalConfig) continue;
 
-                    const delay = delays[delayIndex++];
-                    const processConfig = { ...config, process_delay: delay };
-
-                    const processId = await this.startMevProcess(
-                        processConfig,
-                        {
-                            isRestart: false,
-                            instanceNumber: i,
-                            signalId: signalId
-                        }
-                    );
-
-                    if (processId) {
-                        instanceIds.push(processId);
-                        newProcesses.push(processId);
-                    }
-
-                    // Небольшая задержка между запусками
-                    await sleep(50);
-                }
-
-                return instanceIds;
-            };
-
-            // Шаг 10: Запускаем существующие сигналы
-            for (const signalId of activeSignalIds) {
-                const processes = this.getProcessesBySignalId(signalId);
-                if (processes.length > 0) {
-                    const config = processes[0].config!;
-                    const instanceIds = await launchProcessesForSignal(signalId, config);
-                    signalInstances.set(signalId, instanceIds);
-                }
-            }
-
-            // Шаг 11: Запускаем новые сигналы
-            for (const signalId of newSignalIds) {
-                const config = newConfigs.get(signalId)!;
-                const instanceIds = await launchProcessesForSignal(signalId, config);
+                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays);
                 signalInstances.set(signalId, instanceIds);
+                newProcesses.push(...instanceIds);
             }
 
-            // Шаг 12: Обновляем статистику и отправляем уведомления
+            // Шаг 12: Запускаем новые сигналы
+            for (const signalId of newSignalIds) {
+                const config = newConfigs.get(signalId);
+                if (!config) continue;
+
+                const signalConfig = signalDistribution.get(signalId);
+                if (!signalConfig) continue;
+
+                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays);
+                signalInstances.set(signalId, instanceIds);
+                newProcesses.push(...instanceIds);
+            }
+
+            // Шаг 13: Обновляем статистику и отправляем уведомления
             this.stats.totalMevActions += validSignals.length;
             this.stats.successfulSignals += validSignals.length;
 
             // Вычисляем реальную производительность запущенных процессов
-            const actualProcesses = newProcesses.map(id => this.mevProcesses.get(id))
+            const actualProcesses = newProcesses
+                .map(id => this.mevProcesses.get(id))
                 .filter(p => p !== undefined);
+
             const actualDelays = actualProcesses.map(p => p!.config!.process_delay || 0);
-            const actualPerformance = actualDelays.reduce((total, delay) => total + this.DELAY_PERFORMANCE[delay], 0);
+            const actualPerformance = actualDelays.reduce(
+                (total, delay) => total + (this.DELAY_PERFORMANCE[delay] || 0), 0
+            );
+
             const actualPercent = (actualPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
 
             // Отправляем уведомление в Telegram
@@ -1859,8 +1900,12 @@ export class MevLoadBalancer {
                 // Информация о сигналах и инстансах
                 const signalLines = Array.from(signalInstances.entries())
                     .map(([signalId, instanceIds]) => {
-                        const process = this.getProcessesBySignalId(signalId)[0];
-                        if (!process) return null;
+                        // Получаем процесс для информации о токене
+                        const processInfo = instanceIds.length > 0
+                            ? this.mevProcesses.get(instanceIds[0])
+                            : null;
+
+                        if (!processInfo) return null;
 
                         // Собираем информацию о задержках для этого сигнала
                         const instanceDelays = instanceIds
@@ -1874,7 +1919,7 @@ export class MevLoadBalancer {
                             .map(([delay, count]) => `${count}x${delay}мс`)
                             .join(', ');
 
-                        return `- ${process.tokenAddress.substring(0, 8)}... (${instanceIds.length} инстансов: ${delayInfo})`;
+                        return `- ${processInfo.tokenAddress.substring(0, 8)}... (${instanceIds.length} инстансов: ${delayInfo})`;
                     })
                     .filter(line => line !== null)
                     .join('\n');
@@ -1882,7 +1927,7 @@ export class MevLoadBalancer {
                 const message = `🚀 Обработано ${validSignals.length} MEV сигналов\n\n` +
                     `✅ Результаты перераспределения ресурсов:\n` +
                     `- Всего активных сигналов: ${allSignalIds.length}\n` +
-                    `- Инстансов на сигнал: ${instancesPerSignal}\n` +
+                    `- Средн. инстансов на сигнал: ${distribution.avgInstancesPerSignal}\n` +
                     `- Всего запущено процессов: ${newProcesses.length}\n` +
                     `- Суммарная производительность: ${actualPerformance} из ${TOTAL_REQUESTS_PER_SECOND} req/s (${actualPercent}%)\n\n` +
                     `📊 Распределение задержек:\n${delayLines}\n\n` +
@@ -1894,7 +1939,7 @@ export class MevLoadBalancer {
             return {
                 success: true,
                 totalSignals: allSignalIds.length,
-                instancesPerSignal,
+                avgInstancesPerSignal: distribution.avgInstancesPerSignal,
                 totalProcesses: newProcesses.length,
                 delays: this.countDelays(actualDelays),
                 performance: {
@@ -1916,6 +1961,45 @@ export class MevLoadBalancer {
             return { success: false, error: error.message };
         }
     }
+
+    /**
+     * Вспомогательная функция для запуска процессов с заданными задержками
+     * @param signalId - ID сигнала
+     * @param config - Конфигурация процесса
+     * @param delays - Массив задержек для запуска процессов
+     * @returns Массив идентификаторов запущенных процессов
+     */
+    async launchProcessesForSignal(
+        signalId: string,
+        config: ProcessConfig,
+        delays: number[]
+    ): Promise<string[]> {
+        const instanceIds: string[] = [];
+
+        for (let i = 0; i < delays.length; i++) {
+            const delay = delays[i];
+            const processConfig = { ...config, process_delay: delay };
+
+            const processId = await this.startMevProcess(
+                processConfig,
+                {
+                    isRestart: false,
+                    instanceNumber: i,
+                    signalId: signalId
+                }
+            );
+
+            if (processId) {
+                instanceIds.push(processId);
+            }
+
+            // Небольшая задержка между запусками
+            await sleep(50);
+        }
+
+        return instanceIds;
+    }
+
 
     /**
      * Подсчитывает количество процессов с каждой задержкой
@@ -1942,15 +2026,10 @@ export class MevLoadBalancer {
         }
     }
 
-    /**
-     * Перезапускает все активные процессы с новыми оптимальными задержками
-     * @returns Результат перезапуска процессов
-     */
+
     /**
      * Перезапускает все процессы с оптимальными задержками
-     */
-    /**
-     * Перезапускает все процессы с оптимальными задержками
+     * после удаления некоторых процессов или сигналов
      */
     async restartProcesses() {
         try {
@@ -1963,105 +2042,123 @@ export class MevLoadBalancer {
                 };
             }
 
-            // Рассчитываем оптимальное распределение
+            // Сохраняем информацию о существующих процессах перед их остановкой
+            const existingConfigs = new Map<string, ProcessConfig>();
+
+            for (const signalId of activeSignalIds) {
+                const processes = this.getProcessesBySignalId(signalId);
+                if (processes.length > 0 && processes[0].config) {
+                    existingConfigs.set(signalId, processes[0].config);
+                }
+            }
+
+            // Рассчитываем оптимальное распределение ресурсов
             const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
 
-            // Используем новый алгоритм для оптимального распределения процессов
+            // Используем новую функцию с распределением по сигналам
             const distribution = this.calculateOptimalProcessDistribution(
-                activeSignalIds.length,
+                activeSignalIds,
                 TOTAL_REQUESTS_PER_SECOND
             );
 
-            const instancesPerSignal = distribution.instancesPerSignal;
-            const totalProcessesToLaunch = distribution.totalProcesses;
-            const delays = distribution.delays;
-
-            // Рассчитываем суммарную производительность
-            const expectedPerformance = delays.reduce((total, delay) => total + this.DELAY_PERFORMANCE[delay], 0);
+            const signalDistribution = distribution.signalDistribution;
+            const expectedPerformance = distribution.expectedPerformance;
             const performancePercent = (expectedPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
 
             logger.info(
                 logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                `Перезапуск процессов: ${activeSignalIds.length} сигналов, ${instancesPerSignal} инстансов на сигнал, ` +
-                `всего ${totalProcessesToLaunch} процессов, ожидаемая производительность: ${expectedPerformance} req/s ` +
+                `Перезапуск процессов: ${activeSignalIds.length} сигналов, в среднем ${distribution.avgInstancesPerSignal} инстансов на сигнал, ` +
+                `всего ${distribution.totalProcesses} процессов, ожидаемая производительность: ${expectedPerformance} req/s ` +
                 `(${performancePercent}% от доступных ${TOTAL_REQUESTS_PER_SECOND} req/s)`
             );
 
-            // Останавливаем все процессы
+            // Останавливаем все существующие процессы
             for (const signalId of activeSignalIds) {
-                await this.stopAllProcessesBySignalId(signalId);
+                await this.stopAllProcessesBySignalId(signalId, false);
             }
 
-            // Запускаем процессы с новыми задержками
-            let delayIndex = 0;
+            // Запускаем процессы с новыми оптимальными задержками
             const newProcesses: string[] = [];
-            const signalInstances: Map<string, string[]> = new Map();
+            const signalInstances = new Map<string, { ids: string[], delayInfo: string }>();
 
             // Запускаем процессы для каждого сигнала
             for (const signalId of activeSignalIds) {
-                const processes = this.getProcessesBySignalId(signalId);
-                if (processes.length === 0) continue;
-
-                // Берем первый процесс как шаблон
-                const baseConfig = processes[0].config!;
-                const instanceIds: string[] = [];
-
-                // Запускаем инстансы с оптимальными задержками
-                for (let i = 0; i < instancesPerSignal; i++) {
-                    if (delayIndex >= delays.length) break;
-
-                    const delay = delays[delayIndex++];
-                    const processConfig = { ...baseConfig, process_delay: delay };
-
-                    const processId = await this.startMevProcess(
-                        processConfig,
-                        {
-                            isRestart: true,
-                            initialCreationTime: processes[0].initialCreationTime,
-                            instanceNumber: i,
-                            signalId: signalId
-                        }
+                const config = existingConfigs.get(signalId);
+                if (!config) {
+                    logger.warn(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Конфигурация для сигнала ${signalId} не найдена, пропускаем перезапуск`
                     );
-
-                    if (processId) {
-                        instanceIds.push(processId);
-                        newProcesses.push(processId);
-                    }
-
-                    // Небольшая задержка между запусками
-                    await sleep(50);
+                    continue;
                 }
 
-                signalInstances.set(signalId, instanceIds);
+                const signalConfig = signalDistribution.get(signalId);
+                if (!signalConfig) {
+                    logger.warn(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Распределение для сигнала ${signalId} не найдено, пропускаем перезапуск`
+                    );
+                    continue;
+                }
+
+                // Запускаем процессы для этого сигнала
+                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays);
+
+                if (instanceIds.length > 0) {
+                    // Собираем информацию о задержках для этого сигнала
+                    const instanceDelays = instanceIds
+                        .map(id => this.mevProcesses.get(id)?.config?.process_delay || 0)
+                        .reduce((acc, delay) => {
+                            acc[delay] = (acc[delay] || 0) + 1;
+                            return acc;
+                        }, {});
+
+                    const delayInfo = Object.entries(instanceDelays)
+                        .map(([delay, count]) => `${count}x${delay}мс`)
+                        .join(', ');
+
+                    signalInstances.set(signalId, { ids: instanceIds, delayInfo });
+                    newProcesses.push(...instanceIds);
+
+                    logger.info(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Перезапущен сигнал ${signalId}: ${instanceIds.length} процессов с задержками: ${delayInfo}`
+                    );
+                } else {
+                    logger.warn(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Не удалось запустить процессы для сигнала ${signalId}`
+                    );
+                }
             }
+
+            // Вычисляем реальную производительность запущенных процессов
+            const actualProcesses = newProcesses
+                .map(id => this.mevProcesses.get(id))
+                .filter(p => p !== undefined);
+
+            const actualDelays = actualProcesses.map(p => p!.config!.process_delay || 0);
+            const actualPerformance = actualDelays.reduce(
+                (total, delay) => total + (this.DELAY_PERFORMANCE[delay] || 0), 0
+            );
+
+            const actualPercent = (actualPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
 
             // Отправляем уведомление в Telegram
             if (this.settings.notifyTelegram) {
                 // Информация о распределении задержек
-                const delayBreakdown = this.countDelays(delays);
+                const delayBreakdown = this.countDelays(actualDelays);
                 const delayLines = Object.entries(delayBreakdown)
                     .map(([delay, count]) => `- ${count} процессов с задержкой ${delay}мс (${this.DELAY_PERFORMANCE[delay]} req/s)`)
                     .join('\n');
 
                 // Информация о сигналах
                 const signalLines = Array.from(signalInstances.entries())
-                    .map(([signalId, instanceIds]) => {
-                        const process = this.getProcessesBySignalId(signalId)[0];
+                    .map(([signalId, { ids, delayInfo }]) => {
+                        const process = ids.length > 0 ? this.mevProcesses.get(ids[0]) : null;
                         if (!process) return null;
 
-                        // Собираем информацию о задержках для этого сигнала
-                        const instanceDelays = instanceIds
-                            .map(id => this.mevProcesses.get(id)?.config?.process_delay || '?')
-                            .reduce((acc, delay) => {
-                                acc[delay] = (acc[delay] || 0) + 1;
-                                return acc;
-                            }, {});
-
-                        const delayInfo = Object.entries(instanceDelays)
-                            .map(([delay, count]) => `${count}x${delay}мс`)
-                            .join(', ');
-
-                        return `- ${process.tokenAddress.substring(0, 8)}... (${instanceIds.length} инстансов: ${delayInfo})`;
+                        return `- ${process.tokenAddress.substring(0, 8)}... (${ids.length} инстансов: ${delayInfo})`;
                     })
                     .filter(line => line !== null)
                     .join('\n');
@@ -2070,9 +2167,9 @@ export class MevLoadBalancer {
                 const message = `🔄 Перезапуск MEV процессов\n\n` +
                     `✅ Новое распределение ресурсов:\n` +
                     `- Всего активных сигналов: ${activeSignalIds.length}\n` +
-                    `- Инстансов на сигнал: ${instancesPerSignal}\n` +
-                    `- Всего запущено процессов: ${delayIndex}\n` +
-                    `- Суммарная производительность: ${expectedPerformance} из ${TOTAL_REQUESTS_PER_SECOND} req/s (${performancePercent}%)\n\n` +
+                    `- Средн. инстансов на сигнал: ${distribution.avgInstancesPerSignal}\n` +
+                    `- Всего запущено процессов: ${newProcesses.length}\n` +
+                    `- Суммарная производительность: ${actualPerformance} из ${TOTAL_REQUESTS_PER_SECOND} req/s (${actualPercent}%)\n\n` +
                     `📊 Распределение задержек:\n${delayLines}\n\n` +
                     `🔄 Активные сигналы:\n${signalLines}`;
 
@@ -2082,13 +2179,13 @@ export class MevLoadBalancer {
             return {
                 success: true,
                 newProcesses,
-                totalProcesses: delayIndex,
+                totalProcesses: newProcesses.length,
                 performance: {
-                    actual: expectedPerformance,
+                    actual: actualPerformance,
                     total: TOTAL_REQUESTS_PER_SECOND,
-                    percent: performancePercent
+                    percent: actualPercent
                 },
-                delays: this.countDelays(delays)
+                delays: this.countDelays(actualDelays)
             };
         } catch (e) {
             logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при перезапуске процессов: ${e}`);
@@ -2100,7 +2197,7 @@ export class MevLoadBalancer {
     }
 
     /**
-     * Проверяет ликвидность пулов всех процессов и удаляет процессы с низкой ликвидностью
+     * Проверяет ликвидность пулов всех сигналов и удаляет сигналы с низкой ликвидностью
      */
     async checkAndCleanProcessesByLiquidity() {
         // Проверяем, что очистка уже не запущена и не идёт обработка сигналов
@@ -2118,88 +2215,210 @@ export class MevLoadBalancer {
             // Устанавливаем блокировку на время операции
             this.isCleaningProcesses = true;
 
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Начало проверки ликвидности пулов для ${this.mevProcesses.size} процессов`);
+            // Получаем все активные сигналы
+            const activeSignalIds = this.getActiveSignalIds();
 
-            // Текущее время для проверки возраста процессов
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Начало проверки ликвидности пулов для ${activeSignalIds.length} сигналов (${this.mevProcesses.size} процессов)`
+            );
+
+            // Текущее время для проверки возраста
             const currentTime = Date.now();
 
-            // Собираем процессы, которые нужно остановить
-            const processesToStop: any[] = [];
+            // Кэш результатов проверки пулов для избежания повторных проверок
+            const poolLiquidityCache = new Map<string, boolean>();
 
-            // Проходим по всем процессам и проверяем ликвидность их пулов
-            for (const [processId, processData] of this.mevProcesses.entries()) {
+            // Сигналы, которые нужно остановить
+            const signalsToStop: string[] = [];
+
+            // Информация о пулах, которые нужно удалить для каждого сигнала
+            const poolsToRemove = new Map<string, string[]>();
+
+            // Проверяем каждый сигнал
+            for (const signalId of activeSignalIds) {
                 try {
-                    const meteoraPools = processData.meteoraPools || processData.config?.meteoraPools;
+                    // Получаем все процессы этого сигнала
+                    const signalProcesses = this.getProcessesBySignalId(signalId);
 
-                    if (!meteoraPools) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для процесса ${processId}: пулы не найдены`);
+                    if (signalProcesses.length === 0) {
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для сигнала ${signalId}: процессы не найдены`);
                         continue;
                     }
 
-                    // Проверяем возраст процесса
-                    const processAge = currentTime - (processData.initialCreationTime || processData.startTime);
+                    // Берем первый процесс как репрезентативный для проверки
+                    const representativeProcess = signalProcesses[0];
+
+                    // Проверяем возраст сигнала
+                    const processAge = currentTime - (representativeProcess.initialCreationTime || representativeProcess.startTime);
                     if (processAge < this.settings.minProcessAgeForCleanup) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для молодого процесса ${processId}: возраст ${Math.floor(processAge / 1000 / 60)} минут < ${Math.floor(this.settings.minProcessAgeForCleanup / 1000 / 60)} минут`);
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Пропуск проверки для молодого сигнала ${signalId}: возраст ${Math.floor(processAge / 1000 / 60)} минут < ${Math.floor(this.settings.minProcessAgeForCleanup / 1000 / 60)} минут`
+                        );
                         continue;
                     }
 
-                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка ликвидности пулов ${meteoraPools} для процесса ${processId} (возраст: ${Math.floor(processAge / 1000 / 60)} минут)`);
+                    const meteoraPools = representativeProcess.meteoraPools || representativeProcess.config?.meteoraPools;
+                    if (!meteoraPools || meteoraPools.length === 0) {
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для сигнала ${signalId}: пулы не найдены`);
+                        continue;
+                    }
 
-                    // Проверяем ликвидность пула
-                    const hasEnoughLiquidity: CheckResult[] = await this.checkLiquidity(meteoraPools);
+                    logger.info(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Проверка ликвидности пулов для сигнала ${signalId} (${meteoraPools.length} пулов, возраст: ${Math.floor(processAge / 1000 / 60)} минут)`
+                    );
 
-                    // Если ликвидность ниже порогового значения, добавляем процесс в список на остановку
-                    const count = hasEnoughLiquidity.filter(item => item.verdict === false).length;
+                    // Проверяем ликвидность каждого пула с использованием кэша
+                    const checkResults: CheckResult[] = [];
 
-                    if (count === meteoraPools.length) {
-                        processesToStop.push(processId);
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} будет остановлен: не удолетворены условия check...`);
-                    } else if (count < meteoraPools.length && count !== 0) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `удаляем нерабочие пулы`);
-                        const deletePromises = hasEnoughLiquidity
-                            .filter(item => item.verdict === false)
-                            .map(item => this.deleteMeteoraPoolFromProcess(processId, item.pool));
-                        await Promise.all(deletePromises)
+                    for (const pool of meteoraPools) {
+                        // Проверяем, есть ли результат в кэше
+                        if (poolLiquidityCache.has(pool)) {
+                            const cachedVerdict = poolLiquidityCache.get(pool);
+                            checkResults.push({ pool, verdict: cachedVerdict! });
+                            logger.info(
+                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                `Используем кэшированный результат для пула ${pool}: ${cachedVerdict ? 'активен' : 'неактивен'}`
+                            );
+                        } else {
+                            // Проверяем ликвидность пула
+                            const [checkResult] = await this.checkLiquidity([pool]);
 
+                            // Кэшируем результат
+                            poolLiquidityCache.set(pool, checkResult.verdict);
 
-                    } else if (count === 0) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} продолжит работу: ликвидность пула достаточна`);
+                            checkResults.push(checkResult);
+                            logger.info(
+                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                `Проверка ликвидности пула ${pool}: ${checkResult.verdict ? 'активен' : 'неактивен'}`
+                            );
+                        }
+                    }
+
+                    // Анализируем результаты проверки
+                    const inactivePools = checkResults.filter(item => item.verdict === false).map(item => item.pool);
+                    const inactivePoolCount = inactivePools.length;
+
+                    if (inactivePoolCount === meteoraPools.length) {
+                        // Все пулы неактивны - останавливаем весь сигнал
+                        signalsToStop.push(signalId);
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Сигнал ${signalId} будет остановлен: все ${inactivePoolCount} пулов неактивны`
+                        );
+                    } else if (inactivePoolCount > 0) {
+                        // Часть пулов неактивна - удаляем только неактивные пулы
+                        poolsToRemove.set(signalId, inactivePools);
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `У сигнала ${signalId} удаляем ${inactivePoolCount} неактивных пулов из ${meteoraPools.length}`
+                        );
+                    } else {
+                        // Все пулы активны
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Сигнал ${signalId} продолжит работу: все ${meteoraPools.length} пулов активны`
+                        );
                     }
                 } catch (error) {
-                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при проверке ликвидности для процесса ${processId}:`, error);
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при проверке ликвидности для сигнала ${signalId}:`, error);
                 }
             }
 
-            // Если есть процессы для остановки, останавливаем их
-            if (processesToStop.length > 0) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Найдено ${processesToStop.length} процессов с низкой ликвидностью для остановки`);
+            // Обрабатываем сигналы с частично неактивными пулами
+            if (poolsToRemove.size > 0) {
+                logger.info(
+                    logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                    `Найдено ${poolsToRemove.size} сигналов с частично неактивными пулами`
+                );
+
+                for (const [signalId, inactivePools] of poolsToRemove.entries()) {
+                    try {
+                        // Получаем все процессы сигнала
+                        const processes = this.getProcessesBySignalId(signalId);
+                        if (processes.length === 0) continue;
+
+                        // Берем первый процесс для получения информации о сигнале
+                        const process = processes[0];
+                        const config = process.config;
+                        if (!config) continue;
+
+                        // Получаем все активные пулы (исключаем неактивные)
+                        const activePools = config.meteoraPools.filter(pool => !inactivePools.includes(pool));
+
+                        if (activePools.length === 0) {
+                            // Если после фильтрации не осталось активных пулов, останавливаем сигнал
+                            signalsToStop.push(signalId);
+                            logger.info(
+                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                `Сигнал ${signalId} будет остановлен: после удаления неактивных пулов не осталось активных`
+                            );
+                        } else {
+                            // Останавливаем все процессы сигнала
+                            await this.stopAllProcessesBySignalId(signalId, false);
+
+                            // Создаем новую конфигурацию только с активными пулами
+                            const updatedConfig = {
+                                ...config,
+                                meteoraPools: activePools
+                            };
+
+                            // Заново рассчитываем оптимальное распределение для этого сигнала
+                            const distribution = this.calculateOptimalProcessDistribution(
+                                [signalId],
+                                Number(this.userSettings?.requests_per_second) || 2000
+                            );
+
+                            const signalConfig = distribution.signalDistribution.get(signalId);
+                            if (!signalConfig) continue;
+
+                            // Запускаем процессы с новой конфигурацией и оптимальными задержками
+                            await this.launchProcessesForSignal(signalId, updatedConfig, signalConfig.delays);
+
+                            logger.info(
+                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                `Сигнал ${signalId} перезапущен с ${activePools.length} активными пулами (удалено ${inactivePools.length} неактивных пулов)`
+                            );
+                        }
+                    } catch (error) {
+                        logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при обработке частично неактивных пулов для сигнала ${signalId}:`, error);
+                    }
+                }
+            }
+
+            // Если есть сигналы для остановки, останавливаем их
+            if (signalsToStop.length > 0) {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Найдено ${signalsToStop.length} сигналов с низкой ликвидностью для остановки`);
 
                 // Уведомляем в Telegram о начале очистки
                 if (this.settings.notifyTelegram) {
                     telegramBotService.sendSystemNotification(
-                        `🧹 Начало очистки ${processesToStop.length} MEV процессов с низкой ликвидностью`
+                        `🧹 Начало очистки ${signalsToStop.length} MEV сигналов с низкой ликвидностью`
                     );
                 }
 
-                // Останавливаем все процессы, кроме последнего
-                for (let i = 0; i < processesToStop.length - 1; i++) {
-                    await this.stopProcess(processesToStop[i], false);
+                // Останавливаем все сигналы, кроме последнего
+                for (let i = 0; i < signalsToStop.length - 1; i++) {
+                    await this.stopAllProcessesBySignalId(signalsToStop[i], false);
                 }
 
-                // Останавливаем последний процесс с флагом restart=true
-                if (processesToStop.length > 0) {
-                    const lastProcessId = processesToStop[processesToStop.length - 1];
-                    await this.stopProcess(lastProcessId, true);
+                // Останавливаем последний сигнал с флагом restart=true для перезапуска оставшихся
+                if (signalsToStop.length > 0) {
+                    const lastSignalId = signalsToStop[signalsToStop.length - 1];
+                    await this.stopAllProcessesBySignalId(lastSignalId, true);
 
                     // Уведомляем об окончании процесса очистки
                     if (this.settings.notifyTelegram) {
                         telegramBotService.sendSystemNotification(
-                            `✅ Завершена очистка ${processesToStop.length} MEV процессов с низкой ликвидностью.\nЗапущен перерасчет и перезапуск оставшихся процессов.`
+                            `✅ Завершена очистка ${signalsToStop.length} MEV сигналов с низкой ликвидностью.\n` +
+                            `Запущен перерасчет и перезапуск оставшихся сигналов.`
                         );
                     }
                 }
             } else {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Процессы с низкой ликвидностью не найдены');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сигналы с низкой ликвидностью не найдены');
             }
         } catch (error) {
             logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при проверке и очистке процессов с низкой ликвидностью:', error);
