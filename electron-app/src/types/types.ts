@@ -9,6 +9,7 @@ export interface AppSettings {
     tensor_api_token?: string;
     bloxroute_api_token?: string;
 
+    lookupOwner?: string;
     // mev
     migration_wallet?: string;
     jito_lower_bound?: string;

@@ -810,6 +810,7 @@ export class MevLoadBalancer {
                 meteoraPools,
                 pumpSwapPool,
                 task_name: config.task_name || `MEV Process ${processId}`,
+                lookupOwner: this.userSettings.lookupOwner
             };
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск MEV процесса [signalId: ${signalId}, инстанс: ${instanceNumber}] с задержкой ${config.process_delay}мс: ${JSON.stringify(processConfig)}`);

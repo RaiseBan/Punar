@@ -12,7 +12,8 @@ export function getGlobalConfigDirectory(): string {
         return path.join(app.getPath("userData"), "globalConfigs");
     } else {
         // В девелоперском режиме сохраняем в текущей рабочей директории
-        return path.join(app.getPath("userData"), "globalConfigs");
+        // return path.join(app.getPath("userData"), "globalConfigs");
+        return path.join("C:\\Users\\user\\WebstormProjects\\Punar\\electron-app\\electron-data", "globalConfigs");
         // return path.join(__dirname, "../globalConfigs");
     }
 }

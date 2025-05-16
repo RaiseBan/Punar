@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import {getFilteredPairs, sortPairsByParameter} from "./solanaUtils";
+import {getFilteredPairs, sortPairsByParameter, updateIfNotExistsAndGet} from "./solanaUtils";
 import TOML from '@iarna/toml';
 import {PRIMARY_IP, METEORA_OWNER} from "./constants";
 
@@ -238,13 +238,35 @@ export async function generateSimpleMevConfig(
 
         // Формируем массив пулов
 
+        let lookupTables: string[] = [];
+        if (meteoraPools.length > 1) {
+            let accountToExtendLookup: string[] = [];
+
+            if (pumpSwapPool){
+                accountToExtendLookup.push(pumpSwapPool);
+            }else if (config.raydiumPool){
+                accountToExtendLookup.push(config.raydiumPool);
+            }else if (config.dammMeteoraPool){
+                accountToExtendLookup.push(config.dammMeteoraPool);
+            }
+
+            accountToExtendLookup.push(...meteoraPools);
+
+            lookupTables = await updateIfNotExistsAndGet(main_rpc, accountToExtendLookup, config.lookupOwner);
+        }
+
+
+
+
+
+
         // Формируем конфигурацию для mint_config_list
         const mint_config_list = [
             {
                 mint: tokenAddress,
                 pump_pool_list: pumpSwapPool ? [pumpSwapPool] : [],
                 meteora_dlmm_pool_list: meteoraPools,
-                lookup_table_accounts: [],
+                lookup_table_accounts: lookupTables,
                 process_delay: processDelay,
                 // This is the Raydium V4 AMM Pools
                 raydium_pool_list: config.type === "v4" ? [config.raydiumPool] : [],

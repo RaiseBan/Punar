@@ -13,6 +13,8 @@ interface AppSettings {
     tensor_api_token?: string;
     bloxroute_api_token?: string;
 
+
+    lookupOwner?: string;
     // mev
     migration_wallet?: string;
     jito_lower_bound?: string;
@@ -130,6 +132,23 @@ export default function Settings() {
                         fullWidth
                         value={settings.additionalRpc || ""}
                         onChange={handleChange('additionalRpc')}
+                        margin="normal"
+                    />
+
+                </Typography>
+
+
+            </Box>
+
+            {/* Lookup tables */}
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                    Lookup tables
+                    <TextField
+                        label="Lookup owner"
+                        fullWidth
+                        value={settings.lookupOwner || ""}
+                        onChange={handleChange('lookupOwner')}
                         margin="normal"
                     />
 

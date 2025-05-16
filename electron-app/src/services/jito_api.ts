@@ -20,3 +20,5 @@ export async function sendJitoTransaction(transaction: string) {
     );
     console.log("Отправлено успешно");
 }
+
+
