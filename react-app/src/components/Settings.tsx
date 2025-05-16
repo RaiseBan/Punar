@@ -13,6 +13,8 @@ interface AppSettings {
     tensor_api_token?: string;
     bloxroute_api_token?: string;
 
+
+    lookupOwner?: string;
     // mev
     migration_wallet?: string;
     jito_lower_bound?: string;
@@ -25,6 +27,8 @@ interface AppSettings {
     primary_ip?: string;
     requests_per_second?: number;
     token_release_port?: number;
+
+    delay_between_nodes?: string;
 
     min_process_age_for_cleanup?: string;
     processes_check_interval?: string;
@@ -138,6 +142,23 @@ export default function Settings() {
 
             </Box>
 
+            {/* Lookup tables */}
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                    Lookup tables
+                    <TextField
+                        label="Lookup owner"
+                        fullWidth
+                        value={settings.lookupOwner || ""}
+                        onChange={handleChange('lookupOwner')}
+                        margin="normal"
+                    />
+
+                </Typography>
+
+
+            </Box>
+
             <Box sx={{ mb: 4 }}>
                 <Typography variant="h6" gutterBottom>
                     Migrate token settings
@@ -201,6 +222,14 @@ export default function Settings() {
                         fullWidth
                         value={settings.requests_per_second || ""}
                         onChange={handleChange('requests_per_second')}
+                        margin="normal"
+                    />
+
+                    <TextField
+                        label="Delay_nodes"
+                        fullWidth
+                        value={settings.delay_between_nodes || ""}
+                        onChange={handleChange('delay_between_nodes')}
                         margin="normal"
                     />
 

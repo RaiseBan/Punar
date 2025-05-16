@@ -6,11 +6,12 @@ import {
 import { retrieveDASAssetFields } from "./heliusDasApi";
 import {
     Connection, Keypair, PublicKey, Transaction, ComputeBudgetProgram,
-    SendTransactionError, SystemProgram, AddressLookupTableProgram
+    SendTransactionError, SystemProgram, AddressLookupTableProgram, clusterApiUrl
 } from "@solana/web3.js";
 import * as bs58 from "bs58";
 import { saveLookupTables, getLookupTables } from "./fsHelper";
 import { sendJitoTransaction } from "../services/jito_api";
+import logger from "../services/loggerService";
 
 // Интерфейсы и типы
 interface DASAssetGroup {
@@ -117,8 +118,9 @@ export async function createLookupTable(rpcUrl: string, privateKey: string): Pro
             payer: USER.publicKey,
             recentSlot: slot,
         });
+    const tipIx = getTipIx(2000, "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL", USER);
 
-    const sig = await sendTx(connection, [lookupTableInst], USER);
+    const sig = await sendTx(connection, [lookupTableInst, tipIx], USER);
     if (!sig) {
         console.error(`Transaction on create ALT failed`);
         return undefined;
@@ -246,16 +248,20 @@ export async function appendLookupTable(
         lookupTable: new PublicKey(lookupTableAddress),
         addresses: accounts.map(account => new PublicKey(account)),
     });
+    const tipIx = getTipIx(2000, "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL", USER);
 
-    const sig = await sendTx(connection, [extendInstruction], USER);
+    const sig = await sendTx(connection, [extendInstruction, tipIx], USER);
 
     if (!sig) {
         console.error(`Transaction on append ALT failed`);
         return undefined;
     }
-    console.log(`🚀Append ALT transaction success! signature: ${sig}`);
+    console.log(`🚀Append ALT transaction success!`);
     return lookupTableAddress;
 }
+
+
+
 
 // Функция для преобразования объекта с BigInt в обычный объект
 export function convertBigIntToString(obj: any): any {
@@ -313,7 +319,8 @@ export async function updateIfNotExistsAndGet(
 
     if (!tables || tables.length === 0) {
         console.log(`No tables found. Creating...`);
-        const tableAddress = await createLookupTable(rpcUrl, private_key);
+        // const tableAddress = await createLookupTable(rpcUrl, private_key);
+        const tableAddress = undefined
         if (!tableAddress) {
             console.error("Failed to create initial lookup table");
             return undefined;
@@ -436,20 +443,33 @@ export async function sendTx(
                     result: result.value
                 };
             } else {
-                // Обычный режим отправки
-                let sig = await connection.sendRawTransaction(transaction.serialize(), {
-                    skipPreflight: false,
-                    preflightCommitment: "confirmed",
-                    maxRetries: 5
-                });
-                console.log(`Waiting for transaction confirmation...`);
-                await Promise.race([
-                    connection.confirmTransaction(sig, "confirmed"),
-                    new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error("Confirmation timeout")), 10000)
-                    ),
-                ]);
-                return sig;
+
+
+                const bs64Tx: string = Buffer.from(transaction.serialize()).toString("base64");
+                for (let i = 0; i < 1; i++) {
+                    try {
+                        logger.info(logger.LOG_MODULES.JITO, `attempt: ${i}`);
+                        await sendJitoTransaction(bs64Tx);
+                        return "success";
+                    } catch(err: any) {
+                        logger.error(logger.LOG_MODULES.JITO, err);
+                        return undefined;
+                    }
+                }
+                // // Обычный режим отправки
+                // let sig = await connection.sendRawTransaction(transaction.serialize(), {
+                //     skipPreflight: false,
+                //     preflightCommitment: "confirmed",
+                //     maxRetries: 5
+                // });
+                // console.log(`Waiting for transaction confirmation...`);
+                // await Promise.race([
+                //     connection.confirmTransaction(sig, "confirmed"),
+                //     new Promise((_, reject) =>
+                //         setTimeout(() => reject(new Error("Confirmation timeout")), 10000)
+                //     ),
+                // ]);
+                // return sig;
             }
         } catch (e: any) {
             console.error(`Attempt_${i}: error while ${simulate ? 'simulating' : 'sending'} transaction: ${e}}`);
@@ -739,6 +759,8 @@ export function sleep(ms: number): Promise<void> {
 }
 
 // (async () => {
-//     const res = await getDetailedTokenAccounts("DkU5wMFvq2jMTYgQ4yMFFWJtT9J177BPVSKYY8BAHJxo", "https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f");
-//
+//     const connection = new Connection(clusterApiUrl('mainnet-beta'));
+//     console.log(await updateIfNotExistsAndGet("https://api.mainnet-beta.solana.com",
+//         ["99D5oi479AxQpQcfVKkTK6E7r1Y8KJSKhaA9dUBws1vd"],
+//         "7wXu1a3WDJ8fCM69YzQzW4hnaoU6HCTA1WCHMUCmu4D4Qcksvc6jPDu8VWzkomN9GwpSQ26Nuy2GRXfR42Bb9iN"))
 // })()

@@ -24,7 +24,8 @@ const LOG_MODULES = {
     ELECTRON: 'ELECTRON',
     TOKEN_RELEASE: 'TOKEN_RELEASE',
     API_SERVICE: 'API_SERVICE',
-    CONFIG_SERVICE: 'CONFIG_SERVICE'
+    CONFIG_SERVICE: 'CONFIG_SERVICE',
+    JITO: "JITO"
 };
 
 // Расширенная цветовая палитра для консоли
@@ -87,7 +88,8 @@ const COLORS = {
         ELECTRON: '\x1b[95m',                        // Ярко-пурпурный
         TOKEN_RELEASE: '\x1b[32m',                   // Зеленый
         API_SERVICE: '\x1b[36m',                     // Голубой
-        CONFIG_SERVICE: '\x1b[33m\x1b[1m'            // Желтый жирный
+        CONFIG_SERVICE: '\x1b[33m\x1b[1m',            // Желтый жирный
+        JITO: '\x1b[93m'
     }
 };
 

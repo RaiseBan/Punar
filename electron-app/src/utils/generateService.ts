@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import {getFilteredPairs, sortPairsByParameter} from "./solanaUtils";
+import {getFilteredPairs, sortPairsByParameter, updateIfNotExistsAndGet} from "./solanaUtils";
 import TOML from '@iarna/toml';
 import {PRIMARY_IP, METEORA_OWNER} from "./constants";
 
@@ -209,7 +209,7 @@ export async function generateMevConfig(
 
 export async function generateSimpleMevConfig(
     botDir: string,
-    config: any,
+    config: any, // ProcessConfig
     tokenAddress: string,
     meteoraPools: string[],
     userSetting: UserSettings,
@@ -224,9 +224,9 @@ export async function generateSimpleMevConfig(
         }
 
         console.log(`[TOML Generator] Генерация TOML-файла конфигурации MEV для токена ${tokenAddress} и пула ${meteoraPools}`);
-
+        console.log(`PROCESS DELAY::::::::${config.process_delay}`)
         // Задержка между процессами (по умолчанию 300ms, если не указано)
-        const processDelay = config.process_delay || 300;
+        const processDelay = config.process_delay;
 
         // Основные данные RPC
         const main_rpc = config.main_rpc || "https://api.mainnet-beta.solana.com";
@@ -238,13 +238,19 @@ export async function generateSimpleMevConfig(
 
         // Формируем массив пулов
 
+
+
+
+
+
+
         // Формируем конфигурацию для mint_config_list
         const mint_config_list = [
             {
                 mint: tokenAddress,
                 pump_pool_list: pumpSwapPool ? [pumpSwapPool] : [],
                 meteora_dlmm_pool_list: meteoraPools,
-                lookup_table_accounts: [],
+                lookup_table_accounts: config.lookupTables,
                 process_delay: processDelay,
                 // This is the Raydium V4 AMM Pools
                 raydium_pool_list: config.type === "v4" ? [config.raydiumPool] : [],
@@ -253,7 +259,8 @@ export async function generateSimpleMevConfig(
                 raydium_cp_pool_list: config.type === "cpmm" ? [config.raydiumPool] : [],
 
                 // This is the Raydium CLMM(Centralized Liquidity) Pools
-                raydium_clmm_pool_list: config.type === "clmm" ? [config.raydiumPool] : []
+                raydium_clmm_pool_list: config.type === "clmm" ? [config.raydiumPool] : [],
+                meteora_damm_pool_list: config.dammMeteoraPool? [config.dammMeteoraPool] : [],
             }
         ];
 

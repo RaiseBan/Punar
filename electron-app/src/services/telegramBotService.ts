@@ -1,8 +1,8 @@
-import axios, { AxiosResponse } from 'axios';
-import { app, ipcMain, BrowserWindow } from 'electron';
+import axios, {AxiosResponse} from 'axios';
+import {app, ipcMain, BrowserWindow} from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import { getGlobalConfigDirectory } from '../utils/wallet';
+import {getGlobalConfigDirectory} from '../utils/wallet';
 import logger from './loggerService';
 import {MevProcess, RAYDIUM_TYPE, Signal} from "../types/types";
 
@@ -147,23 +147,23 @@ class TelegramBotService {
     }
 
     async startStream(): Promise<StatusResult> {
-        if (this.isActive) return { success: false };
+        if (this.isActive) return {success: false};
 
         try {
             this.isActive = true;
             this.startPolling();
-            return { success: true };
+            return {success: true};
         } catch (err) {
             console.error('Error starting stream:', err);
             this.isActive = false;
-            return { success: false };
+            return {success: false};
         }
     }
 
     async stopStream(): Promise<StatusResult> {
         this.stopPolling();
         this.isActive = false;
-        return { success: true };
+        return {success: true};
     }
 
     getStatus(): { isActive: boolean; lastActivity: string } {
@@ -213,7 +213,7 @@ class TelegramBotService {
             }
         }
 
-        return { success: true };
+        return {success: true};
     }
 
     addChatId(chatId: number | string): void {
@@ -251,7 +251,7 @@ class TelegramBotService {
             }
 
             const response = await axios.get(`https://api.telegram.org/bot${this.botToken}/getUpdates`, {
-                params: { limit: 1, timeout: 5 }
+                params: {limit: 1, timeout: 5}
             });
 
             const updates = response.data.result || [];
@@ -466,7 +466,7 @@ class TelegramBotService {
             const responses: any[] = [];
             for (let i = 0; i < messageParts.length; i++) {
                 const part = messageParts[i];
-                console.log(`[TG Bot] Отправка части ${i+1}/${messageParts.length}, длина: ${part.length} символов`);
+                console.log(`[TG Bot] Отправка части ${i + 1}/${messageParts.length}, длина: ${part.length} символов`);
 
                 try {
                     const response = await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
@@ -482,7 +482,7 @@ class TelegramBotService {
                         await new Promise(resolve => setTimeout(resolve, 300));
                     }
                 } catch (error: any) {
-                    console.error(`[TG Bot] Ошибка отправки части ${i+1}: ${error.message}`);
+                    console.error(`[TG Bot] Ошибка отправки части ${i + 1}: ${error.message}`);
 
                     // Если проблема с форматированием HTML
                     if (error.response?.data?.description?.includes('can\'t parse entities')) {
@@ -563,7 +563,7 @@ class TelegramBotService {
     }
 
     async sendTaskNotification(taskData: TaskData): Promise<void> {
-        const { taskId, rowIndex, rowId, token, volumeChange, volumeValue, allCells = [] } = taskData;
+        const {taskId, rowIndex, rowId, token, volumeChange, volumeValue, allCells = []} = taskData;
 
         const tokenAddress = token ? token.toLowerCase() : '';
         const dexScreenerUrl = `https://dexscreener.com/solana/${tokenAddress}`;
@@ -596,17 +596,17 @@ class TelegramBotService {
         const replyMarkup: ReplyMarkup = {
             inline_keyboard: [
                 [
-                    { text: "🚀 Запустить Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium_${rowId || ''}` },
-                    { text: "🚀 Запустить PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap_${rowId || ''}` }
+                    {text: "🚀 Запустить Raydium", callback_data: `run_${taskId}_${rowIndex}_raydium_${rowId || ''}`},
+                    {text: "🚀 Запустить PumpSwap", callback_data: `run_${taskId}_${rowIndex}_pumpswap_${rowId || ''}`}
                 ],
                 [
-                    { text: "❌ Игнорировать", callback_data: `delete_${taskId}_${rowIndex}_${rowId || ''}` }
+                    {text: "❌ Игнорировать", callback_data: `delete_${taskId}_${rowIndex}_${rowId || ''}`}
                 ]
             ]
         };
 
         for (const chatId of this.chatIds) {
-            await this.sendMessage(chatId, message, { replyMarkup });
+            await this.sendMessage(chatId, message, {replyMarkup});
         }
     }
 
@@ -883,7 +883,7 @@ class TelegramBotService {
                                     console.log(`[TG Bot] Отправка части ${i + 1}/${chunks.length} длиной ${chunkMessage.length} символов`);
 
                                     // Отправляем в текстовом формате для избежания проблем с HTML-тегами
-                                    await this.sendMessage(chatId, chunkMessage, { parseMode: '' });
+                                    await this.sendMessage(chatId, chunkMessage, {parseMode: ''});
 
                                     // Небольшая задержка между отправкой сообщений, чтобы не превысить лимиты API
                                     if (i < chunks.length - 1) {
@@ -895,7 +895,7 @@ class TelegramBotService {
                             }
                         } else {
                             // Отправляем в текстовом формате для избежания проблем с HTML-тегами
-                            await this.sendMessage(chatId, helpText, { parseMode: '' });
+                            await this.sendMessage(chatId, helpText, {parseMode: ''});
                         }
                         break;
                     case 'tasks':
@@ -1093,16 +1093,16 @@ class TelegramBotService {
                 // Если все задачи остановлены, добавляем кнопку запуска
                 if (allTasksStopped) {
                     inlineKeyboard.push([
-                        { text: "▶️ Запустить все задачи", callback_data: `resume_g_${groupId}` }
+                        {text: "▶️ Запустить все задачи", callback_data: `resume_g_${groupId}`}
                     ]);
                 }
 
                 // Всегда добавляем кнопки остановки и удаления
                 inlineKeyboard.push([
-                    { text: "⏹️ Остановить все задачи", callback_data: `stop_g_${groupId}` }
+                    {text: "⏹️ Остановить все задачи", callback_data: `stop_g_${groupId}`}
                 ]);
                 inlineKeyboard.push([
-                    { text: "🗑️ Удалить все задачи", callback_data: `remove_g_${groupId}` }
+                    {text: "🗑️ Удалить все задачи", callback_data: `remove_g_${groupId}`}
                 ]);
 
                 const replyMarkup: ReplyMarkup = {
@@ -1112,7 +1112,7 @@ class TelegramBotService {
                 // Отправляем сообщение для этой группы
                 console.log(`[TG Bot Tasks] Sending message for group "${groupKey}" with ${tasksInGroup.length} tasks, using groupId ${groupId}`);
                 try {
-                    await this.sendMessage(chatId, message, { replyMarkup });
+                    await this.sendMessage(chatId, message, {replyMarkup});
                     console.log(`[TG Bot Tasks] Message sent successfully for group "${groupKey}"`);
                 } catch (error) {
                     console.error(`[TG Bot Tasks] Error sending message for group "${groupKey}":`, (error as Error).message);
@@ -1122,7 +1122,7 @@ class TelegramBotService {
                         shortMessage += `<b>Содержит ${tasksInGroup.length} задач</b>\n`;
 
                         try {
-                            await this.sendMessage(chatId, shortMessage, { replyMarkup });
+                            await this.sendMessage(chatId, shortMessage, {replyMarkup});
                             console.log(`[TG Bot Tasks] Shortened message sent successfully for group "${groupKey}"`);
                         } catch (err) {
                             console.error(`[TG Bot Tasks] Failed to send even shortened message:`, (err as Error).message);
@@ -1189,14 +1189,13 @@ class TelegramBotService {
                             const newReplyMarkup = {
                                 inline_keyboard: [
                                     [
-                                        { text: "✅ Задача запущена", callback_data: "noop" }
+                                        {text: "✅ Задача запущена", callback_data: "noop"}
                                     ]
                                 ]
                             };
                             this.editMessageReplyMarkup(chatId, messageId, newReplyMarkup);
                         });
-                }
-                else if (callbackData.startsWith('delete_')) {
+                } else if (callbackData.startsWith('delete_')) {
                     const parts = callbackData.split('_');
                     const taskId = parts[1];
                     const rowIndex = parts[2];
@@ -1230,7 +1229,7 @@ class TelegramBotService {
                             const newReplyMarkup = {
                                 inline_keyboard: [
                                     [
-                                        { text: "❌ Удалено", callback_data: "noop" }
+                                        {text: "❌ Удалено", callback_data: "noop"}
                                     ]
                                 ]
                             };
@@ -1257,7 +1256,7 @@ class TelegramBotService {
                     const newReplyMarkup = {
                         inline_keyboard: [
                             [
-                                { text: `▶️ ${taskIds.length} задач запущены`, callback_data: "noop" }
+                                {text: `▶️ ${taskIds.length} задач запущены`, callback_data: "noop"}
                             ]
                         ]
                     };
@@ -1268,7 +1267,7 @@ class TelegramBotService {
                             if (this.messageHandlers.has('resumeTask')) {
                                 const resumeHandler = this.messageHandlers.get('resumeTask');
                                 taskIds.forEach(taskId => {
-                                    resumeHandler({ taskId });
+                                    resumeHandler({taskId});
                                 });
                             }
 
@@ -1290,7 +1289,7 @@ class TelegramBotService {
                     const newReplyMarkup = {
                         inline_keyboard: [
                             [
-                                { text: "⏹️ Задача остановлена", callback_data: "noop" }
+                                {text: "⏹️ Задача остановлена", callback_data: "noop"}
                             ]
                         ]
                     };
@@ -1299,7 +1298,7 @@ class TelegramBotService {
                         .then(() => {
                             if (this.messageHandlers.has('stopTask')) {
                                 const parsedTaskId = parseInt(taskId);
-                                this.messageHandlers.get('stopTask')({ taskId: parsedTaskId });
+                                this.messageHandlers.get('stopTask')({taskId: parsedTaskId});
                             }
 
                             this.sendMessage(chatId, `⏹️ Задача ${taskId} остановлена.`);
@@ -1328,7 +1327,7 @@ class TelegramBotService {
                     const newReplyMarkup = {
                         inline_keyboard: [
                             [
-                                { text: `⏹️ ${taskIds.length} задач остановлены`, callback_data: "noop" }
+                                {text: `⏹️ ${taskIds.length} задач остановлены`, callback_data: "noop"}
                             ]
                         ]
                     };
@@ -1339,7 +1338,7 @@ class TelegramBotService {
                             if (this.messageHandlers.has('stopTask')) {
                                 const stopHandler = this.messageHandlers.get('stopTask');
                                 taskIds.forEach(taskId => {
-                                    stopHandler({ taskId });
+                                    stopHandler({taskId});
                                 });
                             }
 
@@ -1369,7 +1368,7 @@ class TelegramBotService {
                     const newReplyMarkup = {
                         inline_keyboard: [
                             [
-                                { text: `🗑️ ${taskIds.length} задач удалены`, callback_data: "noop" }
+                                {text: `🗑️ ${taskIds.length} задач удалены`, callback_data: "noop"}
                             ]
                         ]
                     };
@@ -1383,9 +1382,9 @@ class TelegramBotService {
 
                                 taskIds.forEach(taskId => {
                                     // Сначала останавливаем
-                                    stopHandler({ taskId });
+                                    stopHandler({taskId});
                                     // Затем удаляем
-                                    removeHandler({ taskId });
+                                    removeHandler({taskId});
                                 });
                             }
 
@@ -1409,7 +1408,7 @@ class TelegramBotService {
                     const newReplyMarkup = {
                         inline_keyboard: [
                             [
-                                { text: `⏹️ ${taskIds.length} задач остановлены`, callback_data: "noop" }
+                                {text: `⏹️ ${taskIds.length} задач остановлены`, callback_data: "noop"}
                             ]
                         ]
                     };
@@ -1420,7 +1419,7 @@ class TelegramBotService {
                             if (this.messageHandlers.has('stopTask')) {
                                 const stopHandler = this.messageHandlers.get('stopTask');
                                 taskIds.forEach(taskId => {
-                                    stopHandler({ taskId });
+                                    stopHandler({taskId});
                                 });
                             }
 
@@ -1444,7 +1443,7 @@ class TelegramBotService {
                     const newReplyMarkup = {
                         inline_keyboard: [
                             [
-                                { text: `🗑️ ${taskIds.length} задач удалены`, callback_data: "noop" }
+                                {text: `🗑️ ${taskIds.length} задач удалены`, callback_data: "noop"}
                             ]
                         ]
                     };
@@ -1458,9 +1457,9 @@ class TelegramBotService {
 
                                 taskIds.forEach(taskId => {
                                     // Сначала останавливаем
-                                    stopHandler({ taskId });
+                                    stopHandler({taskId});
                                     // Затем удаляем
-                                    removeHandler({ taskId });
+                                    removeHandler({taskId});
                                 });
                             }
 
@@ -1482,7 +1481,7 @@ class TelegramBotService {
                     const newReplyMarkup = {
                         inline_keyboard: [
                             [
-                                { text: "▶️ Задача запущена", callback_data: "noop" }
+                                {text: "▶️ Задача запущена", callback_data: "noop"}
                             ]
                         ]
                     };
@@ -1491,7 +1490,7 @@ class TelegramBotService {
                         .then(() => {
                             if (this.messageHandlers.has('resumeTask')) {
                                 const parsedTaskId = parseInt(taskId);
-                                this.messageHandlers.get('resumeTask')({ taskId: parsedTaskId });
+                                this.messageHandlers.get('resumeTask')({taskId: parsedTaskId});
                             }
 
                             this.sendMessage(chatId, `▶️ Задача ${taskId} запущена.`)
@@ -1677,32 +1676,94 @@ class TelegramBotService {
         // Команда для получения списка активных MEV процессов
         this.registerCommand('mev_processes', async (chatId) => {
             try {
-                const processes: MevProcess[] = mevLoadBalancer.getProcesses();
-
-                if (processes.length === 0) {
-                    this.sendMessage(chatId, '📊 Активные MEV процессы отсутствуют');
+                const signalIds = mevLoadBalancer.getActiveSignalIds();
+                if (signalIds.length === 0) {
+                    this.sendMessage(chatId, '📊 Активные MEV сигналы отсутствуют');
                     return;
                 }
 
-                let message = '📊 <b>Активные MEV процессы</b>\n\n';
-                let i = 1;
-                for (const proc of processes) {
-                    const runtime = Math.floor((Date.now() - proc.startTime) / 1000 / 60); // в минутах
+                let message = '<b>📊 Активные MEV сигналы</b>\n\n';
 
-                    message += `<b>${i}. ID:</b> <code>${proc.id}</code> (PID: ${proc.pid || 'неизвестно'})\n`;
-                    message += `<b>${i}. Token:</b> <code>${proc.tokenAddress}</code>\n`;
-                    message += `<b>${i}. Meteora pool:</b> <code>${proc.meteoraPools ? proc.meteoraPools : 'N/A'}</code>\n`;
-                    message += `<b>${i}. Pumpswap pool:</b> <code>${proc.pumpSwapPool ? proc.pumpSwapPool : 'N/A'}</code>\n`;
-                    message += `<b>${i}. Uptime:</b> ${runtime} min.\n`;
-                    message += `<b>${i}. DELETE:</b> <code>/mev_stop_process ${proc.id}</code>\n`;
-                    message += `<b>============================================</b>\n`;
+                // Для каждого сигнала выводим подробную информацию
+                for (let i = 0; i < signalIds.length; i++) {
+                    const signalId = signalIds[i];
+                    const processes = mevLoadBalancer.getProcessesBySignalId(signalId);
+                    if (processes.length === 0) continue;
 
-                    i++;
+                    // Берем первый процесс для получения общей информации о сигнале
+                    const firstProcess = processes[0];
+                    const creationTime = firstProcess.initialCreationTime || firstProcess.startTime;
+                    const runtime = Math.floor((Date.now() - creationTime) / 1000 / 60); // в минутах
+
+                    // Собираем информацию о задержках инстансов
+                    const delayInfo = processes.reduce((acc, proc) => {
+                        const delay = proc.config?.process_delay || 0;
+                        acc[delay] = (acc[delay] || 0) + 1;
+                        return acc;
+                    }, {});
+                    const delayText = Object.entries(delayInfo)
+                        .map(([delay, count]) => `${count}x${delay}мс`)
+                        .join(', ');
+
+                    message += `<b>${i + 1}. ID:</b> <code>${signalId}</code>\n`;
+                    message += `<b>${i + 1}. Token:</b> <code>${firstProcess.tokenAddress}</code>\n`;
+                    message += `<b>${i + 1}. Meteora pools:</b> <code>${firstProcess.meteoraPools?.join(', ') || 'N/A'}</code>\n`;
+                    message += `<b>${i + 1}. Pumpswap pool:</b> <code>${firstProcess.pumpSwapPool || 'N/A'}</code>\n`;
+                    message += `<b>${i + 1}. Raydium pool:</b> <code>${firstProcess.config?.raydiumPool || 'N/A'}</code>\n`;
+                    message += `<b>${i + 1}. Raydium type:</b> <code>${firstProcess.config?.type || 'N/A'}</code>\n`;
+                    message += `<b>${i + 1}. Uptime:</b> ${runtime} min.\n`;
+                    message += `<b>${i + 1}. Instances:</b> ${processes.length} (${delayText})\n`;
+                    message += `<b>${i + 1}. DELETE:</b> <code>/mev_stop_signal ${signalId}</code>\n`;
+                    message += `<b>============================================</b>\n\n`;
                 }
 
                 this.sendMessage(chatId, message);
             } catch (error) {
                 console.error('[TG Bot] Ошибка при получении списка MEV процессов:', error);
+                this.sendMessage(chatId, `❌ Ошибка: ${(error as Error).message}`);
+            }
+        });
+        // Команда для остановки всех процессов сигнала по ID
+        this.registerCommand('mev_stop_signal', async (chatId, args) => {
+            if (!args || args.length === 0) {
+                this.sendMessage(chatId, '❌ Необходимо указать ID сигнала. Пример: /mev_stop_signal signal_12345678_abcdef12');
+                return;
+            }
+
+            const signalId = args[0];
+
+            try {
+                logger.info(logger.LOG_MODULES.TELEGRAM_SERVICE, `Остановка всех процессов сигнала ${signalId} по запросу из Telegram`);
+
+                // Получаем все процессы этого сигнала для информации
+                const processes = mevLoadBalancer.getProcessesBySignalId(signalId);
+                const count = processes.length;
+
+                if (count === 0) {
+                    this.sendMessage(chatId, `⚠️ Сигнал с ID ${signalId} не найден или не имеет активных процессов`);
+                    return;
+                }
+
+                // Останавливаем все процессы сигнала с перезапуском оставшихся
+                const result = await mevLoadBalancer.stopAllProcessesBySignalId(signalId, true);
+
+                if (result.success) {
+                    logger.success(logger.LOG_MODULES.TELEGRAM_SERVICE, `Все процессы сигнала ${signalId} успешно остановлены (${result.count} шт.)`);
+
+                    const firstProcess = processes[0];
+                    const tokenInfo = firstProcess.tokenAddress.substring(0, 8) + '...';
+
+                    this.sendMessage(chatId, `✅ Все процессы сигнала успешно остановлены
+**ID сигнала:** \`${signalId}\`
+**Токен:** \`${tokenInfo}\`
+**Остановлено процессов:** ${result.count}
+**Оставшиеся процессы перераспределены**`);
+                } else {
+                    logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, `Ошибка остановки процессов сигнала: ${result.error || 'неизвестная ошибка'}`);
+                    this.sendMessage(chatId, `❌ Ошибка остановки процессов сигнала: ${result.error || 'неизвестная ошибка'}`);
+                }
+            } catch (error) {
+                logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, `Ошибка при остановке процессов сигнала ${signalId}`, error);
                 this.sendMessage(chatId, `❌ Ошибка: ${(error as Error).message}`);
             }
         });
@@ -1747,7 +1808,7 @@ class TelegramBotService {
                     logger.success(logger.LOG_MODULES.TELEGRAM_SERVICE, `MEV процесс ${processId} успешно остановлен`);
                     this.sendMessage(chatId, `✅ MEV процесс ${processId} успешно остановлен`);
                 } else {
-                    logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, `Ошибка остановки MEV процесса: ${result.error} | ${ processId }`, );
+                    logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, `Ошибка остановки MEV процесса: ${result.error} | ${processId}`,);
                     this.sendMessage(chatId, `❌ Ошибка остановки MEV процесса: ${result.error}`);
                 }
             } catch (error) {
@@ -1778,7 +1839,7 @@ class TelegramBotService {
                 // Проверяем существование директории логов
                 if (!fs.existsSync(logDir)) {
                     console.log(`[TG Bot] Директория логов не существует, создаём: ${logDir}`);
-                    fs.mkdirSync(logDir, { recursive: true });
+                    fs.mkdirSync(logDir, {recursive: true});
                 }
 
                 // Проверяем существование файла логов
@@ -1859,7 +1920,7 @@ class TelegramBotService {
 
             // Проверка типа пула, если указан
             if (poolType) {
-                const validTypes = ["clmm", "cpmm", "v4", "pumpswap"];
+                const validTypes = ["clmm", "cpmm", "v4", "pumpswap", "meteora"];
                 if (!validTypes.includes(poolType)) {
                     this.sendMessage(chatId, `❌ Неверный тип пула. Допустимые значения: ${validTypes.join(', ')}`);
                     return;
@@ -1898,7 +1959,9 @@ class TelegramBotService {
                 // Определяем, куда сохранить адрес пула на основе типа
                 if (poolType === 'pumpswap') {
                     signal.pumpSwapPool = targetPool;
-                } else {
+                } else if (poolType === "meteora") {
+                    signal.meteoraDAMMPool = targetPool;
+                }else {
                     signal.raydiumPool = targetPool;
                 }
 
@@ -2029,9 +2092,6 @@ class TelegramBotService {
     }
 
 
-
-
-
     // Метод для отправки статуса задачи
     async sendTaskStatus(taskId: string | number): Promise<boolean> {
         try {
@@ -2081,7 +2141,7 @@ class TelegramBotService {
                         }
                     ],
                     [
-                        { text: "🗑️ Удалить", callback_data: `remove_g_${task.id}` }
+                        {text: "🗑️ Удалить", callback_data: `remove_g_${task.id}`}
                     ]
                 ]
             };
@@ -2090,7 +2150,7 @@ class TelegramBotService {
             if (this.chatIds && this.chatIds.length > 0) {
                 for (const chatId of this.chatIds) {
                     try {
-                        await this.sendMessage(chatId, message, { replyMarkup });
+                        await this.sendMessage(chatId, message, {replyMarkup});
                         console.log(`[TG Bot] Статус задачи ${taskId} отправлен в чат ${chatId}`);
                     } catch (chatError) {
                         console.error(`[TG Bot] Ошибка при отправке статуса в чат ${chatId}:`, chatError);

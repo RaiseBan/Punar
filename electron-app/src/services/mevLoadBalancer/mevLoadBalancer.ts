@@ -11,7 +11,7 @@ import {getSettings} from '../../utils/fsHelper';
 import telegramBotService from '../telegramBotService';
 import fs from 'fs';
 import bs58 from "bs58";
-import {createTokenAccount, getDetailedTokenAccounts, sleep} from '../../utils/solanaUtils';
+import {createTokenAccount, getDetailedTokenAccounts, sleep, updateIfNotExistsAndGet} from '../../utils/solanaUtils';
 import {Keypair} from "@solana/web3.js";
 import logger from '../loggerService';
 import axios from "axios";
@@ -48,7 +48,14 @@ export class MevLoadBalancer {
     settings: any;
     userSettings: AppSettings | null;
     private meteoraPoolsUsage: Map<string, UsageMeteoraPools> = new Map<string, UsageMeteoraPools>();
-
+    private readonly DELAY_PERFORMANCE = {
+        0: 670, // 0ms: 670 req/s
+        1: 370, // 1ms: 370 req/s
+        2: 263, // 2ms: 263 req/s
+        3: 180, // 3ms: 180 req/s
+        4: 160, // 4ms: 160 req/s
+        5: 140  // Примерная оценка для 5ms
+    };
     constructor() {
         // Карта для отслеживания MEV процессов
         // key = processId, value = { process, config, startTime, lastActivity, signals: [], status }
@@ -139,7 +146,15 @@ export class MevLoadBalancer {
     }
 
 
-    generateProcessId(token: string, meteoraPools: string[], jito_lower_bound: string): string {
+    /**
+     * Генерирует уникальный ID для процесса
+     * @param token - Адрес токена
+     * @param meteoraPools - Массив пулов Meteora
+     * @param jito_lower_bound - Нижняя граница Jito
+     * @param instanceNumber - Номер экземпляра процесса (для создания нескольких копий)
+     * @returns Уникальный ID процесса
+     */
+    generateProcessId(token: string, meteoraPools: string[], jito_lower_bound: string, instanceNumber: number = 0): string {
         const tokenPart = token.substring(0, 4);
 
         // Обрабатываем пулы
@@ -147,7 +162,10 @@ export class MevLoadBalancer {
             .map(pool => pool.substring(0, 4))
             .join('_');
 
-        return `mev_${tokenPart}_${meteoraPoolsPart}_${jito_lower_bound}`;
+        // Добавляем instanceNumber для разделения экземпляров одного процесса
+        const instanceSuffix = instanceNumber > 0 ? `_inst${instanceNumber}` : '';
+
+        return `mev_${tokenPart}_${meteoraPoolsPart}_${jito_lower_bound}${instanceSuffix}`;
     }
 
 
@@ -234,211 +252,196 @@ export class MevLoadBalancer {
     }
 
 
-    getConfigs(validSignals: SignalWithMeta[]): ProcessesToManage | undefined {
+    /**
+     * Группирует пулы по токенам и создает конфигурации для процессов
+     * @param validSignals - Валидные сигналы для обработки
+     * @returns Конфигурации для добавления и идентификаторы процессов для удаления
+     */
+    async getConfigs(validSignals: SignalWithMeta[]): Promise<ProcessesToManage | undefined> {
+        try {
+            // Группируем пулы по токенам
+            const groupPoolsByToken = new Map<string, Pools>();
+            const configsToAdd: ProcessConfig[] = [];
+            const configsToDelete: string[] = [];
 
-        const groupPoolsByToken: Map<string, Pools> = new Map<string, Pools>();
-        let configsToAdd: ProcessConfig[] = [];
-        let configsToDelete: string[] = [];
-        for (const signal of validSignals) {
-            if (groupPoolsByToken.has(signal.tokenAddress)) {
-                const pools: Pools = groupPoolsByToken.get(signal.tokenAddress)!;
-                pools.meteora.push(signal.meteoraPool)
-            } else {
-                groupPoolsByToken.set(signal.tokenAddress, {
-                    meteora: [signal.meteoraPool],
-                    pump: signal.pumpSwapPool,
-                    raydium: signal.raydiumPool,
-                    type: signal.type
-                })
-            }
-        }
-        for (const [token, pools] of groupPoolsByToken.entries()) {
-            console.log(`token pools:`)
-            console.log(token, pools)
-            let meteoraUsageForToken: UsageMeteoraPools | undefined = this.getMeteoraUsagePoolsByToken(token);
-            if (!meteoraUsageForToken) {
-                this.setMeteoraUsagePoolsByToken(token, {
-                    pairs: new Map<string, PairInfo>(),
-                    hasFreeSingleSlot: false
-                })
-                meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
-                if (!meteoraUsageForToken) {
-                    return;
-                }
-            }
-
-            // кол-во пулов токена для добавления
-            let poolsDecrementable = [...pools.meteora];
-            console.log("usage: ", formatUsage(meteoraUsageForToken));
-            console.log(meteoraUsageForToken.pairs)
-
-            let skipShift = false;
-            let itemBuffer: string = "";
-            console.log(`length: ${poolsDecrementable.length}`)
-            while (poolsDecrementable.length !== 0) {
-                console.log(1)
-                let poolHasPlaced = false;
-                let tookPool: string | undefined;
-                if (!skipShift) {
-                    console.log(2)
-                    tookPool = poolsDecrementable.shift();
-                } else {
-                    console.log(3)
-                    tookPool = itemBuffer;
-                }
-
-                if (!tookPool) {
-                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `watafuk`);
-                    return;
-                }
-                if (meteoraUsageForToken.pairs.size === 0) {
-
-
-                    if (poolsDecrementable.length > 0) {
-                        console.log(`BIG BOY 000`)
-                        // не нужно добавлять, потому что еще есть элементы
-                        // configsToAdd.push(structConfig(this, token, [...pairInfo.activePools, tookPool], pools.pump));
-                        meteoraUsageForToken.pairs.set(
-                            this.generateProcessId(
-                                token,
-                                [tookPool],
-                                this.userSettings?.jito_lower_bound!),
-                            {
-                                activePools: [tookPool],
-                                isNew: true
-                            }
-                        );
-                        console.log(meteoraUsageForToken.pairs)
-                        console.log(`-----------`)
-                        poolHasPlaced = true;
-                        skipShift = false;
-                        continue
-                    } else if (poolsDecrementable.length === 0) {
-                        console.log(`MET 1: ${formatUsage(meteoraUsageForToken)}`);
-                        this.setMeteoraUsagePoolsByToken(token, {
-                            pairs: new Map<string, PairInfo>([
-                                [this.generateProcessId(token, [tookPool], this.userSettings.jito_lower_bound), {
-                                    activePools: [tookPool],
-                                    isNew: false
-                                }]
-                            ]),
-                            hasFreeSingleSlot: false
-                        })
-                        console.log(`MET 2: ${formatUsage(meteoraUsageForToken)}`);
-
-                        configsToAdd.push(structConfig(this, token, [tookPool], pools.pump, pools.raydium, pools.type));
-                        poolHasPlaced = true;
-                        skipShift = false;
-                        break;
-
-                        // meteoraUsageForToken.pairs.set(
-                        //     this.generateProcessId(
-                        //         token,
-                        //         [tookPool],
-                        //         this.userSettings?.jito_lower_bound!),
-                        //     {
-                        //         activePools: [tookPool],
-                        //         isNew: false
-                        //     }
-                        // );
-
-                        // break;
+            // Шаг 1: Группируем все пулы по токенам
+            for (const signal of validSignals) {
+                if (groupPoolsByToken.has(signal.tokenAddress)) {
+                    // Если токен уже есть, добавляем новый пул Meteora
+                    const pools = groupPoolsByToken.get(signal.tokenAddress)!;
+                    // Добавляем только уникальные пулы
+                    if (!pools.meteora.includes(signal.meteoraPool)) {
+                        pools.meteora.push(signal.meteoraPool);
                     }
 
+                    // Обновляем поля pump, raydium и type согласно новому сигналу
+                    if (signal.pumpSwapPool) {
+                        pools.pump = signal.pumpSwapPool;
+                        pools.raydium = undefined; // Обнуляем raydium если пришел pumpSwap
+                        pools.dammMeteora = undefined;
+                    } else if (signal.raydiumPool) {
+                        pools.raydium = signal.raydiumPool;
+                        pools.pump = undefined; // Обнуляем pumpSwap если пришел raydium
+                        pools.dammMeteora = undefined;
+                    }else if (signal.meteoraDAMMPool){
+                        pools.raydium = undefined
+                        pools.pump = undefined; // Обнуляем pumpSwap если пришел raydium
+                        pools.dammMeteora = signal.meteoraDAMMPool;
+                    }
 
+                    // Обновляем тип, если он есть в сигнале
+                    if (signal.type) {
+                        pools.type = signal.type;
+                    }
+                } else {
+                    // Создаем новую запись для токена
+                    groupPoolsByToken.set(signal.tokenAddress, {
+                        meteora: [signal.meteoraPool],
+                        pump: signal.pumpSwapPool,
+                        raydium: signal.raydiumPool,
+                        dammMeteora: signal.meteoraDAMMPool,
+                        type: signal.type
+                    });
+                }
+            }
+
+
+            // Шаг 2: Для каждого токена распределяем пулы по процессам
+            for (const [token, pools] of groupPoolsByToken.entries()) {
+                logger.info(
+                    logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                    `Распределение пулов для токена ${token}: ${pools.meteora.length} пулов Meteora`
+                );
+
+                // Получаем или создаем структуру для отслеживания пулов токена
+                let meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
+                if (!meteoraUsageForToken) {
+                    this.setMeteoraUsagePoolsByToken(token, {
+                        pairs: new Map<string, PairInfo>(),
+                        hasFreeSingleSlot: false
+                    });
+                    meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
+                    if (!meteoraUsageForToken) {
+                        logger.error(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Не удалось создать структуру распределения пулов для токена ${token}`
+                        );
+                        return undefined;
+                    }
                 }
 
+                // Копируем список пулов, чтобы не изменять оригинал
+                const poolsToDistribute = [...pools.meteora];
+
+                // Шаг 2.1: Сначала пытаемся добавить пулы к существующим процессам с одним пулом
                 for (const [processId, pairInfo] of meteoraUsageForToken.pairs.entries()) {
-                    console.log(`entries: ${processId} ${pairInfo}`)
-                    if (pairInfo.activePools.length === 1) { // пока что сделали, что максиамльное кол-во пулов метеоры в одном конфиге - 2
-                        console.log(1)
-                        pairInfo.activePools.push(tookPool);
+                    // Пропускаем stub и процессы, которые уже имеют 2 пула
+                    if (processId === "stub" || pairInfo.activePools.length >= 2) {
+                        continue;
+                    }
+
+                    // Если у процесса 1 пул и есть пулы для распределения
+                    if (pairInfo.activePools.length === 1 && poolsToDistribute.length > 0) {
+                        // Берем первый пул из списка
+                        const poolToAdd = poolsToDistribute.shift()!;
+
+                        // Добавляем пул к существующему процессу
+                        pairInfo.activePools.push(poolToAdd);
+
+                        // Если процесс не новый, помечаем его для удаления и последующего пересоздания
                         if (!pairInfo.isNew) {
                             configsToDelete.push(processId);
                         }
-                        console.log("BABY: ", pairInfo);
-                        configsToAdd.push(structConfig(this, token, [...pairInfo.activePools], pools.pump, pools.raydium, pools.type));
 
+                        // Создаем новую конфигурацию с обновленным списком пулов
+                        configsToAdd.push(await structConfig(
+                            this,
+                            token,
+                            [...pairInfo.activePools],
+                            pools.pump,
+                            pools.raydium,
+                            pools.dammMeteora,
+                            pools.type
+                        ));
+
+                        // Обновляем запись в структуре с новым ID процесса
                         meteoraUsageForToken.pairs.delete(processId);
-                        meteoraUsageForToken.pairs.set(
-                            this.generateProcessId(
-                                token,
-                                [...pairInfo.activePools],
-                                this.userSettings?.jito_lower_bound!),
-                            {
-                                activePools: [...pairInfo.activePools],
-                                // isModified: false, // потому что этот процесс уже не будет изменяться при этом проходе добавления
-                                isNew: false
-                            }
+                        const newProcessId = this.generateProcessId(
+                            token,
+                            [...pairInfo.activePools],
+                            this.userSettings?.jito_lower_bound!
                         );
-                        poolHasPlaced = true;
-                        skipShift = false;
-                        break;
-                    }
-                    if (pairInfo.activePools.length === 0) {
-                        console.log("salam")
-                        if (poolsDecrementable.length > 0) {
-                            console.log(`BIG BOY 000`)
-                            pairInfo.activePools.push(tookPool);
-                            // не нужно добавлять, потому что еще есть элементы
-                            // configsToAdd.push(structConfig(this, token, [...pairInfo.activePools, tookPool], pools.pump));
-                            console.log(pairInfo.activePools);
-                            meteoraUsageForToken.pairs.delete(processId);
-                            meteoraUsageForToken.pairs.set(
-                                this.generateProcessId(
-                                    token,
-                                    [...pairInfo.activePools],
-                                    this.userSettings?.jito_lower_bound!),
-                                {
-                                    activePools: [...pairInfo.activePools],
-                                    isNew: true
-                                }
-                            );
-                            console.log(meteoraUsageForToken.pairs)
-                            console.log(`-----------`)
-                            poolHasPlaced = true;
-                            skipShift = false;
-                            break;
-                        } else if (poolsDecrementable.length === 0) {
-                            console.log(`MET 1: ${formatUsage(meteoraUsageForToken)}`);
 
-                            configsToAdd.push(structConfig(this, token, [tookPool], pools.pump, pools.raydium, pools.type));
-                            meteoraUsageForToken.pairs.set(
-                                this.generateProcessId(
-                                    token,
-                                    [tookPool],
-                                    this.userSettings?.jito_lower_bound!),
-                                {
-                                    activePools: [...pairInfo.activePools],
-                                    isNew: false
-                                }
-                            );
-                            poolHasPlaced = true;
-                            skipShift = false;
-                            break;
-                        }
+                        meteoraUsageForToken.pairs.set(newProcessId, {
+                            activePools: [...pairInfo.activePools],
+                            isNew: false
+                        });
 
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Добавлен пул ${poolToAdd} к существующему процессу ${processId} -> ${newProcessId}`
+                        );
                     }
                 }
 
+                // Шаг 2.2: Создаем новые процессы для оставшихся пулов
+                while (poolsToDistribute.length > 0) {
+                    // Определяем, сколько пулов добавить в процесс (1 или 2)
+                    const poolsForProcess: string[] = [];
 
-                if (!poolHasPlaced) {
-                    meteoraUsageForToken.pairs.set("stub", {
-                        activePools: [],
-                        isNew: true
-                    })
-                    skipShift = true
-                    itemBuffer = tookPool;
+                    // Добавляем первый пул
+                    poolsForProcess.push(poolsToDistribute.shift()!);
+
+                    // Если есть еще пулы, добавляем второй
+                    if (poolsToDistribute.length > 0) {
+                        poolsForProcess.push(poolsToDistribute.shift()!);
+                    }
+
+                    // Создаем новую конфигурацию
+                    configsToAdd.push(await structConfig(
+                        this,
+                        token,
+                        poolsForProcess,
+                        pools.pump,
+                        pools.raydium,
+                        pools.dammMeteora,
+                        pools.type
+                    ));
+
+                    // Добавляем запись в структуру
+                    const processId = this.generateProcessId(
+                        token,
+                        poolsForProcess,
+                        this.userSettings?.jito_lower_bound!
+                    );
+
+                    meteoraUsageForToken.pairs.set(processId, {
+                        activePools: poolsForProcess,
+                        isNew: false
+                    });
+
+                    logger.info(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Создан новый процесс ${processId} с ${poolsForProcess.length} пулами: ${poolsForProcess.join(', ')}`
+                    );
                 }
-
             }
 
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Результат распределения пулов: ${configsToAdd.length} процессов для создания, ${configsToDelete.length} для удаления`
+            );
 
-        }
-        console.log(JSON.stringify(this.meteoraPoolsUsage, null, 2));
-        return {
-            configsToAdd: configsToAdd,
-            processIdsToDelete: configsToDelete
+            return {
+                configsToAdd,
+                processIdsToDelete: configsToDelete
+            };
+        } catch (error) {
+            logger.error(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Ошибка при распределении пулов: ${error.message}`
+            );
+            return undefined;
         }
     }
 
@@ -754,22 +757,32 @@ export class MevLoadBalancer {
     }
 
 
+    /**
+     * Запускает MEV процесс
+     * @param config - Конфигурация процесса
+     * @param options - Дополнительные опции
+     * @returns ID запущенного процесса или null в случае ошибки
+     */
+    /**
+     * Запускает MEV процесс
+     */
     async startMevProcess(config: ProcessConfig, options: {
         isRestart?: boolean,
-        initialCreationTime?: number
+        initialCreationTime?: number,
+        instanceNumber?: number,
+        signalId?: string
     } = {}) {
         try {
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ckeck token exists on "${config.tokenAddress}"`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка токена "${config.tokenAddress}"`);
             if (!this.userTokens.has(config.tokenAddress.trim())) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `NO TOKEN ACCOUNT, CREATING...`);
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Токен не найден, создаем...`);
                 this.userTokens.set(config.tokenAddress.trim(), (await createTokenAccount(this.userSettings?.mainRpc!, config.tokenAddress.trim(), this.USER, this.userTokens))!);
                 await sleep(21000);
             }
 
-
             // Проверяем обязательные параметры
             const tokenAddress = config.tokenAddress;
-            const meteoraPools = config.meteoraPools
+            const meteoraPools = config.meteoraPools;
             let pumpSwapPool = config.pumpSwapPool || undefined;
 
             if (!tokenAddress || !meteoraPools) {
@@ -778,8 +791,17 @@ export class MevLoadBalancer {
                 return null;
             }
 
-            // Генерируем уникальный ID для процесса
-            const processId = this.generateProcessId(tokenAddress, meteoraPools, this.userSettings.jito_lower_bound); // TODO: возможно по другому id задать
+            // Генерируем signalId если не передан
+            const signalId = options.signalId || this.generateSignalId(tokenAddress, meteoraPools);
+
+            // Используем номер инстанса для создания уникального ID
+            const instanceNumber = options.instanceNumber || 0;
+            const processId = this.generateProcessId(
+                tokenAddress,
+                meteoraPools,
+                this.userSettings.jito_lower_bound,
+                instanceNumber
+            );
 
             // Формируем конфигурацию процесса
             const processConfig = {
@@ -789,11 +811,12 @@ export class MevLoadBalancer {
                 meteoraPools,
                 pumpSwapPool,
                 task_name: config.task_name || `MEV Process ${processId}`,
+                lookupOwner: this.userSettings.lookupOwner
             };
 
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск MEV процесса с конфигурацией: ${JSON.stringify(processConfig)}`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск MEV процесса [signalId: ${signalId}, инстанс: ${instanceNumber}] с задержкой ${config.process_delay}мс: ${JSON.stringify(processConfig)}`);
 
-            // Отправка процесса на запуск - передаем userSettings
+            // Отправка процесса на запуск
             const childProcess = await spawnProcess(processConfig, this.userSettings!);
 
             if (!childProcess) {
@@ -803,17 +826,10 @@ export class MevLoadBalancer {
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Успешно запущен MEV процесс ${processId}`);
 
-            // Добавляем обработчики для логирования вывода процесса (ПОТОМ УБРАТЬ консольный вывод)
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `(ПОТОМ УБРАТЬ) Настраиваем перехват вывода для процесса ${processId}`);
-
-            // Обработка стандартного вывода (stdout)
+            // Добавляем обработчики для логирования вывода процесса
             childProcess.stdout.on("data", (data: any) => {
                 const output = data.toString().trim();
                 if (output) {
-                    // // Временно выводим в консоль для отладки (ПОТОМ УБРАТЬ)
-                    // console.log(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) STDOUT: ${output}`);
-
-                    // Записываем лог в файл
                     this.writeProcessLog(processId, output, 'info');
                 }
             });
@@ -822,28 +838,19 @@ export class MevLoadBalancer {
             childProcess.stderr.on("data", (data) => {
                 const output = data.toString().trim();
                 if (output) {
-                    // // Временно выводим в консоль для отладки (ПОТОМ УБРАТЬ)
-                    // console.error(`[MEV LoadBalancer] (ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) STDERR: ${output}`);
-
-                    // Записываем лог в файл
                     this.writeProcessLog(processId, output, 'error');
                 }
             });
 
             // Добавляем обработчик завершения процесса
             childProcess.on("exit", (code) => {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `(ПОТОМ УБРАТЬ) MEV ПРОЦЕСС ${processId} (PID: ${childProcess.pid}) завершился с кодом ${code}`);
-
-                // Записываем информацию о завершении в лог
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `MEV процесс ${processId} (PID: ${childProcess.pid}) завершился с кодом ${code}`);
                 this.writeProcessLog(processId, `Процесс завершен с кодом ${code}`, code === 0 ? 'info' : 'error');
-
-                // Обновляем статус процесса
                 this.handleProcessExit(processId, code);
             });
 
             // Определяем время создания
             const currentTime = Date.now();
-            // Если это перезапуск - используем оригинальное время создания, иначе - текущее
             const initialCreationTime = options.isRestart ? options.initialCreationTime : currentTime;
 
             // Сохраняем информацию о процессе
@@ -854,15 +861,14 @@ export class MevLoadBalancer {
                 pumpSwapPool,
                 process: childProcess,
                 startTime: currentTime,
-                initialCreationTime: initialCreationTime, // Сохраняем оригинальное время создания
+                initialCreationTime: initialCreationTime,
                 status: 'running',
                 lastActivity: currentTime,
                 signals: [],
                 config: processConfig,
+                instanceNumber: instanceNumber,
+                signalId: signalId // Сохраняем signalId для группировки
             });
-
-            // Создаем числовой ID для React UI
-            const numericTaskId = Date.now() + Math.floor(Math.random() * 1000);
 
             this.stats.totalProcesses++;
 
@@ -871,6 +877,65 @@ export class MevLoadBalancer {
             logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при запуске MEV процесса:', error);
             return null;
         }
+    }
+
+
+    /**
+     * Останавливает все процессы, связанные с указанным сигналом
+     */
+    async stopAllProcessesBySignalId(signalId: string, restart: boolean = false): Promise<{success: boolean, count: number}> {
+        try {
+            const processes = this.getProcessesBySignalId(signalId);
+            if (processes.length === 0) {
+                return {success: true, count: 0};
+            }
+
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Останавливаем все процессы (${processes.length}) для сигнала ${signalId}`);
+
+            // Останавливаем каждый процесс
+            for (let i = 0; i < processes.length; i++) {
+                const process = processes[i];
+                const isLast = i === processes.length - 1;
+
+                // Для последнего процесса используем переданный флаг restart
+                await this.stopProcess(process.id!, isLast && restart);
+            }
+
+            return {success: true, count: processes.length};
+        } catch (error) {
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при остановке процессов сигнала ${signalId}:`, error);
+            return {success: false, count: 0};
+        }
+    }
+
+    /**
+     * Получает все процессы, связанные с указанным сигналом
+     */
+    getProcessesBySignalId(signalId: string): MevProcess[] {
+        const processes: MevProcess[] = [];
+
+        for (const [processId, processData] of this.mevProcesses.entries()) {
+            if (processData.signalId === signalId) {
+                processes.push({...processData, id: processId});
+            }
+        }
+
+        return processes;
+    }
+
+    /**
+     * Получает все уникальные signalId активных процессов
+     */
+    getActiveSignalIds(): string[] {
+        const signalIds = new Set<string>();
+
+        for (const process of this.mevProcesses.values()) {
+            if (process.signalId) {
+                signalIds.add(process.signalId);
+            }
+        }
+
+        return Array.from(signalIds);
     }
 
     async checkLiquidity(pairs: string[]): Promise<CheckResult[]> {
@@ -1344,7 +1409,7 @@ export class MevLoadBalancer {
     }
 
 
-    parseLogForMevSignal(logMessage: string) {
+    parseLogForMevSignal(logMessage: string): Signal {
         try {
             // Проверяем, содержит ли сообщение MEV сигнал
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка на наличие '[PERFORM_MEV_ACTION]' в логе`);
@@ -1373,7 +1438,7 @@ export class MevLoadBalancer {
     }
 
 
-    extractSignalDataFromText(logMessage: string) {
+    extractSignalDataFromText(logMessage: string): Signal{
         try {
             // Находим содержимое между [PERFORM_MEV_ACTION] и [END]
             const startMarker = '[PERFORM_MEV_ACTION]';
@@ -1426,9 +1491,13 @@ export class MevLoadBalancer {
             const meteoraPool = parts[1];
 
             // Создаем результат
-            const result: any = {
-                tokenAddress,
-                meteoraPool,
+            const result: Signal = {
+                tokenAddress: tokenAddress,
+                meteoraPool: meteoraPool,
+                meteoraDAMMPool: undefined,
+                raydiumPool: undefined,
+                pumpSwapPool: undefined,
+                type: undefined,
                 timestamp: Date.now()
             };
 
@@ -1440,7 +1509,9 @@ export class MevLoadBalancer {
                 // Определяем, к какому типу пула относится адрес (Raydium или PumpSwap)
                 if (poolType.toLowerCase().includes('pumpswap')) {
                     result.pumpSwapPool = poolAddress;
-                } else {
+                } else if(poolType.toLowerCase().includes('meteora')) {
+                    result.meteoraDAMMPool = poolAddress;
+                }else {
                     result.raydiumPool = poolAddress;
                 }
 
@@ -1474,30 +1545,201 @@ export class MevLoadBalancer {
         }
     }
 
+
     /**
-     * Рассчитывает задержку для процессов на основе их количества
-     * @param {number} processCount - Количество процессов
-     * @returns {number} - Задержка в миллисекундах
+     * Рассчитывает оптимальное количество процессов и их задержки для каждого сигнала
+     * @param signalCount - Количество сигналов
+     * @param totalRequestsPerSecond - Максимальное количество запросов в секунду
+     * @returns Объект с информацией о распределении ресурсов по сигналам
      */
-    calculateProcessDelay(processCount) {
-        // Проверяем входные данные
-        if (!processCount || processCount <= 0) {
-            processCount = 1;
+    calculateOptimalProcessDistribution(
+        signalIds: string[],
+        totalRequestsPerSecond: number
+    ): {
+        signalDistribution: Map<string, { delays: number[], totalPerformance: number }>;
+        totalProcesses: number;
+        avgInstancesPerSignal: number;
+        expectedPerformance: number;
+    } {
+        // Если нет сигналов, возвращаем пустой результат
+        if (signalIds.length === 0) {
+            return {
+                signalDistribution: new Map(),
+                totalProcesses: 0,
+                avgInstancesPerSignal: 0,
+                expectedPerformance: 0
+            };
         }
 
-        // Общая нагрузка - 170 запросов в секунду
-        const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second);
+        // Запас производительности для каждого сигнала (делим поровну)
+        const requestsPerSignal = Math.floor(totalRequestsPerSecond / signalIds.length);
 
-        // Расчет запросов в секунду на процесс
-        const requestsPerProcess = TOTAL_REQUESTS_PER_SECOND / processCount;
+        logger.info(
+            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+            `Распределение ресурсов: ${signalIds.length} сигналов, ${requestsPerSignal} req/s на сигнал (всего ${totalRequestsPerSecond} req/s)`
+        );
 
-        // Расчет задержки по формуле: Math.ceil(1000 / requestsPerProcess) + 1
-        let delay = Math.ceil(1000 / requestsPerProcess) + 1;
+        // Доступные задержки и их производительность (отсортированы от самой эффективной к наименее эффективной)
+        const delayOptions = Object.entries(this.DELAY_PERFORMANCE)
+            .map(([delay, performance]) => ({ delay: parseInt(delay), performance }))
+            .sort((a, b) => b.performance - a.performance);
 
-        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Расчет задержки: ${TOTAL_REQUESTS_PER_SECOND} req/s / ${processCount} процессов = ${requestsPerProcess} req/s на процесс`);
-        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Итоговая задержка: ${delay}ms`);
-        return delay;
+        // Функция для рассчета оптимальной комбинации процессов для заданного запаса производительности
+        const calculateProcessesForCapacity = (targetCapacity: number): number[] => {
+            const selectedDelays: number[] = [];
+            let remainingCapacity = targetCapacity;
+
+            // Жадный алгоритм - выбираем процессы с наибольшей производительностью
+            for (const option of delayOptions) {
+                // Пока можем добавлять процессы с текущей задержкой - добавляем
+                while (option.performance <= remainingCapacity) {
+                    selectedDelays.push(option.delay);
+                    remainingCapacity -= option.performance;
+                }
+            }
+
+            // Если у нас осталась неиспользованная ёмкость, но она недостаточна для самого "лёгкого" процесса,
+            // но нам всё равно нужен хотя бы один процесс:
+            if (selectedDelays.length === 0) {
+                // Найдем вариант с минимальной производительностью
+                const leastPerformantOption = delayOptions[delayOptions.length - 1];
+                selectedDelays.push(leastPerformantOption.delay);
+            }
+
+            return selectedDelays;
+        };
+
+        // Рассчитываем оптимальные комбинации для каждого сигнала и сохраняем их в Map
+        const signalDistribution = new Map<string, { delays: number[], totalPerformance: number }>();
+
+        for (const signalId of signalIds) {
+            const delays = calculateProcessesForCapacity(requestsPerSignal);
+            const totalPerformance = delays.reduce(
+                (sum, delay) => sum + (this.DELAY_PERFORMANCE[delay] || 0), 0
+            );
+
+            signalDistribution.set(signalId, { delays, totalPerformance });
+        }
+
+        // Если у нас осталась неиспользованная ёмкость из-за округления,
+        // распределим её между сигналами с наименьшей производительностью
+        const totalAllocated = Array.from(signalDistribution.values())
+            .reduce((total, { totalPerformance }) => total + totalPerformance, 0);
+
+        const remainingCapacity = totalRequestsPerSecond - totalAllocated;
+
+        if (remainingCapacity > 0) {
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Осталась неиспользованная мощность: ${remainingCapacity} req/s. Попытка распределения.`
+            );
+
+            // Находим наиболее эффективный процесс, который можно добавить с оставшейся мощностью
+            for (const option of delayOptions) {
+                if (option.performance <= remainingCapacity) {
+                    // Ищем сигнал с наименьшей производительностью
+                    let minSignalId = signalIds[0];
+                    let minPerformance = Number.MAX_SAFE_INTEGER;
+
+                    for (const [signalId, { totalPerformance }] of signalDistribution.entries()) {
+                        if (totalPerformance < minPerformance) {
+                            minPerformance = totalPerformance;
+                            minSignalId = signalId;
+                        }
+                    }
+
+                    // Добавляем процесс к сигналу с наименьшей производительностью
+                    const signalInfo = signalDistribution.get(minSignalId)!;
+                    signalInfo.delays.push(option.delay);
+                    signalInfo.totalPerformance += option.performance;
+
+                    break;
+                }
+            }
+        }
+
+        // Собираем статистику для обратной совместимости и логирования
+        let totalProcesses = 0;
+        let expectedPerformance = 0;
+
+        for (const { delays, totalPerformance } of signalDistribution.values()) {
+            totalProcesses += delays.length;
+            expectedPerformance += totalPerformance;
+        }
+
+        const avgInstancesPerSignal = Math.ceil(totalProcesses / signalIds.length);
+        const utilizationPercent = (expectedPerformance / totalRequestsPerSecond * 100).toFixed(1);
+
+        // Логируем итоговую информацию о распределении
+        logger.info(
+            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+            `Оптимизация: ${signalIds.length} сигналов, в среднем ${avgInstancesPerSignal} инстансов на сигнал, ` +
+            `всего ${totalProcesses} процессов, ожидаемая производительность ${expectedPerformance} req/s ` +
+            `(${utilizationPercent}% от ${totalRequestsPerSecond} req/s)`
+        );
+
+        // Детализация по сигналам для отладки
+        for (const [signalId, { delays, totalPerformance }] of signalDistribution.entries()) {
+            const delayBreakdown = delays.reduce((acc, delay) => {
+                acc[delay] = (acc[delay] || 0) + 1;
+                return acc;
+            }, {});
+
+            const delayInfo = Object.entries(delayBreakdown)
+                .map(([delay, count]) => `${count}x${delay}мс`)
+                .join(', ');
+
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Сигнал ${signalId.substring(0, 8)}...: ${delays.length} процессов, ${totalPerformance} req/s, задержки: ${delayInfo}`
+            );
+        }
+
+        return {
+            signalDistribution,
+            totalProcesses,
+            avgInstancesPerSignal,
+            expectedPerformance
+        };
     }
+
+    /**
+     * Генерирует уникальный ID для сигнала на основе токена и всех пулов
+     * @param tokenAddress - Адрес токена
+     * @param meteoraPools - Массив пулов Meteora
+     * @returns Уникальный ID сигнала
+     */
+    generateSignalId(tokenAddress: string, meteoraPools: string[]): string {
+        const tokenPart = tokenAddress.substring(0, 8);
+
+        // Сортируем пулы для консистентности
+        const sortedPools = [...meteoraPools].sort();
+
+        // Создаем хеш из всех пулов
+        const poolsHash = this.createHash(sortedPools.join('-')).substring(0, 8);
+
+        // Также добавляем количество пулов для большей уникальности
+        return `signal_${tokenPart}_${poolsHash}_${sortedPools.length}`;
+    }
+
+
+    /**
+     * Создает простой хеш строки
+     * @param str - Строка для хеширования
+     * @returns Хеш строки
+     */
+    createHash(str: string): string {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        // Преобразуем число в строку и берем абсолютное значение
+        return Math.abs(hash).toString(16);
+    }
+
+
 
     async addRaydiumSignal(token: string,
                            meteoraPools: string[],
@@ -1524,12 +1766,35 @@ export class MevLoadBalancer {
 
     }
 
+    async getLookups(config: ProcessConfig): Promise<string[] | undefined>{
+        if (config.meteoraPools.length > 1) {
+            let accountToExtendLookup: string[] = [];
+
+            if (config.pumpSwapPool){
+                accountToExtendLookup.push(config.pumpSwapPool);
+            }else if (config.raydiumPool){
+                accountToExtendLookup.push(config.raydiumPool);
+            }else if (config.dammMeteoraPool){
+                accountToExtendLookup.push(config.dammMeteoraPool);
+            }
+
+            accountToExtendLookup.push(...config.meteoraPools);
+
+            return await updateIfNotExistsAndGet(config.main_rpc, accountToExtendLookup, this.userSettings.lookupOwner);
+        }
+    }
+
+
+    /**
+     * Обрабатывает MEV сигналы
+     * @param signals - Массив сигналов для обработки
+     * @returns Результат обработки сигналов
+     */
     async handleMevSignal(signals: SignalWithMeta[]) {
         try {
             // Проверяем, идет ли очистка процессов
             if (this.isCleaningProcesses) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Нельзя обработать сигналы: идет очистка процессов`);
-                // Возвращаем сигналы обратно в буфер
                 this.signalBuffer.push(...signals);
                 return {
                     success: false,
@@ -1559,144 +1824,252 @@ export class MevLoadBalancer {
                 throw new Error('Нет валидных сигналов для обработки');
             }
 
-            const jitoValues = [
-                {
-                    jito_lower_bound: 10_000,
-                    jito_upper_bound: 100_000,
-                }
-            ]
-
-            // Шаг 2: Сохраняем текущие процессы для последующего перезапуска
-            const currentProcesses = Array.from(this.mevProcesses.entries());
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Текущее количество процессов: ${currentProcesses.length}`);
-
-
-            let newProcessConfigs: ProcessConfig[] = [];
-            let newTokenPools = new Map();
-
-            const processManageInfo: ProcessesToManage | undefined = this.getConfigs(validSignals);
-            console.log(`processManagerInfo: ${JSON.stringify(processManageInfo, null, 2)}`)
-            newProcessConfigs.push(...processManageInfo.configsToAdd);
-
-
-            // Шаг 3: Рассчитываем новую задержку для всех процессов (текущие + новые)
-            console.log(`РАССЧЕТ: ${currentProcesses.length} - ${processManageInfo.processIdsToDelete.length} + (${processManageInfo.configsToAdd.length} * ${jitoValues.length}) `);
-            const newProcessCount = currentProcesses.length - processManageInfo.processIdsToDelete.length + (processManageInfo.configsToAdd.length * jitoValues.length);
-            const processDelay = this.calculateProcessDelay(newProcessCount);
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
-
-            // обновим задержку для новых процессов, так как до этого мы не ставили. ref: getConfigs();
-            for (const processConfig of newProcessConfigs) {
-                processConfig.process_delay = processDelay;
-            }
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, JSON.stringify(newProcessConfigs, null, 2));
-
-
-            // Шаг 4: Сохраняем конфигурации текущих процессов с временем их создания
-            const processConfigs: any[] = [];
-            for (const [processId, processData] of currentProcesses) {
-                // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = {...processData.config, process_delay: processDelay};
-                // Сохраняем также время первоначального создания процесса
-                const initialCreationTime = processData.initialCreationTime || processData.startTime;
-
-                processConfigs.push({
-                    processId,
-                    config,
-                    initialCreationTime
-                });
-
-                // Останавливаем текущий процесс
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
-                await this.stopProcess(processId);
+            // Шаг 2: Получаем конфигурации для новых сигналов
+            const processManageInfo: ProcessesToManage | undefined = await this.getConfigs(validSignals);
+            if (!processManageInfo) {
+                throw new Error('Не удалось получить информацию о конфигурациях процессов');
             }
 
-            // Шаг 7: Перезапускаем все сохраненные процессы с новой задержкой
-            // const processMeteoraPool = new Map();
-            const processesToDelete: any[] = [];
-            const restartedProcesses: any[] = [];
-            for (const {processId, config, initialCreationTime} of processConfigs) {
-                if (processManageInfo.processIdsToDelete.includes(processId)) {
-                    processesToDelete.push(processId);
-                    console.log()
-                    continue
+            // Шаг 3: Сохраняем конфигурации существующих сигналов ДО остановки процессов
+            const existingConfigs = new Map<string, ProcessConfig>();
+            const activeSignalIds = this.getActiveSignalIds();
+
+            for (const signalId of activeSignalIds) {
+                const processes = this.getProcessesBySignalId(signalId);
+                if (processes.length > 0 && processes[0].config) {
+                    existingConfigs.set(signalId, processes[0].config);
                 }
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
-                // Передаем флаг, что это перезапуск и оригинальное время создания
-                const restartedProcessId = await this.startMevProcess(config, {
-                    isRestart: true,
-                    initialCreationTime: initialCreationTime
-                });
-                if (restartedProcessId) {
-                    restartedProcesses.push(restartedProcessId);
-                }
-                // await sleep(1000);
             }
 
-            this.deleteProcesses(processesToDelete);
-
-
-            // Шаг 6: Запускаем все новые процессы
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск ${newProcessConfigs.length} новых MEV процессов`);
-            const newProcesses: any[] = [];
-            for (const config of newProcessConfigs) {
-                // Для новых процессов не передаем флаг перезапуска
-                const processId = await this.startMevProcess(config);
-                if (processId) {
-                    newProcesses.push(processId);
+            // Шаг 4: Останавливаем и удаляем процессы, которые нужно удалить
+            const deletedSignalIds = new Set<string>();
+            for (const processId of processManageInfo.processIdsToDelete) {
+                const process = this.mevProcesses.get(processId);
+                if (process && process.signalId && !deletedSignalIds.has(process.signalId)) {
+                    // Останавливаем все процессы этого сигнала
+                    await this.stopAllProcessesBySignalId(process.signalId);
+                    deletedSignalIds.add(process.signalId);
+                } else {
+                    // Если signalId нет или уже обработан, останавливаем отдельный процесс
+                    await this.stopProcess(processId);
                 }
-                await sleep(1000);
             }
 
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
+            // Шаг 5: Обновляем список активных сигналов после удаления
+            const updatedActiveSignalIds = activeSignalIds.filter(id => !deletedSignalIds.has(id));
 
-            // Статистика и уведомления
+            // Шаг 6: Добавляем новые signalIds
+            const newSignalIds: string[] = [];
+            const newConfigs = new Map<string, ProcessConfig>();
+
+            for (const config of processManageInfo.configsToAdd) {
+                const signalId = this.generateSignalId(config.tokenAddress, config.meteoraPools);
+                if (!newSignalIds.includes(signalId) && !updatedActiveSignalIds.includes(signalId)) {
+                    newSignalIds.push(signalId);
+                    newConfigs.set(signalId, config);
+                }
+            }
+
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `NEW SIGNAL IDS: ${newSignalIds}`);
+
+            // Шаг 7: Объединяем существующие и новые signalIds
+            const allSignalIds = [...updatedActiveSignalIds, ...newSignalIds];
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ALL SIGNAL IDS: ${allSignalIds}`);
+            // Шаг 8: Рассчитываем оптимальное распределение инстансов и задержек
+            const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
+
+            // Используем новую функцию с распределением по сигналам
+            const distribution = this.calculateOptimalProcessDistribution(
+                allSignalIds,
+                TOTAL_REQUESTS_PER_SECOND
+            );
+
+            const signalDistribution = distribution.signalDistribution;
+            const expectedPerformance = distribution.expectedPerformance;
+            const performancePercent = (expectedPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
+
+            // Шаг 9: Останавливаем все существующие процессы для перераспределения
+            for (const signalId of updatedActiveSignalIds) {
+                await this.stopAllProcessesBySignalId(signalId, false);
+            }
+
+            // Шаг 10: Запускаем все процессы с новыми задержками
+            const newProcesses: string[] = [];
+            const signalInstances = new Map<string, string[]>();
+
+            // Шаг 11: Запускаем существующие сигналы с новыми задержками
+            for (const signalId of updatedActiveSignalIds) {
+                const config = existingConfigs.get(signalId);
+                if (!config) continue;
+
+                const signalConfig = signalDistribution.get(signalId);
+                if (!signalConfig) continue;
+
+                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays);
+                signalInstances.set(signalId, instanceIds);
+                newProcesses.push(...instanceIds);
+            }
+
+            // Шаг 12: Запускаем новые сигналы
+            for (const signalId of newSignalIds) {
+                await sleep(Number(this.userSettings.delay_between_nodes));
+                const config = newConfigs.get(signalId);
+                config.lookupTables = await this.getLookups(config);
+                if (!config) continue;
+
+                const signalConfig = signalDistribution.get(signalId);
+                if (!signalConfig) continue;
+
+                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays);
+                signalInstances.set(signalId, instanceIds);
+                newProcesses.push(...instanceIds);
+            }
+
+            // Шаг 13: Обновляем статистику и отправляем уведомления
             this.stats.totalMevActions += validSignals.length;
             this.stats.successfulSignals += validSignals.length;
 
+            // Вычисляем реальную производительность запущенных процессов
+            const actualProcesses = newProcesses
+                .map(id => this.mevProcesses.get(id))
+                .filter(p => p !== undefined);
+
+            const actualDelays = actualProcesses.map(p => p!.config!.process_delay || 0);
+            const actualPerformance = actualDelays.reduce(
+                (total, delay) => total + (this.DELAY_PERFORMANCE[delay] || 0), 0
+            );
+
+            const actualPercent = (actualPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
+
+            // Отправляем уведомление в Telegram
             if (this.settings.notifyTelegram) {
-                // Информация о процессах
-                let processesInfo = `Новые процессы: ${newProcesses.join(', ')}\n`;
+                // Информация о распределении задержек
+                const delayBreakdown = this.countDelays(actualDelays);
+                const delayLines = Object.entries(delayBreakdown)
+                    .map(([delay, count]) => `- ${count} процессов с задержкой ${delay}мс (${this.DELAY_PERFORMANCE[delay]} req/s)`)
+                    .join('\n');
 
-                if (restartedProcesses.length > 0) {
-                    processesInfo += `Перезапущенные процессы: ${restartedProcesses.join(', ')}\n`;
-                }
+                // Информация о сигналах и инстансах
+                const signalLines = Array.from(signalInstances.entries())
+                    .map(([signalId, instanceIds]) => {
+                        // Получаем процесс для информации о токене
+                        const processInfo = instanceIds.length > 0
+                            ? this.mevProcesses.get(instanceIds[0])
+                            : null;
 
-                processesInfo += `Всего процессов: ${newProcessCount}\n`;
-                processesInfo += `Задержка: ${processDelay}ms\n`;
+                        if (!processInfo) return null;
 
-                const message = `🚀 Обработано ${validSignals.length} MEV сигналов:\n` +
-                    `\n⚖️ Параметры:\n` +
-                    `Задержка: ${processDelay}ms\n` +
-                    `\n📊 Процессы:\n${processesInfo}`;
+                        // Собираем информацию о задержках для этого сигнала
+                        const instanceDelays = instanceIds
+                            .map(id => this.mevProcesses.get(id)?.config?.process_delay || 0)
+                            .reduce((acc, delay) => {
+                                acc[delay] = (acc[delay] || 0) + 1;
+                                return acc;
+                            }, {});
+
+                        const delayInfo = Object.entries(instanceDelays)
+                            .map(([delay, count]) => `${count}x${delay}мс`)
+                            .join(', ');
+
+                        return `- ${processInfo.tokenAddress.substring(0, 8)}... (${instanceIds.length} инстансов: ${delayInfo})`;
+                    })
+                    .filter(line => line !== null)
+                    .join('\n');
+
+                const message = `🚀 Обработано ${validSignals.length} MEV сигналов\n\n` +
+                    `✅ Результаты перераспределения ресурсов:\n` +
+                    `- Всего активных сигналов: ${allSignalIds.length}\n` +
+                    `- Средн. инстансов на сигнал: ${distribution.avgInstancesPerSignal}\n` +
+                    `- Всего запущено процессов: ${newProcesses.length}\n` +
+                    `- Суммарная производительность: ${actualPerformance} из ${TOTAL_REQUESTS_PER_SECOND} req/s (${actualPercent}%)\n\n` +
+                    `📊 Распределение задержек:\n${delayLines}\n\n` +
+                    `🔄 Активные сигналы:\n${signalLines}`;
 
                 telegramBotService.sendSystemNotification(message);
             }
 
             return {
                 success: true,
-                newProcesses,
-                restartedProcesses,
-                processDelay,
-                totalProcesses: newProcessCount
+                totalSignals: allSignalIds.length,
+                avgInstancesPerSignal: distribution.avgInstancesPerSignal,
+                totalProcesses: newProcesses.length,
+                delays: this.countDelays(actualDelays),
+                performance: {
+                    actual: actualPerformance,
+                    total: TOTAL_REQUESTS_PER_SECOND,
+                    percent: actualPercent
+                }
             };
         } catch (error) {
             logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при обработке MEV сигналов:', error);
             this.stats.failedSignals += signals.length;
 
-            // Отправляем уведомление об ошибке в Telegram
             if (this.settings?.notifyTelegram) {
-                const errorMessage = `❌ Ошибка обработки ${signals.length} MEV сигналов:\n` +
-                    `Ошибка: ${error.message}`;
-
-                telegramBotService.sendSystemNotification(errorMessage);
+                telegramBotService.sendSystemNotification(
+                    `❌ Ошибка обработки ${signals.length} MEV сигналов:\nОшибка: ${error.message}`
+                );
             }
 
-            return {
-                success: false,
-                error: error.message
-            };
+            return { success: false, error: error.message };
         }
+    }
+
+    /**
+     * Вспомогательная функция для запуска процессов с заданными задержками
+     * @param signalId - ID сигнала
+     * @param config - Конфигурация процесса
+     * @param delays - Массив задержек для запуска процессов
+     * @returns Массив идентификаторов запущенных процессов
+     */
+    async launchProcessesForSignal(
+        signalId: string,
+        config: ProcessConfig,
+        delays: number[]
+    ): Promise<string[]> {
+        const instanceIds: string[] = [];
+
+        for (let i = 0; i < delays.length; i++) {
+            const delay = delays[i];
+            const processConfig = { ...config, process_delay: delay };
+
+            const processId = await this.startMevProcess(
+                processConfig,
+                {
+                    isRestart: false,
+                    instanceNumber: i,
+                    signalId: signalId
+                }
+            );
+
+            if (processId) {
+                instanceIds.push(processId);
+            }
+
+            // Небольшая задержка между запусками
+            await sleep(50);
+        }
+
+        return instanceIds;
+    }
+
+
+    /**
+     * Подсчитывает количество процессов с каждой задержкой
+     * @param delays - Массив задержек
+     * @returns Объект, где ключи - это задержки, а значения - количество процессов с такой задержкой
+     */
+
+    countDelays(delays: number[]): {[key: string]: number} {
+        const result: {[key: string]: number} = {};
+
+        for (const delay of delays) {
+            if (!result[delay]) {
+                result[delay] = 0;
+            }
+            result[delay]++;
+        }
+
+        return result;
     }
 
     deleteProcesses(taskIds: string[]) {
@@ -1705,82 +2078,178 @@ export class MevLoadBalancer {
         }
     }
 
+
+    /**
+     * Перезапускает все процессы с оптимальными задержками
+     * после удаления некоторых процессов или сигналов
+     */
     async restartProcesses() {
         try {
-            const currentProcesses = Array.from(this.mevProcesses.entries());
-
-            const newProcessCount = currentProcesses.length;
-            const processDelay = this.calculateProcessDelay(newProcessCount);
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Рассчитана новая задержка ${processDelay}ms для ${newProcessCount} процессов`);
-
-            const processConfigs: any[] = [];
-            for (const [processId, processData] of currentProcesses) {
-                // Сохраняем конфигурацию процесса с обновленной задержкой
-                const config = {...processData.config, process_delay: processDelay};
-                // Сохраняем также время первоначального создания процесса
-                const initialCreationTime = processData.initialCreationTime || processData.startTime;
-
-                processConfigs.push({
-                    processId,
-                    config,
-                    initialCreationTime
-                });
-
-                // Останавливаем текущий процесс
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Останавливаем процесс ${processId} для перезапуска с новой задержкой`);
-                await this.stopProcess(processId);
-            }
-
-            const restartedProcesses: any[] = [];
-            for (const {config, initialCreationTime} of processConfigs) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапуск процесса с обновленной задержкой ${processDelay}ms, сохраняем время создания: ${new Date(initialCreationTime).toISOString()}`);
-                const restartedProcessId = await this.startMevProcess(config, {
-                    isRestart: true,
-                    initialCreationTime: initialCreationTime
-                });
-                if (restartedProcessId) {
-                    restartedProcesses.push(restartedProcessId);
-                }
-                // await sleep(1000);
-            }
-
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Перезапущено ${restartedProcesses.length} из ${processConfigs.length} процессов`);
-
-
-            if (this.settings.notifyTelegram) {
-                // Информация о процессах
-                let processesInfo = "";
-
-                if (restartedProcesses.length > 0) {
-                    processesInfo += `Перезапущенные процессы: ${restartedProcesses.join(', ')}\n`;
-                }
-                processesInfo += `Задержка: ${processDelay}ms\n`;
-
-                const message = `🔄 Перезапуск MEV процессов:\n` +
-                    `\n⚖️ Параметры:\n` +
-                    `Задержка: ${processDelay}ms\n` +
-                    `\n📊 Процессы:\n${processesInfo}`;
-
-                telegramBotService.sendSystemNotification(message);
+            const activeSignalIds = this.getActiveSignalIds();
+            if (activeSignalIds.length === 0) {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Нет активных сигналов для перезапуска`);
                 return {
                     success: true,
-                    restartedProcesses,
-                    processDelay,
+                    message: 'Нет активных сигналов для перезапуска'
                 };
             }
+
+            // Сохраняем информацию о существующих процессах перед их остановкой
+            const existingConfigs = new Map<string, ProcessConfig>();
+
+            for (const signalId of activeSignalIds) {
+                const processes = this.getProcessesBySignalId(signalId);
+                if (processes.length > 0 && processes[0].config) {
+                    existingConfigs.set(signalId, processes[0].config);
+                }
+            }
+
+            // Рассчитываем оптимальное распределение ресурсов
+            const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
+
+            // Используем новую функцию с распределением по сигналам
+            const distribution = this.calculateOptimalProcessDistribution(
+                activeSignalIds,
+                TOTAL_REQUESTS_PER_SECOND
+            );
+
+            const signalDistribution = distribution.signalDistribution;
+            const expectedPerformance = distribution.expectedPerformance;
+            const performancePercent = (expectedPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
+
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Перезапуск процессов: ${activeSignalIds.length} сигналов, в среднем ${distribution.avgInstancesPerSignal} инстансов на сигнал, ` +
+                `всего ${distribution.totalProcesses} процессов, ожидаемая производительность: ${expectedPerformance} req/s ` +
+                `(${performancePercent}% от доступных ${TOTAL_REQUESTS_PER_SECOND} req/s)`
+            );
+
+            // Останавливаем все существующие процессы
+            for (const signalId of activeSignalIds) {
+                await this.stopAllProcessesBySignalId(signalId, false);
+            }
+
+            // Запускаем процессы с новыми оптимальными задержками
+            const newProcesses: string[] = [];
+            const signalInstances = new Map<string, { ids: string[], delayInfo: string }>();
+
+            // Запускаем процессы для каждого сигнала
+            for (const signalId of activeSignalIds) {
+                const config = existingConfigs.get(signalId);
+                if (!config) {
+                    logger.warn(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Конфигурация для сигнала ${signalId} не найдена, пропускаем перезапуск`
+                    );
+                    continue;
+                }
+
+                const signalConfig = signalDistribution.get(signalId);
+                if (!signalConfig) {
+                    logger.warn(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Распределение для сигнала ${signalId} не найдено, пропускаем перезапуск`
+                    );
+                    continue;
+                }
+
+                // Запускаем процессы для этого сигнала
+                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays);
+
+                if (instanceIds.length > 0) {
+                    // Собираем информацию о задержках для этого сигнала
+                    const instanceDelays = instanceIds
+                        .map(id => this.mevProcesses.get(id)?.config?.process_delay || 0)
+                        .reduce((acc, delay) => {
+                            acc[delay] = (acc[delay] || 0) + 1;
+                            return acc;
+                        }, {});
+
+                    const delayInfo = Object.entries(instanceDelays)
+                        .map(([delay, count]) => `${count}x${delay}мс`)
+                        .join(', ');
+
+                    signalInstances.set(signalId, { ids: instanceIds, delayInfo });
+                    newProcesses.push(...instanceIds);
+
+                    logger.info(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Перезапущен сигнал ${signalId}: ${instanceIds.length} процессов с задержками: ${delayInfo}`
+                    );
+                } else {
+                    logger.warn(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Не удалось запустить процессы для сигнала ${signalId}`
+                    );
+                }
+            }
+
+            // Вычисляем реальную производительность запущенных процессов
+            const actualProcesses = newProcesses
+                .map(id => this.mevProcesses.get(id))
+                .filter(p => p !== undefined);
+
+            const actualDelays = actualProcesses.map(p => p!.config!.process_delay || 0);
+            const actualPerformance = actualDelays.reduce(
+                (total, delay) => total + (this.DELAY_PERFORMANCE[delay] || 0), 0
+            );
+
+            const actualPercent = (actualPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
+
+            // Отправляем уведомление в Telegram
+            if (this.settings.notifyTelegram) {
+                // Информация о распределении задержек
+                const delayBreakdown = this.countDelays(actualDelays);
+                const delayLines = Object.entries(delayBreakdown)
+                    .map(([delay, count]) => `- ${count} процессов с задержкой ${delay}мс (${this.DELAY_PERFORMANCE[delay]} req/s)`)
+                    .join('\n');
+
+                // Информация о сигналах
+                const signalLines = Array.from(signalInstances.entries())
+                    .map(([signalId, { ids, delayInfo }]) => {
+                        const process = ids.length > 0 ? this.mevProcesses.get(ids[0]) : null;
+                        if (!process) return null;
+
+                        return `- ${process.tokenAddress.substring(0, 8)}... (${ids.length} инстансов: ${delayInfo})`;
+                    })
+                    .filter(line => line !== null)
+                    .join('\n');
+
+                // Добавляем информацию о суммарной производительности
+                const message = `🔄 Перезапуск MEV процессов\n\n` +
+                    `✅ Новое распределение ресурсов:\n` +
+                    `- Всего активных сигналов: ${activeSignalIds.length}\n` +
+                    `- Средн. инстансов на сигнал: ${distribution.avgInstancesPerSignal}\n` +
+                    `- Всего запущено процессов: ${newProcesses.length}\n` +
+                    `- Суммарная производительность: ${actualPerformance} из ${TOTAL_REQUESTS_PER_SECOND} req/s (${actualPercent}%)\n\n` +
+                    `📊 Распределение задержек:\n${delayLines}\n\n` +
+                    `🔄 Активные сигналы:\n${signalLines}`;
+
+                telegramBotService.sendSystemNotification(message);
+            }
+
+            return {
+                success: true,
+                newProcesses,
+                totalProcesses: newProcesses.length,
+                performance: {
+                    actual: actualPerformance,
+                    total: TOTAL_REQUESTS_PER_SECOND,
+                    percent: actualPercent
+                },
+                delays: this.countDelays(actualDelays)
+            };
         } catch (e) {
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while restring: ${e}`);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при перезапуске процессов: ${e}`);
             return {
                 success: false,
                 error: e.message
             };
         }
-
-
     }
 
     /**
-     * Проверяет ликвидность пулов всех процессов и удаляет процессы с низкой ликвидностью
+     * Проверяет ликвидность пулов всех сигналов и удаляет сигналы с низкой ликвидностью
      */
     async checkAndCleanProcessesByLiquidity() {
         // Проверяем, что очистка уже не запущена и не идёт обработка сигналов
@@ -1798,88 +2267,210 @@ export class MevLoadBalancer {
             // Устанавливаем блокировку на время операции
             this.isCleaningProcesses = true;
 
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Начало проверки ликвидности пулов для ${this.mevProcesses.size} процессов`);
+            // Получаем все активные сигналы
+            const activeSignalIds = this.getActiveSignalIds();
 
-            // Текущее время для проверки возраста процессов
+            logger.info(
+                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                `Начало проверки ликвидности пулов для ${activeSignalIds.length} сигналов (${this.mevProcesses.size} процессов)`
+            );
+
+            // Текущее время для проверки возраста
             const currentTime = Date.now();
 
-            // Собираем процессы, которые нужно остановить
-            const processesToStop: any[] = [];
+            // Кэш результатов проверки пулов для избежания повторных проверок
+            const poolLiquidityCache = new Map<string, boolean>();
 
-            // Проходим по всем процессам и проверяем ликвидность их пулов
-            for (const [processId, processData] of this.mevProcesses.entries()) {
+            // Сигналы, которые нужно остановить
+            const signalsToStop: string[] = [];
+
+            // Информация о пулах, которые нужно удалить для каждого сигнала
+            const poolsToRemove = new Map<string, string[]>();
+
+            // Проверяем каждый сигнал
+            for (const signalId of activeSignalIds) {
                 try {
-                    const meteoraPools = processData.meteoraPools || processData.config?.meteoraPools;
+                    // Получаем все процессы этого сигнала
+                    const signalProcesses = this.getProcessesBySignalId(signalId);
 
-                    if (!meteoraPools) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для процесса ${processId}: пулы не найдены`);
+                    if (signalProcesses.length === 0) {
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для сигнала ${signalId}: процессы не найдены`);
                         continue;
                     }
 
-                    // Проверяем возраст процесса
-                    const processAge = currentTime - (processData.initialCreationTime || processData.startTime);
+                    // Берем первый процесс как репрезентативный для проверки
+                    const representativeProcess = signalProcesses[0];
+
+                    // Проверяем возраст сигнала
+                    const processAge = currentTime - (representativeProcess.initialCreationTime || representativeProcess.startTime);
                     if (processAge < this.settings.minProcessAgeForCleanup) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для молодого процесса ${processId}: возраст ${Math.floor(processAge / 1000 / 60)} минут < ${Math.floor(this.settings.minProcessAgeForCleanup / 1000 / 60)} минут`);
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Пропуск проверки для молодого сигнала ${signalId}: возраст ${Math.floor(processAge / 1000 / 60)} минут < ${Math.floor(this.settings.minProcessAgeForCleanup / 1000 / 60)} минут`
+                        );
                         continue;
                     }
 
-                    logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка ликвидности пулов ${meteoraPools} для процесса ${processId} (возраст: ${Math.floor(processAge / 1000 / 60)} минут)`);
+                    const meteoraPools = representativeProcess.meteoraPools || representativeProcess.config?.meteoraPools;
+                    if (!meteoraPools || meteoraPools.length === 0) {
+                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для сигнала ${signalId}: пулы не найдены`);
+                        continue;
+                    }
 
-                    // Проверяем ликвидность пула
-                    const hasEnoughLiquidity: CheckResult[] = await this.checkLiquidity(meteoraPools);
+                    logger.info(
+                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        `Проверка ликвидности пулов для сигнала ${signalId} (${meteoraPools.length} пулов, возраст: ${Math.floor(processAge / 1000 / 60)} минут)`
+                    );
 
-                    // Если ликвидность ниже порогового значения, добавляем процесс в список на остановку
-                    const count = hasEnoughLiquidity.filter(item => item.verdict === false).length;
+                    // Проверяем ликвидность каждого пула с использованием кэша
+                    const checkResults: CheckResult[] = [];
 
-                    if (count === meteoraPools.length) {
-                        processesToStop.push(processId);
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} будет остановлен: не удолетворены условия check...`);
-                    } else if (count < meteoraPools.length && count !== 0) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `удаляем нерабочие пулы`);
-                        const deletePromises = hasEnoughLiquidity
-                            .filter(item => item.verdict === false)
-                            .map(item => this.deleteMeteoraPoolFromProcess(processId, item.pool));
-                        await Promise.all(deletePromises)
+                    for (const pool of meteoraPools) {
+                        // Проверяем, есть ли результат в кэше
+                        if (poolLiquidityCache.has(pool)) {
+                            const cachedVerdict = poolLiquidityCache.get(pool);
+                            checkResults.push({ pool, verdict: cachedVerdict! });
+                            logger.info(
+                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                `Используем кэшированный результат для пула ${pool}: ${cachedVerdict ? 'активен' : 'неактивен'}`
+                            );
+                        } else {
+                            // Проверяем ликвидность пула
+                            const [checkResult] = await this.checkLiquidity([pool]);
 
+                            // Кэшируем результат
+                            poolLiquidityCache.set(pool, checkResult.verdict);
 
-                    } else if (count === 0) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Процесс ${processId} продолжит работу: ликвидность пула достаточна`);
+                            checkResults.push(checkResult);
+                            logger.info(
+                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                `Проверка ликвидности пула ${pool}: ${checkResult.verdict ? 'активен' : 'неактивен'}`
+                            );
+                        }
+                    }
+
+                    // Анализируем результаты проверки
+                    const inactivePools = checkResults.filter(item => item.verdict === false).map(item => item.pool);
+                    const inactivePoolCount = inactivePools.length;
+
+                    if (inactivePoolCount === meteoraPools.length) {
+                        // Все пулы неактивны - останавливаем весь сигнал
+                        signalsToStop.push(signalId);
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Сигнал ${signalId} будет остановлен: все ${inactivePoolCount} пулов неактивны`
+                        );
+                    } else if (inactivePoolCount > 0) {
+                        // Часть пулов неактивна - удаляем только неактивные пулы
+                        poolsToRemove.set(signalId, inactivePools);
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `У сигнала ${signalId} удаляем ${inactivePoolCount} неактивных пулов из ${meteoraPools.length}`
+                        );
+                    } else {
+                        // Все пулы активны
+                        logger.info(
+                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            `Сигнал ${signalId} продолжит работу: все ${meteoraPools.length} пулов активны`
+                        );
                     }
                 } catch (error) {
-                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при проверке ликвидности для процесса ${processId}:`, error);
+                    logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при проверке ликвидности для сигнала ${signalId}:`, error);
                 }
             }
 
-            // Если есть процессы для остановки, останавливаем их
-            if (processesToStop.length > 0) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Найдено ${processesToStop.length} процессов с низкой ликвидностью для остановки`);
+            // Обрабатываем сигналы с частично неактивными пулами
+            if (poolsToRemove.size > 0) {
+                logger.info(
+                    logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                    `Найдено ${poolsToRemove.size} сигналов с частично неактивными пулами`
+                );
+
+                for (const [signalId, inactivePools] of poolsToRemove.entries()) {
+                    try {
+                        // Получаем все процессы сигнала
+                        const processes = this.getProcessesBySignalId(signalId);
+                        if (processes.length === 0) continue;
+
+                        // Берем первый процесс для получения информации о сигнале
+                        const process = processes[0];
+                        const config = process.config;
+                        if (!config) continue;
+
+                        // Получаем все активные пулы (исключаем неактивные)
+                        const activePools = config.meteoraPools.filter(pool => !inactivePools.includes(pool));
+
+                        if (activePools.length === 0) {
+                            // Если после фильтрации не осталось активных пулов, останавливаем сигнал
+                            signalsToStop.push(signalId);
+                            logger.info(
+                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                `Сигнал ${signalId} будет остановлен: после удаления неактивных пулов не осталось активных`
+                            );
+                        } else {
+                            // Останавливаем все процессы сигнала
+                            await this.stopAllProcessesBySignalId(signalId, false);
+
+                            // Создаем новую конфигурацию только с активными пулами
+                            const updatedConfig = {
+                                ...config,
+                                meteoraPools: activePools
+                            };
+
+                            // Заново рассчитываем оптимальное распределение для этого сигнала
+                            const distribution = this.calculateOptimalProcessDistribution(
+                                [signalId],
+                                Number(this.userSettings?.requests_per_second) || 2000
+                            );
+
+                            const signalConfig = distribution.signalDistribution.get(signalId);
+                            if (!signalConfig) continue;
+
+                            // Запускаем процессы с новой конфигурацией и оптимальными задержками
+                            await this.launchProcessesForSignal(signalId, updatedConfig, signalConfig.delays);
+
+                            logger.info(
+                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                `Сигнал ${signalId} перезапущен с ${activePools.length} активными пулами (удалено ${inactivePools.length} неактивных пулов)`
+                            );
+                        }
+                    } catch (error) {
+                        logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при обработке частично неактивных пулов для сигнала ${signalId}:`, error);
+                    }
+                }
+            }
+
+            // Если есть сигналы для остановки, останавливаем их
+            if (signalsToStop.length > 0) {
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Найдено ${signalsToStop.length} сигналов с низкой ликвидностью для остановки`);
 
                 // Уведомляем в Telegram о начале очистки
                 if (this.settings.notifyTelegram) {
                     telegramBotService.sendSystemNotification(
-                        `🧹 Начало очистки ${processesToStop.length} MEV процессов с низкой ликвидностью`
+                        `🧹 Начало очистки ${signalsToStop.length} MEV сигналов с низкой ликвидностью`
                     );
                 }
 
-                // Останавливаем все процессы, кроме последнего
-                for (let i = 0; i < processesToStop.length - 1; i++) {
-                    await this.stopProcess(processesToStop[i], false);
+                // Останавливаем все сигналы, кроме последнего
+                for (let i = 0; i < signalsToStop.length - 1; i++) {
+                    await this.stopAllProcessesBySignalId(signalsToStop[i], false);
                 }
 
-                // Останавливаем последний процесс с флагом restart=true
-                if (processesToStop.length > 0) {
-                    const lastProcessId = processesToStop[processesToStop.length - 1];
-                    await this.stopProcess(lastProcessId, true);
+                // Останавливаем последний сигнал с флагом restart=true для перезапуска оставшихся
+                if (signalsToStop.length > 0) {
+                    const lastSignalId = signalsToStop[signalsToStop.length - 1];
+                    await this.stopAllProcessesBySignalId(lastSignalId, true);
 
                     // Уведомляем об окончании процесса очистки
                     if (this.settings.notifyTelegram) {
                         telegramBotService.sendSystemNotification(
-                            `✅ Завершена очистка ${processesToStop.length} MEV процессов с низкой ликвидностью.\nЗапущен перерасчет и перезапуск оставшихся процессов.`
+                            `✅ Завершена очистка ${signalsToStop.length} MEV сигналов с низкой ликвидностью.\n` +
+                            `Запущен перерасчет и перезапуск оставшихся сигналов.`
                         );
                     }
                 }
             } else {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Процессы с низкой ликвидностью не найдены');
+                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сигналы с низкой ликвидностью не найдены');
             }
         } catch (error) {
             logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Ошибка при проверке и очистке процессов с низкой ликвидностью:', error);

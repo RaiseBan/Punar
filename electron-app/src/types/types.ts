@@ -9,6 +9,10 @@ export interface AppSettings {
     tensor_api_token?: string;
     bloxroute_api_token?: string;
 
+    delay_between_nodes?: string;
+
+
+    lookupOwner?: string;
     // mev
     migration_wallet?: string;
     jito_lower_bound?: string;
@@ -46,7 +50,7 @@ export interface Signal {
     meteoraPool: string;
     pumpSwapPool?: string;
     raydiumPool?: string;
-
+    meteoraDAMMPool?: string;
     type: string;
 
     timestamp: number;
@@ -61,6 +65,8 @@ export type ProcessConfig = {
     meteoraPools: string[];
     pumpSwapPool?: string;
     raydiumPool?: string;
+    dammMeteoraPool?: string;
+    lookupTables?: string[];
     // Raydium pools:
     type: string;
 
@@ -75,6 +81,7 @@ export type Pools = {
     meteora: string[];
     pump?: string;
     raydium?: string;
+    dammMeteora?: string;
     type?: string;
 }
 
@@ -83,24 +90,25 @@ export type ProcessesToManage = {
     processIdsToDelete: string[]
 }
 
+// В файле с определением типов:
 export interface MevProcess {
     id?: string;
     pid: number;
     tokenAddress: string;
-    meteoraPools: string[]; // Замените на ваш реальный тип
-    pumpSwapPool: string; // Или конкретный тип, если есть
-
-
-    process?: ChildProcess; // Из модуля 'child_process'
+    meteoraPools: string[];
+    pumpSwapPool: string;
+    process?: ChildProcess;
     startTime: number;
     initialCreationTime?: number;
     status: 'running' | 'stopped' | 'error' | 'completed';
     lastActivity: number;
-    signals: any; // Замените на ваш тип сигналов
+    signals: any;
     config?: ProcessConfig;
     exitCode?: any;
     exitTime?: number;
     processTimer?: any;
+    instanceNumber?: number;
+    signalId?: string; // Новое поле для группировки процессов
 }
 export type CheckResult = {
     pool: string,
