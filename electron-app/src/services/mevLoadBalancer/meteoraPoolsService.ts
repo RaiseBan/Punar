@@ -1,7 +1,7 @@
 import {PairInfo, Pools, ProcessConfig, ProcessesToManage, SignalWithMeta, UsageMeteoraPools} from "@/types/types";
 import {MevLoadBalancer} from "./mevLoadBalancer";
 import logger from "../loggerService";
-import {checkPairDex} from "@/services/dexScreenerAPI";
+import {checkPairDex} from "../../services/dexScreenerAPI";
 
 export async function structConfig<T extends MevLoadBalancer>(
     target: T,
