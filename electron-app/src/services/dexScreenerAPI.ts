@@ -1,5 +1,5 @@
 import axios from "axios";
-import logger from "@/services/loggerService";
+import logger from "../services/loggerService";
 
 export async function checkPairDex(pair: string ) {
     const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
