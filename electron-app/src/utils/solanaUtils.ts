@@ -11,7 +11,7 @@ import {
 import * as bs58 from "bs58";
 import { saveLookupTables, getLookupTables } from "./fsHelper";
 import { sendJitoTransaction } from "../services/jito_api";
-import logger from "@/services/loggerService";
+import logger from "../services/loggerService";
 
 // Интерфейсы и типы
 interface DASAssetGroup {
