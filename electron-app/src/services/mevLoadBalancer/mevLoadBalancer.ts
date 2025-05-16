@@ -1689,16 +1689,39 @@ export class MevLoadBalancer {
     }
 
     /**
-     * Генерирует уникальный ID для сигнала на основе токена и пулов
+     * Генерирует уникальный ID для сигнала на основе токена и всех пулов
+     * @param tokenAddress - Адрес токена
+     * @param meteoraPools - Массив пулов Meteora
+     * @returns Уникальный ID сигнала
      */
     generateSignalId(tokenAddress: string, meteoraPools: string[]): string {
         const tokenPart = tokenAddress.substring(0, 8);
 
-        // Сортируем и берем первый пул для краткости
+        // Сортируем пулы для консистентности
         const sortedPools = [...meteoraPools].sort();
-        const poolPart = sortedPools[0]?.substring(0, 8) || 'nopool';
 
-        return `signal_${tokenPart}_${poolPart}`;
+        // Создаем хеш из всех пулов
+        const poolsHash = this.createHash(sortedPools.join('-')).substring(0, 8);
+
+        // Также добавляем количество пулов для большей уникальности
+        return `signal_${tokenPart}_${poolsHash}_${sortedPools.length}`;
+    }
+
+
+    /**
+     * Создает простой хеш строки
+     * @param str - Строка для хеширования
+     * @returns Хеш строки
+     */
+    createHash(str: string): string {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        // Преобразуем число в строку и берем абсолютное значение
+        return Math.abs(hash).toString(16);
     }
 
 
