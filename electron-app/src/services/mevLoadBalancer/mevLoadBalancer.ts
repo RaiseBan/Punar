@@ -1813,9 +1813,11 @@ export class MevLoadBalancer {
                 }
             }
 
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `NEW SIGNAL IDS: ${newSignalIds}`);
+
             // Шаг 7: Объединяем существующие и новые signalIds
             const allSignalIds = [...updatedActiveSignalIds, ...newSignalIds];
-
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ALL SIGNAL IDS: ${allSignalIds}`);
             // Шаг 8: Рассчитываем оптимальное распределение инстансов и задержек
             const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
 
