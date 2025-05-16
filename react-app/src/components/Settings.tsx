@@ -226,7 +226,7 @@ export default function Settings() {
                     />
 
                     <TextField
-                        label="Req/s"
+                        label="Delay_nodes"
                         fullWidth
                         value={settings.delay_between_nodes || ""}
                         onChange={handleChange('delay_between_nodes')}
