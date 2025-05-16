@@ -258,6 +258,9 @@ export async function appendLookupTable(
     return lookupTableAddress;
 }
 
+
+
+
 // Функция для преобразования объекта с BigInt в обычный объект
 export function convertBigIntToString(obj: any): any {
     if (typeof obj !== 'object' || obj === null) return obj;

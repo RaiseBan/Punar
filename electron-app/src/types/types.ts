@@ -63,6 +63,7 @@ export type ProcessConfig = {
     pumpSwapPool?: string;
     raydiumPool?: string;
     dammMeteoraPool?: string;
+    lookupTables?: string[];
     // Raydium pools:
     type: string;
 

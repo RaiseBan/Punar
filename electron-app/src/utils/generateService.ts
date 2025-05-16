@@ -209,7 +209,7 @@ export async function generateMevConfig(
 
 export async function generateSimpleMevConfig(
     botDir: string,
-    config: any,
+    config: any, // ProcessConfig
     tokenAddress: string,
     meteoraPools: string[],
     userSetting: UserSettings,
@@ -238,22 +238,6 @@ export async function generateSimpleMevConfig(
 
         // Формируем массив пулов
 
-        let lookupTables: string[] = [];
-        if (meteoraPools.length > 1) {
-            let accountToExtendLookup: string[] = [];
-
-            if (pumpSwapPool){
-                accountToExtendLookup.push(pumpSwapPool);
-            }else if (config.raydiumPool){
-                accountToExtendLookup.push(config.raydiumPool);
-            }else if (config.dammMeteoraPool){
-                accountToExtendLookup.push(config.dammMeteoraPool);
-            }
-
-            accountToExtendLookup.push(...meteoraPools);
-
-            lookupTables = await updateIfNotExistsAndGet(main_rpc, accountToExtendLookup, config.lookupOwner);
-        }
 
 
 
@@ -266,7 +250,7 @@ export async function generateSimpleMevConfig(
                 mint: tokenAddress,
                 pump_pool_list: pumpSwapPool ? [pumpSwapPool] : [],
                 meteora_dlmm_pool_list: meteoraPools,
-                lookup_table_accounts: lookupTables,
+                lookup_table_accounts: config.lookupTables,
                 process_delay: processDelay,
                 // This is the Raydium V4 AMM Pools
                 raydium_pool_list: config.type === "v4" ? [config.raydiumPool] : [],

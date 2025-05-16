@@ -11,7 +11,7 @@ import {getSettings} from '../../utils/fsHelper';
 import telegramBotService from '../telegramBotService';
 import fs from 'fs';
 import bs58 from "bs58";
-import {createTokenAccount, getDetailedTokenAccounts, sleep} from '../../utils/solanaUtils';
+import {createTokenAccount, getDetailedTokenAccounts, sleep, updateIfNotExistsAndGet} from '../../utils/solanaUtils';
 import {Keypair} from "@solana/web3.js";
 import logger from '../loggerService';
 import axios from "axios";
@@ -1752,6 +1752,25 @@ export class MevLoadBalancer {
 
     }
 
+    async getLookups(config: ProcessConfig): Promise<string[] | undefined>{
+        if (config.meteoraPools.length > 1) {
+            let accountToExtendLookup: string[] = [];
+
+            if (config.pumpSwapPool){
+                accountToExtendLookup.push(config.pumpSwapPool);
+            }else if (config.raydiumPool){
+                accountToExtendLookup.push(config.raydiumPool);
+            }else if (config.dammMeteoraPool){
+                accountToExtendLookup.push(config.dammMeteoraPool);
+            }
+
+            accountToExtendLookup.push(...config.meteoraPools);
+
+            return await updateIfNotExistsAndGet(config.main_rpc, accountToExtendLookup, this.userSettings.lookupOwner);
+        }
+    }
+
+
     /**
      * Обрабатывает MEV сигналы
      * @param signals - Массив сигналов для обработки
@@ -1879,7 +1898,9 @@ export class MevLoadBalancer {
 
             // Шаг 12: Запускаем новые сигналы
             for (const signalId of newSignalIds) {
+
                 const config = newConfigs.get(signalId);
+                config.lookupTables = await this.getLookups(config);
                 if (!config) continue;
 
                 const signalConfig = signalDistribution.get(signalId);
