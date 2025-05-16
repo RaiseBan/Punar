@@ -289,8 +289,8 @@ function stopMevProcess(taskId: string | number): Promise<KillProcessResult> {
 
 // Добавим логирование входных параметров для диагностики
 async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | null> {
-    console.log(`🚀 SPAWN: Запуск процесса с конфигурацией:`, JSON.stringify(taskConfig, null, 2));
-    console.log(`⚙️ SPAWN: Настройки пользователя:`, JSON.stringify(userSettings, null, 2));
+    // console.log(`🚀 SPAWN: Запуск процесса с конфигурацией:`, JSON.stringify(taskConfig, null, 2));
+    // console.log(`⚙️ SPAWN: Настройки пользователя:`, JSON.stringify(userSettings, null, 2));
 
     // Проверка необходимых параметров
     if (!taskConfig) {
@@ -355,7 +355,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
         console.log(`Конфигурация сохранена: ${configPath}`);
 
         // Запускаем дочерний процесс с заданным рабочим каталогом (cwd) и переменными окружения
-        console.log(JSON.stringify(userSettings, null, 2));
+        // console.log(JSON.stringify(userSettings, null, 2));
         console.log(`scriptsDirectoryPath: ${userSettings.scriptDirectory}`);
         console.log(`start process: \nPath: ${path.join(userSettings.scriptDirectory, "src", "index.ts")} \nConfigPath: ${configPath}`);
 
