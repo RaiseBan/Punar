@@ -1920,7 +1920,7 @@ class TelegramBotService {
 
             // Проверка типа пула, если указан
             if (poolType) {
-                const validTypes = ["clmm", "cpmm", "v4", "pumpswap"];
+                const validTypes = ["clmm", "cpmm", "v4", "pumpswap", "meteora"];
                 if (!validTypes.includes(poolType)) {
                     this.sendMessage(chatId, `❌ Неверный тип пула. Допустимые значения: ${validTypes.join(', ')}`);
                     return;
