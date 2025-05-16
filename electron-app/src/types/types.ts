@@ -9,6 +9,9 @@ export interface AppSettings {
     tensor_api_token?: string;
     bloxroute_api_token?: string;
 
+    delay_between_nodes?: string;
+
+
     lookupOwner?: string;
     // mev
     migration_wallet?: string;

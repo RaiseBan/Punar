@@ -1898,7 +1898,7 @@ export class MevLoadBalancer {
 
             // Шаг 12: Запускаем новые сигналы
             for (const signalId of newSignalIds) {
-
+                await sleep(Number(this.userSettings.delay_between_nodes));
                 const config = newConfigs.get(signalId);
                 config.lookupTables = await this.getLookups(config);
                 if (!config) continue;
