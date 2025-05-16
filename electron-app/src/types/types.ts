@@ -46,7 +46,7 @@ export interface Signal {
     meteoraPool: string;
     pumpSwapPool?: string;
     raydiumPool?: string;
-
+    meteoraDAMMPool?: string;
     type: string;
 
     timestamp: number;
@@ -61,6 +61,7 @@ export type ProcessConfig = {
     meteoraPools: string[];
     pumpSwapPool?: string;
     raydiumPool?: string;
+    dammMeteoraPool?: string;
     // Raydium pools:
     type: string;
 
@@ -75,6 +76,7 @@ export type Pools = {
     meteora: string[];
     pump?: string;
     raydium?: string;
+    dammMeteora?: string;
     type?: string;
 }
 

@@ -1677,19 +1677,17 @@ class TelegramBotService {
         this.registerCommand('mev_processes', async (chatId) => {
             try {
                 const signalIds = mevLoadBalancer.getActiveSignalIds();
-
                 if (signalIds.length === 0) {
                     this.sendMessage(chatId, '📊 Активные MEV сигналы отсутствуют');
                     return;
                 }
 
-                let message = '📊 **Активные MEV сигналы**\n\n';
+                let message = '<b>📊 Активные MEV сигналы</b>\n\n';
 
                 // Для каждого сигнала выводим подробную информацию
                 for (let i = 0; i < signalIds.length; i++) {
                     const signalId = signalIds[i];
                     const processes = mevLoadBalancer.getProcessesBySignalId(signalId);
-
                     if (processes.length === 0) continue;
 
                     // Берем первый процесс для получения общей информации о сигнале
@@ -1703,21 +1701,20 @@ class TelegramBotService {
                         acc[delay] = (acc[delay] || 0) + 1;
                         return acc;
                     }, {});
-
                     const delayText = Object.entries(delayInfo)
                         .map(([delay, count]) => `${count}x${delay}мс`)
                         .join(', ');
 
-                    message += `**Сигнал ${i + 1}. ID:** \`${signalId}\`\n`;
-                    message += `**Токен:** \`${firstProcess.tokenAddress}\`\n`;
-                    message += `**Meteora пулы:** \`${firstProcess.meteoraPools?.join(', ') || 'N/A'}\`\n`;
-                    message += `**PumpSwap пул:** \`${firstProcess.pumpSwapPool || 'N/A'}\`\n`;
-                    message += `**Raydium пул:** \`${firstProcess.config?.raydiumPool || 'N/A'}\`\n`;
-                    message += `**Тип Raydium:** \`${firstProcess.config?.type || 'N/A'}\`\n`;
-                    message += `**Время работы:** ${runtime} мин.\n`;
-                    message += `**Инстансы:** ${processes.length} (${delayText})\n`;
-                    message += `**Удалить сигнал:** \`/mev_stop_signal ${signalId}\`\n\n`;
-                    message += `**=============================================**\n\n`;
+                    message += `<b>${i + 1}. ID:</b> <code>${signalId}</code>\n`;
+                    message += `<b>${i + 1}. Token:</b> <code>${firstProcess.tokenAddress}</code>\n`;
+                    message += `<b>${i + 1}. Meteora pools:</b> <code>${firstProcess.meteoraPools?.join(', ') || 'N/A'}</code>\n`;
+                    message += `<b>${i + 1}. Pumpswap pool:</b> <code>${firstProcess.pumpSwapPool || 'N/A'}</code>\n`;
+                    message += `<b>${i + 1}. Raydium pool:</b> <code>${firstProcess.config?.raydiumPool || 'N/A'}</code>\n`;
+                    message += `<b>${i + 1}. Raydium type:</b> <code>${firstProcess.config?.type || 'N/A'}</code>\n`;
+                    message += `<b>${i + 1}. Uptime:</b> ${runtime} min.\n`;
+                    message += `<b>${i + 1}. Instances:</b> ${processes.length} (${delayText})\n`;
+                    message += `<b>${i + 1}. DELETE:</b> <code>/mev_stop_signal ${signalId}</code>\n`;
+                    message += `<b>============================================</b>\n\n`;
                 }
 
                 this.sendMessage(chatId, message);

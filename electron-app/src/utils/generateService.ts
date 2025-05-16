@@ -253,7 +253,8 @@ export async function generateSimpleMevConfig(
                 raydium_cp_pool_list: config.type === "cpmm" ? [config.raydiumPool] : [],
 
                 // This is the Raydium CLMM(Centralized Liquidity) Pools
-                raydium_clmm_pool_list: config.type === "clmm" ? [config.raydiumPool] : []
+                raydium_clmm_pool_list: config.type === "clmm" ? [config.raydiumPool] : [],
+                meteora_damm_pool_list: config.dammMeteoraPool? [config.dammMeteoraPool] : [],
             }
         ];
 

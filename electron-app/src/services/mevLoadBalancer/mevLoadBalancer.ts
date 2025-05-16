@@ -256,7 +256,7 @@ export class MevLoadBalancer {
      * @param validSignals - Валидные сигналы для обработки
      * @returns Конфигурации для добавления и идентификаторы процессов для удаления
      */
-    getConfigs(validSignals: SignalWithMeta[]): ProcessesToManage | undefined {
+    async getConfigs(validSignals: SignalWithMeta[]): Promise<ProcessesToManage | undefined> {
         try {
             // Группируем пулы по токенам
             const groupPoolsByToken = new Map<string, Pools>();
@@ -272,16 +272,38 @@ export class MevLoadBalancer {
                     if (!pools.meteora.includes(signal.meteoraPool)) {
                         pools.meteora.push(signal.meteoraPool);
                     }
+
+                    // Обновляем поля pump, raydium и type согласно новому сигналу
+                    if (signal.pumpSwapPool) {
+                        pools.pump = signal.pumpSwapPool;
+                        pools.raydium = undefined; // Обнуляем raydium если пришел pumpSwap
+                        pools.dammMeteora = undefined;
+                    } else if (signal.raydiumPool) {
+                        pools.raydium = signal.raydiumPool;
+                        pools.pump = undefined; // Обнуляем pumpSwap если пришел raydium
+                        pools.dammMeteora = undefined;
+                    }else if (signal.meteoraDAMMPool){
+                        pools.raydium = undefined
+                        pools.pump = undefined; // Обнуляем pumpSwap если пришел raydium
+                        pools.dammMeteora = signal.meteoraDAMMPool;
+                    }
+
+                    // Обновляем тип, если он есть в сигнале
+                    if (signal.type) {
+                        pools.type = signal.type;
+                    }
                 } else {
                     // Создаем новую запись для токена
                     groupPoolsByToken.set(signal.tokenAddress, {
                         meteora: [signal.meteoraPool],
                         pump: signal.pumpSwapPool,
                         raydium: signal.raydiumPool,
+                        dammMeteora: signal.meteoraDAMMPool,
                         type: signal.type
                     });
                 }
             }
+
 
             // Шаг 2: Для каждого токена распределяем пулы по процессам
             for (const [token, pools] of groupPoolsByToken.entries()) {
@@ -331,12 +353,13 @@ export class MevLoadBalancer {
                         }
 
                         // Создаем новую конфигурацию с обновленным списком пулов
-                        configsToAdd.push(structConfig(
+                        configsToAdd.push(await structConfig(
                             this,
                             token,
                             [...pairInfo.activePools],
                             pools.pump,
                             pools.raydium,
+                            pools.dammMeteora,
                             pools.type
                         ));
 
@@ -374,12 +397,13 @@ export class MevLoadBalancer {
                     }
 
                     // Создаем новую конфигурацию
-                    configsToAdd.push(structConfig(
+                    configsToAdd.push(await structConfig(
                         this,
                         token,
                         poolsForProcess,
                         pools.pump,
                         pools.raydium,
+                        pools.dammMeteora,
                         pools.type
                     ));
 
@@ -1370,7 +1394,7 @@ export class MevLoadBalancer {
     }
 
 
-    parseLogForMevSignal(logMessage: string) {
+    parseLogForMevSignal(logMessage: string): Signal {
         try {
             // Проверяем, содержит ли сообщение MEV сигнал
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка на наличие '[PERFORM_MEV_ACTION]' в логе`);
@@ -1399,7 +1423,7 @@ export class MevLoadBalancer {
     }
 
 
-    extractSignalDataFromText(logMessage: string) {
+    extractSignalDataFromText(logMessage: string): Signal{
         try {
             // Находим содержимое между [PERFORM_MEV_ACTION] и [END]
             const startMarker = '[PERFORM_MEV_ACTION]';
@@ -1452,9 +1476,13 @@ export class MevLoadBalancer {
             const meteoraPool = parts[1];
 
             // Создаем результат
-            const result: any = {
-                tokenAddress,
-                meteoraPool,
+            const result: Signal = {
+                tokenAddress: tokenAddress,
+                meteoraPool: meteoraPool,
+                meteoraDAMMPool: undefined,
+                raydiumPool: undefined,
+                pumpSwapPool: undefined,
+                type: undefined,
                 timestamp: Date.now()
             };
 
@@ -1466,7 +1494,9 @@ export class MevLoadBalancer {
                 // Определяем, к какому типу пула относится адрес (Raydium или PumpSwap)
                 if (poolType.toLowerCase().includes('pumpswap')) {
                     result.pumpSwapPool = poolAddress;
-                } else {
+                } else if(poolType.toLowerCase().includes('meteora')) {
+                    result.meteoraDAMMPool = poolAddress;
+                }else {
                     result.raydiumPool = poolAddress;
                 }
 
@@ -1738,7 +1768,7 @@ export class MevLoadBalancer {
             }
 
             // Шаг 2: Получаем конфигурации для новых сигналов
-            const processManageInfo: ProcessesToManage | undefined = this.getConfigs(validSignals);
+            const processManageInfo: ProcessesToManage | undefined = await this.getConfigs(validSignals);
             if (!processManageInfo) {
                 throw new Error('Не удалось получить информацию о конфигурациях процессов');
             }
