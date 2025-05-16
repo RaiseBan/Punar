@@ -118,8 +118,9 @@ export async function createLookupTable(rpcUrl: string, privateKey: string): Pro
             payer: USER.publicKey,
             recentSlot: slot,
         });
+    const tipIx = getTipIx(2000, "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL", USER);
 
-    const sig = await sendTx(connection, [lookupTableInst], USER);
+    const sig = await sendTx(connection, [lookupTableInst, tipIx], USER);
     if (!sig) {
         console.error(`Transaction on create ALT failed`);
         return undefined;
@@ -247,8 +248,9 @@ export async function appendLookupTable(
         lookupTable: new PublicKey(lookupTableAddress),
         addresses: accounts.map(account => new PublicKey(account)),
     });
+    const tipIx = getTipIx(2000, "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL", USER);
 
-    const sig = await sendTx(connection, [extendInstruction], USER);
+    const sig = await sendTx(connection, [extendInstruction, tipIx], USER);
 
     if (!sig) {
         console.error(`Transaction on append ALT failed`);
