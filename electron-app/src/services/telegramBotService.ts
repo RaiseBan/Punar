@@ -1959,7 +1959,9 @@ class TelegramBotService {
                 // Определяем, куда сохранить адрес пула на основе типа
                 if (poolType === 'pumpswap') {
                     signal.pumpSwapPool = targetPool;
-                } else {
+                } else if (poolType === "meteora") {
+                    signal.meteoraDAMMPool = targetPool;
+                }else {
                     signal.raydiumPool = targetPool;
                 }
 
