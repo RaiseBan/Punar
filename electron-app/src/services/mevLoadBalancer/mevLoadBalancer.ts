@@ -974,7 +974,7 @@ export class MevLoadBalancer {
 
         } catch (error) {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while check for DEX: ${error}`);
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch 2: ${error.message}`);
             if (error.cause) {
                 logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
             }
@@ -1006,7 +1006,7 @@ export class MevLoadBalancer {
 
         } catch (error) {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checking Meteora: ${error}`);
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch 3: ${error.message}`);
             if (error.cause) {
                 logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
             }
