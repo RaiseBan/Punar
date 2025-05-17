@@ -945,6 +945,7 @@ export class MevLoadBalancer {
 
     async checkLiquidity(pair: string): Promise<CheckResult> {
         const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
+        console.log(meteoraUrl)
         const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
 
 
@@ -988,7 +989,7 @@ export class MevLoadBalancer {
 
     }
 
-    async checkMeteora(meteoraUrl) {
+    async checkMeteora(meteoraUrl: string) {
         try {
             const meteoraData = await (await this.forwardRequest(meteoraUrl)).json();
             logger.info(logger.LOG_MODULES.SYSTEM, `METEOTA DATA: ${JSON.stringify(meteoraData, null, 2)}`);
@@ -1026,7 +1027,8 @@ export class MevLoadBalancer {
 
     async forwardRequest(url) { // todo: переделать под разные параметры
         const resp = await fetch(
-            `http://${this.userSettings!.proxy_server_ip}:${this.userSettings!.proxy_server_port}/forward`,
+            // `http://${this.userSettings!.proxy_server_ip}:${this.userSettings!.proxy_server_port}/forward`,
+            `http://localhost:8082/forward`,
             {
                 method: 'POST',
                 headers: {
