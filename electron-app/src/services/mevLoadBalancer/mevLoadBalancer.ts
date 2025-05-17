@@ -43,6 +43,8 @@ export class MevLoadBalancer {
     processingSignals: boolean;
     processingTimer: any;
     liquidityCheckerTimer: any
+    private countMap = new Map<string, number>();
+
     isCleaningProcesses: boolean;
     stats: any;
     settings: any;
@@ -56,6 +58,7 @@ export class MevLoadBalancer {
         4: 160, // 4ms: 160 req/s
         5: 140  // Примерная оценка для 5ms
     };
+
     constructor() {
         // Карта для отслеживания MEV процессов
         // key = processId, value = { process, config, startTime, lastActivity, signals: [], status }
@@ -94,9 +97,9 @@ export class MevLoadBalancer {
         this.settings = {
             notifyTelegram: true,        // Отправлять уведомления в Telegram
             processingInterval: 10000,    // Интервал обработки буфера сигналов (5 секунд)
-            liquidityCheckInterval: 4 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
+            liquidityCheckInterval: 5 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
             minimumLiquidity: 170,       // Минимальная ликвидность пула (USD)
-            minProcessAgeForCleanup: 20 * 60 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
+            minProcessAgeForCleanup: 10 * 60 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
         };
 
         // Настройки пользователя
@@ -177,7 +180,9 @@ export class MevLoadBalancer {
             // Загружаем настройки пользователя
             this.userSettings = await getSettings();
             this.settings.minProcessAgeForCleanup = (Number(this.userSettings.min_process_age_for_cleanup) | 4) * 60 * 1000;
+            // this.settings.minProcessAgeForCleanup = 10 * 1000;
             this.settings.liquidityCheckInterval = (Number(this.userSettings.processes_check_interval) | 20) * 60 * 1000;
+            // this.settings.liquidityCheckInterval = 15 * 1000;
             // Инициализируем обработчики IPC
             this.initIpcHandlers();
 
@@ -283,7 +288,7 @@ export class MevLoadBalancer {
                         pools.raydium = signal.raydiumPool;
                         pools.pump = undefined; // Обнуляем pumpSwap если пришел raydium
                         pools.dammMeteora = undefined;
-                    }else if (signal.meteoraDAMMPool){
+                    } else if (signal.meteoraDAMMPool) {
                         pools.raydium = undefined
                         pools.pump = undefined; // Обнуляем pumpSwap если пришел raydium
                         pools.dammMeteora = signal.meteoraDAMMPool;
@@ -883,7 +888,10 @@ export class MevLoadBalancer {
     /**
      * Останавливает все процессы, связанные с указанным сигналом
      */
-    async stopAllProcessesBySignalId(signalId: string, restart: boolean = false): Promise<{success: boolean, count: number}> {
+    async stopAllProcessesBySignalId(signalId: string, restart: boolean = false): Promise<{
+        success: boolean,
+        count: number
+    }> {
         try {
             const processes = this.getProcessesBySignalId(signalId);
             if (processes.length === 0) {
@@ -938,29 +946,39 @@ export class MevLoadBalancer {
         return Array.from(signalIds);
     }
 
-    async checkLiquidity(pairs: string[]): Promise<CheckResult[]> {
-        let checkResults: CheckResult[] = [];
-        for (const pair of pairs) {
-            const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
-            const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
+    async checkLiquidity(pair: string): Promise<CheckResult> {
+        const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
 
 
-            let meteoraVerdict = await this.checkMeteora(meteoraUrl);
-            let dexscreenerVerdict = await this.checkDex(dexScreenerUrl);
-
-            // meteoraVerdict || dexscreenerVerdict;
-            checkResults.push({
-                pool: pair,
-                verdict: meteoraVerdict || dexscreenerVerdict
-            })
+        // let meteoraVerdict = await this.checkMeteora(meteoraUrl);
+        if (!this.countMap.has(pair)){
+            this.countMap.set(pair, 0);
         }
 
-        return checkResults
+        let dexscreenerVerdict = await this.checkDex(dexScreenerUrl);
+        if (!dexscreenerVerdict){
+            this.countMap.set(pair, this.countMap.get(pair) + 1);
+        }
+
+
+        if (this.countMap.get(pair) === 3){
+            return {
+                pool: pair,
+                verdict: false
+            }
+        }else{
+            return{
+                pool: pair,
+                verdict: true
+            }
+        }
+
 
 
     }
 
-    async checkDex(dexScreenerUrl) {
+    async checkDex(dexScreenerUrl: string) {
+
         try {
             const dexData = (await axios.get(dexScreenerUrl)).data;
             logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
@@ -974,7 +992,7 @@ export class MevLoadBalancer {
 
         } catch (error) {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while check for DEX: ${error}`);
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch 2: ${error.message}`);
             if (error.cause) {
                 logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
             }
@@ -988,7 +1006,7 @@ export class MevLoadBalancer {
 
     }
 
-    async checkMeteora(meteoraUrl) {
+    async checkMeteora(meteoraUrl: string) {
         try {
             const meteoraData = await (await this.forwardRequest(meteoraUrl)).json();
             logger.info(logger.LOG_MODULES.SYSTEM, `METEOTA DATA: ${JSON.stringify(meteoraData, null, 2)}`);
@@ -1006,7 +1024,7 @@ export class MevLoadBalancer {
 
         } catch (error) {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checking Meteora: ${error}`);
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch 3: ${error.message}`);
             if (error.cause) {
                 logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
             }
@@ -1026,7 +1044,8 @@ export class MevLoadBalancer {
 
     async forwardRequest(url) { // todo: переделать под разные параметры
         const resp = await fetch(
-            `http://${this.userSettings!.proxy_server_ip}:${this.userSettings!.proxy_server_port}/forward`,
+            // `http://${this.userSettings!.proxy_server_ip}:${this.userSettings!.proxy_server_port}/forward`,
+            `http://localhost:8082/forward`,
             {
                 method: 'POST',
                 headers: {
@@ -1041,7 +1060,7 @@ export class MevLoadBalancer {
                 })
             }
         );
-        if (resp.ok) {
+        if (!resp.ok) {
             const errorText = await resp.text();
             throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}. Текст ответа: ${errorText}`);
         }
@@ -1438,7 +1457,7 @@ export class MevLoadBalancer {
     }
 
 
-    extractSignalDataFromText(logMessage: string): Signal{
+    extractSignalDataFromText(logMessage: string): Signal {
         try {
             // Находим содержимое между [PERFORM_MEV_ACTION] и [END]
             const startMarker = '[PERFORM_MEV_ACTION]';
@@ -1509,9 +1528,9 @@ export class MevLoadBalancer {
                 // Определяем, к какому типу пула относится адрес (Raydium или PumpSwap)
                 if (poolType.toLowerCase().includes('pumpswap')) {
                     result.pumpSwapPool = poolAddress;
-                } else if(poolType.toLowerCase().includes('meteora')) {
+                } else if (poolType.toLowerCase().includes('meteora')) {
                     result.meteoraDAMMPool = poolAddress;
-                }else {
+                } else {
                     result.raydiumPool = poolAddress;
                 }
 
@@ -1581,7 +1600,7 @@ export class MevLoadBalancer {
 
         // Доступные задержки и их производительность (отсортированы от самой эффективной к наименее эффективной)
         const delayOptions = Object.entries(this.DELAY_PERFORMANCE)
-            .map(([delay, performance]) => ({ delay: parseInt(delay), performance }))
+            .map(([delay, performance]) => ({delay: parseInt(delay), performance}))
             .sort((a, b) => b.performance - a.performance);
 
         // Функция для рассчета оптимальной комбинации процессов для заданного запаса производительности
@@ -1618,13 +1637,13 @@ export class MevLoadBalancer {
                 (sum, delay) => sum + (this.DELAY_PERFORMANCE[delay] || 0), 0
             );
 
-            signalDistribution.set(signalId, { delays, totalPerformance });
+            signalDistribution.set(signalId, {delays, totalPerformance});
         }
 
         // Если у нас осталась неиспользованная ёмкость из-за округления,
         // распределим её между сигналами с наименьшей производительностью
         const totalAllocated = Array.from(signalDistribution.values())
-            .reduce((total, { totalPerformance }) => total + totalPerformance, 0);
+            .reduce((total, {totalPerformance}) => total + totalPerformance, 0);
 
         const remainingCapacity = totalRequestsPerSecond - totalAllocated;
 
@@ -1641,7 +1660,7 @@ export class MevLoadBalancer {
                     let minSignalId = signalIds[0];
                     let minPerformance = Number.MAX_SAFE_INTEGER;
 
-                    for (const [signalId, { totalPerformance }] of signalDistribution.entries()) {
+                    for (const [signalId, {totalPerformance}] of signalDistribution.entries()) {
                         if (totalPerformance < minPerformance) {
                             minPerformance = totalPerformance;
                             minSignalId = signalId;
@@ -1662,7 +1681,7 @@ export class MevLoadBalancer {
         let totalProcesses = 0;
         let expectedPerformance = 0;
 
-        for (const { delays, totalPerformance } of signalDistribution.values()) {
+        for (const {delays, totalPerformance} of signalDistribution.values()) {
             totalProcesses += delays.length;
             expectedPerformance += totalPerformance;
         }
@@ -1679,7 +1698,7 @@ export class MevLoadBalancer {
         );
 
         // Детализация по сигналам для отладки
-        for (const [signalId, { delays, totalPerformance }] of signalDistribution.entries()) {
+        for (const [signalId, {delays, totalPerformance}] of signalDistribution.entries()) {
             const delayBreakdown = delays.reduce((acc, delay) => {
                 acc[delay] = (acc[delay] || 0) + 1;
                 return acc;
@@ -1740,7 +1759,6 @@ export class MevLoadBalancer {
     }
 
 
-
     async addRaydiumSignal(token: string,
                            meteoraPools: string[],
                            rayPool: string,
@@ -1748,17 +1766,17 @@ export class MevLoadBalancer {
     ): Promise<string | undefined> {
 
         let procConfig: ProcessConfig = {
-                tokenAddress: token,
-                meteoraPools: meteoraPools,
-                raydiumPool: rayPool,
-                type: type,
-                main_rpc: this.userSettings.mainRpc,
-                useJito: true,
-                jito_lower_bound: Number(this.userSettings.jito_lower_bound),
-                jito_upper_bound: Number(this.userSettings.jito_upper_bound),
-                process_delay: 5,
-                task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
-            }
+            tokenAddress: token,
+            meteoraPools: meteoraPools,
+            raydiumPool: rayPool,
+            type: type,
+            main_rpc: this.userSettings.mainRpc,
+            useJito: true,
+            jito_lower_bound: Number(this.userSettings.jito_lower_bound),
+            jito_upper_bound: Number(this.userSettings.jito_upper_bound),
+            process_delay: 5,
+            task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
+        }
         return await this.startMevProcess(procConfig, {
             isRestart: true,
             initialCreationTime: Date.now()
@@ -1766,15 +1784,15 @@ export class MevLoadBalancer {
 
     }
 
-    async getLookups(config: ProcessConfig): Promise<string[] | undefined>{
+    async getLookups(config: ProcessConfig): Promise<string[] | undefined> {
         if (config.meteoraPools.length > 1) {
             let accountToExtendLookup: string[] = [];
 
-            if (config.pumpSwapPool){
+            if (config.pumpSwapPool) {
                 accountToExtendLookup.push(config.pumpSwapPool);
-            }else if (config.raydiumPool){
+            } else if (config.raydiumPool) {
                 accountToExtendLookup.push(config.raydiumPool);
-            }else if (config.dammMeteoraPool){
+            } else if (config.dammMeteoraPool) {
                 accountToExtendLookup.push(config.dammMeteoraPool);
             }
 
@@ -2010,7 +2028,7 @@ export class MevLoadBalancer {
                 );
             }
 
-            return { success: false, error: error.message };
+            return {success: false, error: error.message};
         }
     }
 
@@ -2030,7 +2048,7 @@ export class MevLoadBalancer {
 
         for (let i = 0; i < delays.length; i++) {
             const delay = delays[i];
-            const processConfig = { ...config, process_delay: delay };
+            const processConfig = {...config, process_delay: delay};
 
             const processId = await this.startMevProcess(
                 processConfig,
@@ -2059,8 +2077,8 @@ export class MevLoadBalancer {
      * @returns Объект, где ключи - это задержки, а значения - количество процессов с такой задержкой
      */
 
-    countDelays(delays: number[]): {[key: string]: number} {
-        const result: {[key: string]: number} = {};
+    countDelays(delays: number[]): { [key: string]: number } {
+        const result: { [key: string]: number } = {};
 
         for (const delay of delays) {
             if (!result[delay]) {
@@ -2169,7 +2187,7 @@ export class MevLoadBalancer {
                         .map(([delay, count]) => `${count}x${delay}мс`)
                         .join(', ');
 
-                    signalInstances.set(signalId, { ids: instanceIds, delayInfo });
+                    signalInstances.set(signalId, {ids: instanceIds, delayInfo});
                     newProcesses.push(...instanceIds);
 
                     logger.info(
@@ -2206,7 +2224,7 @@ export class MevLoadBalancer {
 
                 // Информация о сигналах
                 const signalLines = Array.from(signalInstances.entries())
-                    .map(([signalId, { ids, delayInfo }]) => {
+                    .map(([signalId, {ids, delayInfo}]) => {
                         const process = ids.length > 0 ? this.mevProcesses.get(ids[0]) : null;
                         if (!process) return null;
 
@@ -2252,8 +2270,14 @@ export class MevLoadBalancer {
      * Проверяет ликвидность пулов всех сигналов и удаляет сигналы с низкой ликвидностью
      */
     async checkAndCleanProcessesByLiquidity() {
+        telegramBotService.sendSystemNotification(
+            `🧹 Начало проверки пулов meteora`
+        );
         // Проверяем, что очистка уже не запущена и не идёт обработка сигналов
         if (this.isCleaningProcesses || this.processingSignals) {
+            telegramBotService.sendSystemNotification(
+                `'🧹Пропуск проверки ликвидности: уже выполняется другая операция с процессами`
+            );
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Пропуск проверки ликвидности: уже выполняется другая операция с процессами');
             return;
         }
@@ -2289,12 +2313,13 @@ export class MevLoadBalancer {
 
             // Проверяем каждый сигнал
             for (const signalId of activeSignalIds) {
+                logger.info(logger.LOG_MODULES.CLEANING_POOLS, `signalId on verify: ${signalId}`)
                 try {
                     // Получаем все процессы этого сигнала
                     const signalProcesses = this.getProcessesBySignalId(signalId);
 
                     if (signalProcesses.length === 0) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для сигнала ${signalId}: процессы не найдены`);
+                        logger.info(logger.LOG_MODULES.CLEANING_POOLS, `Пропуск проверки для сигнала ${signalId}: процессы не найдены`);
                         continue;
                     }
 
@@ -2305,20 +2330,20 @@ export class MevLoadBalancer {
                     const processAge = currentTime - (representativeProcess.initialCreationTime || representativeProcess.startTime);
                     if (processAge < this.settings.minProcessAgeForCleanup) {
                         logger.info(
-                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            logger.LOG_MODULES.CLEANING_POOLS,
                             `Пропуск проверки для молодого сигнала ${signalId}: возраст ${Math.floor(processAge / 1000 / 60)} минут < ${Math.floor(this.settings.minProcessAgeForCleanup / 1000 / 60)} минут`
                         );
                         continue;
                     }
 
-                    const meteoraPools = representativeProcess.meteoraPools || representativeProcess.config?.meteoraPools;
+                    const meteoraPools = representativeProcess.config?.meteoraPools || representativeProcess.meteoraPools;
                     if (!meteoraPools || meteoraPools.length === 0) {
-                        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Пропуск проверки для сигнала ${signalId}: пулы не найдены`);
+                        logger.info(logger.LOG_MODULES.CLEANING_POOLS, `Пропуск проверки для сигнала ${signalId}: пулы не найдены`);
                         continue;
                     }
 
                     logger.info(
-                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                        logger.LOG_MODULES.CLEANING_POOLS,
                         `Проверка ликвидности пулов для сигнала ${signalId} (${meteoraPools.length} пулов, возраст: ${Math.floor(processAge / 1000 / 60)} минут)`
                     );
 
@@ -2326,24 +2351,25 @@ export class MevLoadBalancer {
                     const checkResults: CheckResult[] = [];
 
                     for (const pool of meteoraPools) {
+                        logger.info(logger.LOG_MODULES.CLEANING_POOLS, `check pool: ${pool}`)
                         // Проверяем, есть ли результат в кэше
                         if (poolLiquidityCache.has(pool)) {
                             const cachedVerdict = poolLiquidityCache.get(pool);
-                            checkResults.push({ pool, verdict: cachedVerdict! });
+                            checkResults.push({pool, verdict: cachedVerdict!});
                             logger.info(
-                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                logger.LOG_MODULES.CLEANING_POOLS,
                                 `Используем кэшированный результат для пула ${pool}: ${cachedVerdict ? 'активен' : 'неактивен'}`
                             );
                         } else {
                             // Проверяем ликвидность пула
-                            const [checkResult] = await this.checkLiquidity([pool]);
+                            const checkResult = await this.checkLiquidity(pool);
 
                             // Кэшируем результат
                             poolLiquidityCache.set(pool, checkResult.verdict);
 
                             checkResults.push(checkResult);
                             logger.info(
-                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                logger.LOG_MODULES.CLEANING_POOLS,
                                 `Проверка ликвидности пула ${pool}: ${checkResult.verdict ? 'активен' : 'неактивен'}`
                             );
                         }
@@ -2357,20 +2383,20 @@ export class MevLoadBalancer {
                         // Все пулы неактивны - останавливаем весь сигнал
                         signalsToStop.push(signalId);
                         logger.info(
-                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            logger.LOG_MODULES.CLEANING_POOLS,
                             `Сигнал ${signalId} будет остановлен: все ${inactivePoolCount} пулов неактивны`
                         );
                     } else if (inactivePoolCount > 0) {
                         // Часть пулов неактивна - удаляем только неактивные пулы
                         poolsToRemove.set(signalId, inactivePools);
                         logger.info(
-                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            logger.LOG_MODULES.CLEANING_POOLS,
                             `У сигнала ${signalId} удаляем ${inactivePoolCount} неактивных пулов из ${meteoraPools.length}`
                         );
                     } else {
                         // Все пулы активны
                         logger.info(
-                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                            logger.LOG_MODULES.CLEANING_POOLS,
                             `Сигнал ${signalId} продолжит работу: все ${meteoraPools.length} пулов активны`
                         );
                     }
@@ -2382,11 +2408,12 @@ export class MevLoadBalancer {
             // Обрабатываем сигналы с частично неактивными пулами
             if (poolsToRemove.size > 0) {
                 logger.info(
-                    logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                    logger.LOG_MODULES.CLEANING_POOLS,
                     `Найдено ${poolsToRemove.size} сигналов с частично неактивными пулами`
                 );
 
                 for (const [signalId, inactivePools] of poolsToRemove.entries()) {
+                    logger.info(logger.LOG_MODULES.CLEANING_POOLS, `Удаление для сигнала: ${signalId}\nИнактивные пулы: ${inactivePools}`)
                     try {
                         // Получаем все процессы сигнала
                         const processes = this.getProcessesBySignalId(signalId);
@@ -2430,19 +2457,19 @@ export class MevLoadBalancer {
                             await this.launchProcessesForSignal(signalId, updatedConfig, signalConfig.delays);
 
                             logger.info(
-                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
+                                logger.LOG_MODULES.CLEANING_POOLS,
                                 `Сигнал ${signalId} перезапущен с ${activePools.length} активными пулами (удалено ${inactivePools.length} неактивных пулов)`
                             );
                         }
                     } catch (error) {
-                        logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при обработке частично неактивных пулов для сигнала ${signalId}:`, error);
+                        logger.error(logger.LOG_MODULES.CLEANING_POOLS, `Ошибка при обработке частично неактивных пулов для сигнала ${signalId}:`, error);
                     }
                 }
             }
 
             // Если есть сигналы для остановки, останавливаем их
             if (signalsToStop.length > 0) {
-                logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Найдено ${signalsToStop.length} сигналов с низкой ликвидностью для остановки`);
+                logger.info(logger.LOG_MODULES.CLEANING_POOLS, `Найдено ${signalsToStop.length} сигналов с низкой ликвидностью для остановки`);
 
                 // Уведомляем в Telegram о начале очистки
                 if (this.settings.notifyTelegram) {

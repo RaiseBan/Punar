@@ -9,7 +9,7 @@ export async function checkPairDex(pair: string ) {
 
     } catch (error) {
         logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while check for DEX: ${error}`);
-        logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch: ${error.message}`);
+        logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch 1: ${error.message}`);
         if (error.cause) {
             logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
         }

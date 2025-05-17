@@ -25,7 +25,8 @@ const LOG_MODULES = {
     TOKEN_RELEASE: 'TOKEN_RELEASE',
     API_SERVICE: 'API_SERVICE',
     CONFIG_SERVICE: 'CONFIG_SERVICE',
-    JITO: "JITO"
+    JITO: "JITO",
+    CLEANING_POOLS: "CLEANING_POOLS"
 };
 
 // Расширенная цветовая палитра для консоли
@@ -89,7 +90,8 @@ const COLORS = {
         TOKEN_RELEASE: '\x1b[32m',                   // Зеленый
         API_SERVICE: '\x1b[36m',                     // Голубой
         CONFIG_SERVICE: '\x1b[33m\x1b[1m',            // Желтый жирный
-        JITO: '\x1b[93m'
+        JITO: '\x1b[93m',
+        CLEANING_POOLS: "\x1b[46m"
     }
 };
 
