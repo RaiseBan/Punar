@@ -1043,7 +1043,7 @@ export class MevLoadBalancer {
                 })
             }
         );
-        if (resp.ok) {
+        if (!resp.ok) {
             const errorText = await resp.text();
             throw new Error(`Ошибка HTTP: ${resp.status} ${resp.statusText}. Текст ответа: ${errorText}`);
         }
