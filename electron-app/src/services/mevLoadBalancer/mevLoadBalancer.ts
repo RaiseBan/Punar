@@ -96,9 +96,9 @@ export class MevLoadBalancer {
         this.settings = {
             notifyTelegram: true,        // Отправлять уведомления в Telegram
             processingInterval: 10000,    // Интервал обработки буфера сигналов (5 секунд)
-            liquidityCheckInterval: 15 * 1000, // Интервал проверки ликвидности (20 минут)
+            liquidityCheckInterval: 5 * 60 * 1000, // Интервал проверки ликвидности (20 минут)
             minimumLiquidity: 170,       // Минимальная ликвидность пула (USD)
-            minProcessAgeForCleanup: 10 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
+            minProcessAgeForCleanup: 10 * 60 * 1000  // Минимальный возраст процесса для проверки очистки (20 минут)
         };
 
         // Настройки пользователя
@@ -178,10 +178,10 @@ export class MevLoadBalancer {
         try {
             // Загружаем настройки пользователя
             this.userSettings = await getSettings();
-            // this.settings.minProcessAgeForCleanup = (Number(this.userSettings.min_process_age_for_cleanup) | 4) * 60 * 1000;
-            this.settings.minProcessAgeForCleanup = 10 * 1000;
-            // this.settings.liquidityCheckInterval = (Number(this.userSettings.processes_check_interval) | 20) * 60 * 1000;
-            this.settings.liquidityCheckInterval = 15 * 1000;
+            this.settings.minProcessAgeForCleanup = (Number(this.userSettings.min_process_age_for_cleanup) | 4) * 60 * 1000;
+            // this.settings.minProcessAgeForCleanup = 10 * 1000;
+            this.settings.liquidityCheckInterval = (Number(this.userSettings.processes_check_interval) | 20) * 60 * 1000;
+            // this.settings.liquidityCheckInterval = 15 * 1000;
             // Инициализируем обработчики IPC
             this.initIpcHandlers();
 
