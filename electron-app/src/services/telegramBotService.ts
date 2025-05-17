@@ -1770,17 +1770,28 @@ class TelegramBotService {
 
         this.registerCommand('get_add_dump', async (chatId) => {
             try {
-                const processes = mevLoadBalancer.getProcesses();
-
-                if (processes.length === 0) {
-                    this.sendMessage(chatId, '📊 Активные MEV процессы отсутствуют');
+                let message = '📊 <b>___COMMANDS___</b>\n\n';
+                const signalIds = mevLoadBalancer.getActiveSignalIds();
+                if (signalIds.length === 0) {
+                    this.sendMessage(chatId, '📊 Активные сигналы отсутствуют');
                     return;
                 }
-                let message = '📊 <b>___COMMANDS___</b>\n\n';
+
                 let i = 1;
-                for (const proc of processes) {
-                    message += `${i}. <b>ID:</b> <code>${proc.id}</code> (PID: ${proc.pid || 'неизвестно'})\n`;
-                    message += `${i}. <code>/mev_add_signal ${proc.tokenAddress} ${proc.meteoraPool} ${proc.pumpSwapPool}</code>\n`;
+                for (const signalId of signalIds) {
+                    const processes = mevLoadBalancer.getProcessesBySignalId(signalId);
+                    const mevProc = processes[0];
+                    message += `${i}. <b>SIGNAL ID:</b> <code>${signalId}</code> \n`;
+                    let targetPool: string;
+                    if (mevProc.config.raydiumPool) {
+                        targetPool = mevProc.config.raydiumPool;
+                    } else if (mevProc.config.pumpSwapPool) {
+                        targetPool = mevProc.config.pumpSwapPool;
+                    } else if (mevProc.config.dammMeteoraPool) {
+                        targetPool = mevProc.config.dammMeteoraPool
+                    }
+
+                    message += `${i}. <code>/mev_add_signal ${mevProc.config.tokenAddress} ${JSON.stringify(mevProc.config.meteoraPools)} ${targetPool} ${mevProc.config.type}</code>\n`;
                     message += `<b>============================================</b>\n`;
                     i++;
                 }
@@ -1949,28 +1960,35 @@ class TelegramBotService {
                 );
 
                 // Создаем сигнал с учетом типа пула
-                const signal: Signal = {
-                    tokenAddress: tokenAddress,
-                    meteoraPool: meteoraPools[0], // Для обратной совместимости оставляем первый пул
-                    timestamp: Date.now(),
-                    type: poolType || '' // Добавляем тип пула
-                };
+                const results = []
+                for (const meteoraPool of meteoraPools) {
+                    const signal: Signal = {
+                        tokenAddress: tokenAddress,
+                        meteoraPool: meteoraPool, // Для обратной совместимости оставляем первый пул
+                        timestamp: Date.now(),
+                        type: poolType || '' // Добавляем тип пула
+                    };
 
-                // Определяем, куда сохранить адрес пула на основе типа
-                if (poolType === 'pumpswap') {
-                    signal.pumpSwapPool = targetPool;
-                } else if (poolType === "meteora") {
-                    signal.meteoraDAMMPool = targetPool;
-                }else {
-                    signal.raydiumPool = targetPool;
+                    // Определяем, куда сохранить адрес пула на основе типа
+                    if (poolType === 'pumpswap') {
+                        signal.pumpSwapPool = targetPool;
+                    } else if (poolType === "meteora") {
+                        signal.meteoraDAMMPool = targetPool;
+                    } else {
+                        signal.raydiumPool = targetPool;
+                    }
+
+                    const result = mevLoadBalancer.handleExternalMevSignal(signal, 'telegram_' + chatId);
+                    results.push(result);
                 }
 
-                const result = mevLoadBalancer.handleExternalMevSignal(signal, 'telegram_' + chatId);
 
-                if (result.success) {
-                    this.sendMessage(chatId, `✅ MEV сигнал успешно добавлен в буфер (общий размер буфера: ${result.bufferSize || 'неизвестно'})`);
+                const isValid = results.every(item => item.success === true);
+
+                if (isValid) {
+                    this.sendMessage(chatId, `✅ MEV сигналы успешно добавлеы в буфер ${results.length}`);
                 } else {
-                    this.sendMessage(chatId, `❌ Ошибка добавления MEV сигнала: ${result.error}`);
+                    this.sendMessage(chatId, `❌ Ошибка добавления MEV сигнала`);
                 }
             } catch (error) {
                 logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] Ошибка при добавлении MEV сигнала:', error);
