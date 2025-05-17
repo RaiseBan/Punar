@@ -50,7 +50,7 @@ export async function structConfig<T extends MevLoadBalancer>(
     }
 
     // Формируем и возвращаем конфигурацию
-    return {
+    const struct = {
         tokenAddress,
         meteoraPools: meteoraPools,
         pumpSwapPool: pumpSwapPool ? pumpSwapPool : undefined,
@@ -64,6 +64,9 @@ export async function structConfig<T extends MevLoadBalancer>(
         process_delay: null,
         task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
     };
+
+    logger.info(logger.LOG_MODULES.CONFIG_SERVICE, `STRUCT CONFIG::: ${JSON.stringify(struct, null, 2)}`);
+    return struct;
 }
 
 
