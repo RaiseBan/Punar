@@ -42,6 +42,8 @@ export class MevLoadBalancer {
     processingSignals: boolean;
     processingTimer: any;
     liquidityCheckerTimer: any
+    private countMap = new Map<string, number>();
+
     isCleaningProcesses: boolean;
     stats: any;
     settings: any;
@@ -944,24 +946,38 @@ export class MevLoadBalancer {
     }
 
     async checkLiquidity(pair: string): Promise<CheckResult> {
-        const meteoraUrl = `https://dlmm-api.meteora.ag/pair/${pair}/analytic/swap_history?rows_to_take=1`;
-        console.log(meteoraUrl)
         const dexScreenerUrl = `https://api.dexscreener.com/latest/dex/pairs/solana/${pair}`;
 
 
-        let meteoraVerdict = await this.checkMeteora(meteoraUrl);
-        let dexscreenerVerdict = await this.checkDex(dexScreenerUrl);
-
-        // meteoraVerdict || dexscreenerVerdict;
-        return {
-            pool: pair,
-            verdict: meteoraVerdict || dexscreenerVerdict
+        // let meteoraVerdict = await this.checkMeteora(meteoraUrl);
+        if (!this.countMap.has(pair)){
+            this.countMap.set(pair, 0);
         }
+
+        let dexscreenerVerdict = await this.checkDex(dexScreenerUrl);
+        if (!dexscreenerVerdict){
+            this.countMap.set(pair, this.countMap.get(pair) + 1);
+        }
+
+
+        if (this.countMap.get(pair) === 3){
+            return {
+                pool: pair,
+                verdict: false
+            }
+        }else{
+            return{
+                pool: pair,
+                verdict: true
+            }
+        }
+
 
 
     }
 
-    async checkDex(dexScreenerUrl) {
+    async checkDex(dexScreenerUrl: string) {
+
         try {
             const dexData = (await axios.get(dexScreenerUrl)).data;
             logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
