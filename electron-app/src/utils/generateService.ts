@@ -223,8 +223,8 @@ export async function generateSimpleMevConfig(
             return null;
         }
 
-        console.log(`[TOML Generator] Генерация TOML-файла конфигурации MEV для токена ${tokenAddress} и пула ${meteoraPools}`);
-        console.log(`PROCESS DELAY::::::::${config.process_delay}`)
+        // console.log(`[TOML Generator] Генерация TOML-файла конфигурации MEV для токена ${tokenAddress} и пула ${meteoraPools}`);
+        // console.log(`PROCESS DELAY::::::::${config.process_delay}`)
         // Задержка между процессами (по умолчанию 300ms, если не указано)
         const processDelay = config.process_delay;
 
@@ -335,7 +335,7 @@ export async function generateSimpleMevConfig(
 
         // Записываем файл
         fs.writeFileSync(configPath, tomlString);
-        console.log(`[TOML Generator] TOML-файл конфигурации успешно создан: ${configPath}`);
+        // console.log(`[TOML Generator] TOML-файл конфигурации успешно создан: ${configPath}`);
 
         return configPath;
     } catch (error) {

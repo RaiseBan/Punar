@@ -763,7 +763,7 @@ export async function createTokenAccount(
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     transaction.sign(USER);
     // for (const region of JITO_REGIONS)
-    console.log(`before buffer`);
+    // console.log(`before buffer`);
     const bs64Tx: string = Buffer.from(transaction.serialize()).toString("base64");
     console.log(`after buffer`);
     for (let i = 0; i < 3; i++) {

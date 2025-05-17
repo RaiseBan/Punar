@@ -777,7 +777,7 @@ export class MevLoadBalancer {
         signalId?: string
     } = {}) {
         try {
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка токена "${config.tokenAddress}"`);
+            // logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка токена "${config.tokenAddress}"`);
             if (!this.userTokens.has(config.tokenAddress.trim())) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Токен не найден, создаем...`);
                 this.userTokens.set(config.tokenAddress.trim(), (await createTokenAccount(this.userSettings?.mainRpc!, config.tokenAddress.trim(), this.USER, this.userTokens))!);
@@ -981,7 +981,7 @@ export class MevLoadBalancer {
 
         try {
             const dexData = (await axios.get(dexScreenerUrl)).data;
-            logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
+            logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData.pair.txns, null, 2)}`);
 
             if (dexData.pair && dexData.pair.txns.m5) {
                 const buys = dexData.pair.txns.m5.buys;
