@@ -856,7 +856,8 @@ export class MevLoadBalancer {
 
             // Определяем время создания
             const currentTime = Date.now();
-            const initialCreationTime = options.isRestart ? options.initialCreationTime : currentTime;
+            // const initialCreationTime = options.isRestart ? options.initialCreationTime : currentTime;
+            const initialCreationTime = options.initialCreationTime ? options.initialCreationTime : currentTime;
 
             // Сохраняем информацию о процессе
             this.mevProcesses.set(processId, {
@@ -1849,13 +1850,13 @@ export class MevLoadBalancer {
             }
 
             // Шаг 3: Сохраняем конфигурации существующих сигналов ДО остановки процессов
-            const existingConfigs = new Map<string, ProcessConfig>();
+            const existingMevProcesses = new Map<string, MevProcess>();
             const activeSignalIds = this.getActiveSignalIds();
 
             for (const signalId of activeSignalIds) {
                 const processes = this.getProcessesBySignalId(signalId);
-                if (processes.length > 0 && processes[0].config) {
-                    existingConfigs.set(signalId, processes[0].config);
+                if (processes.length > 0) {
+                    existingMevProcesses.set(signalId, processes[0]);
                 }
             }
 
@@ -1917,13 +1918,14 @@ export class MevLoadBalancer {
 
             // Шаг 11: Запускаем существующие сигналы с новыми задержками
             for (const signalId of updatedActiveSignalIds) {
-                const config = existingConfigs.get(signalId);
+                const config = existingMevProcesses.get(signalId).config;
+                const initialCreationTime: number = existingMevProcesses.get(signalId).initialCreationTime;
                 if (!config) continue;
 
                 const signalConfig = signalDistribution.get(signalId);
                 if (!signalConfig) continue;
 
-                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays);
+                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays, initialCreationTime);
                 signalInstances.set(signalId, instanceIds);
                 newProcesses.push(...instanceIds);
             }
@@ -2032,17 +2034,12 @@ export class MevLoadBalancer {
         }
     }
 
-    /**
-     * Вспомогательная функция для запуска процессов с заданными задержками
-     * @param signalId - ID сигнала
-     * @param config - Конфигурация процесса
-     * @param delays - Массив задержек для запуска процессов
-     * @returns Массив идентификаторов запущенных процессов
-     */
+
     async launchProcessesForSignal(
         signalId: string,
         config: ProcessConfig,
-        delays: number[]
+        delays: number[],
+        initialCreationTime?: number
     ): Promise<string[]> {
         const instanceIds: string[] = [];
 
@@ -2054,6 +2051,7 @@ export class MevLoadBalancer {
                 processConfig,
                 {
                     isRestart: false,
+                    initialCreationTime: initialCreationTime,
                     instanceNumber: i,
                     signalId: signalId
                 }
@@ -2113,12 +2111,12 @@ export class MevLoadBalancer {
             }
 
             // Сохраняем информацию о существующих процессах перед их остановкой
-            const existingConfigs = new Map<string, ProcessConfig>();
+            const existingMevProcesses = new Map<string, MevProcess>();
 
             for (const signalId of activeSignalIds) {
                 const processes = this.getProcessesBySignalId(signalId);
-                if (processes.length > 0 && processes[0].config) {
-                    existingConfigs.set(signalId, processes[0].config);
+                if (processes.length > 0) {
+                    existingMevProcesses.set(signalId, processes[0]);
                 }
             }
 
@@ -2153,7 +2151,8 @@ export class MevLoadBalancer {
 
             // Запускаем процессы для каждого сигнала
             for (const signalId of activeSignalIds) {
-                const config = existingConfigs.get(signalId);
+                const config = existingMevProcesses.get(signalId).config;
+                const initialCreationTime: number = existingMevProcesses.get(signalId).initialCreationTime;
                 if (!config) {
                     logger.warn(
                         logger.LOG_MODULES.MEV_LOAD_BALANCER,
@@ -2172,7 +2171,7 @@ export class MevLoadBalancer {
                 }
 
                 // Запускаем процессы для этого сигнала
-                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays);
+                const instanceIds = await this.launchProcessesForSignal(signalId, config, signalConfig.delays, initialCreationTime);
 
                 if (instanceIds.length > 0) {
                     // Собираем информацию о задержках для этого сигнала
@@ -2420,12 +2419,11 @@ export class MevLoadBalancer {
                         if (processes.length === 0) continue;
 
                         // Берем первый процесс для получения информации о сигнале
-                        const process = processes[0];
-                        const config = process.config;
-                        if (!config) continue;
+                        const mevProcess =  processes[0];
+                        if (!mevProcess.config) continue;
 
                         // Получаем все активные пулы (исключаем неактивные)
-                        const activePools = config.meteoraPools.filter(pool => !inactivePools.includes(pool));
+                        const activePools = mevProcess.config.meteoraPools.filter(pool => !inactivePools.includes(pool));
 
                         if (activePools.length === 0) {
                             // Если после фильтрации не осталось активных пулов, останавливаем сигнал
@@ -2440,7 +2438,7 @@ export class MevLoadBalancer {
 
                             // Создаем новую конфигурацию только с активными пулами
                             const updatedConfig = {
-                                ...config,
+                                ...mevProcess.config,
                                 meteoraPools: activePools
                             };
 
@@ -2454,7 +2452,7 @@ export class MevLoadBalancer {
                             if (!signalConfig) continue;
 
                             // Запускаем процессы с новой конфигурацией и оптимальными задержками
-                            await this.launchProcessesForSignal(signalId, updatedConfig, signalConfig.delays);
+                            await this.launchProcessesForSignal(signalId, updatedConfig, signalConfig.delays, mevProcess.initialCreationTime);
 
                             logger.info(
                                 logger.LOG_MODULES.CLEANING_POOLS,

@@ -337,6 +337,7 @@ export async function updateIfNotExistsAndGet(
         console.log(`Checking if accounts already exist...`);
         let accountsToAppend = [...accounts]; // Create a copy of accounts array
         let existingTableAddresses = new Map<string, string>(); // Map to track which accounts exist in which tables
+        let checkedTables = [...tables]; // Keep track of tables we've already checked
 
         // Check all tables for existing accounts
         for (const table of tables) {
@@ -356,17 +357,55 @@ export async function updateIfNotExistsAndGet(
             });
         }
 
-        // If there are accounts to append
+        // If there are accounts to append, try to find additional lookup tables
         if (accountsToAppend.length > 0) {
-            console.log(`Found ${accountsToAppend.length} accounts to append`);
+            console.log(`Found ${accountsToAppend.length} accounts not in initial tables, searching for additional tables...`);
+
+            // Find additional lookup tables
+            const additionalTables = await findLookupTables(rpcUrl, private_key);
+
+            // Filter out tables we've already checked
+            const newTables = additionalTables.filter(table => !checkedTables.includes(table));
+
+            if (newTables.length > 0) {
+                console.log(`Found ${newTables.length} additional lookup tables to check`);
+
+                // Save the new tables we've discovered
+                await saveLookupTables(newTables);
+
+                // Check if accounts exist in these additional tables
+                for (const table of newTables) {
+                    const tableAddresses = await getAllAddressesFromLookupTable(rpcUrl, table);
+
+                    // Update accountsToAppend to only include accounts not found in any table
+                    accountsToAppend = accountsToAppend.filter(account => {
+                        const exists = tableAddresses.includes(account);
+                        if (exists) {
+                            // Track which table contains this account
+                            if (!existingTableAddresses.has(account)) {
+                                existingTableAddresses.set(account, table);
+                            }
+                        }
+                        return !exists;
+                    });
+
+                    // Add this table to our list of checked tables
+                    checkedTables.push(table);
+                }
+            }
+        }
+
+        // If there are still accounts to append
+        if (accountsToAppend.length > 0) {
+            console.log(`After checking all tables, still found ${accountsToAppend.length} accounts to append`);
 
             // Try to use an existing table that has space
-            for (const table of tables) {
+            for (const table of checkedTables) {
                 const tableAddresses = await getAllAddressesFromLookupTable(rpcUrl, table);
                 const currentCount = tableAddresses.length;
                 console.log(`Table ${table} current count: ${currentCount}`);
 
-                if (currentCount + accountsToAppend.length <= 256) {
+                if (currentCount + accountsToAppend.length < 250) {
                     console.log(`Table ${table} has enough space`);
                     const res = await appendLookupTable(accountsToAppend, rpcUrl, private_key, table);
                     if (!res) {
@@ -380,7 +419,7 @@ export async function updateIfNotExistsAndGet(
             }
 
             // If no existing table has enough space, create a new one
-            console.log("No existing table has enough space. Creating a new one...");
+            console.log("No existing table has enough space. Creating a new one / fetch tables");
             const newTableAddr = await createLookupTable(rpcUrl, private_key);
             if (!newTableAddr) {
                 console.error("Failed to create a new lookup table");
@@ -758,9 +797,48 @@ export function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+
+
+/**
+ * Finds lookup tables owned by a specific private key
+ * @param rpcUrl - Solana RPC URL
+ * @param privateKey - Private key in base58 format
+ * @returns Promise containing an array of lookup table addresses
+ */
+async function findLookupTables(rpcUrl: string, privateKey: string): Promise<string[]> {
+    try {
+        const connection = new Connection(rpcUrl);
+        const USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(privateKey)));
+        const programId = new PublicKey('AddressLookupTab1e1111111111111111111111111');
+
+        const accounts = await connection.getProgramAccounts(programId, {
+            filters: [
+                {
+                    memcmp: {
+                        offset: 22, // Offset for authority
+                        bytes: USER.publicKey.toBase58(),
+                    },
+                },
+            ],
+        });
+
+        // Simply return the addresses of the lookup tables
+        return accounts.map(account => account.pubkey.toBase58());
+    } catch (error) {
+        // Silently return empty array on error
+        return [];
+    }
+}
+
+
+
+
 // (async () => {
-//     const connection = new Connection(clusterApiUrl('mainnet-beta'));
-//     console.log(await updateIfNotExistsAndGet("https://api.mainnet-beta.solana.com",
-//         ["99D5oi479AxQpQcfVKkTK6E7r1Y8KJSKhaA9dUBws1vd"],
-//         "7wXu1a3WDJ8fCM69YzQzW4hnaoU6HCTA1WCHMUCmu4D4Qcksvc6jPDu8VWzkomN9GwpSQ26Nuy2GRXfR42Bb9iN"))
+//     // const connection = new Connection(clusterApiUrl('mainnet-beta'));
+//     // console.log(await updateIfNotExistsAndGet("https://api.mainnet-beta.solana.com",
+//     //     ["99D5oi479AxQpQcfVKkTK6E7r1Y8KJSKhaA9dUBws1vd"],
+//     //     "7wXu1a3WDJ8fCM69YzQzW4hnaoU6HCTA1WCHMUCmu4D4Qcksvc6jPDu8VWzkomN9GwpSQ26Nuy2GRXfR42Bb9iN"))
+//
+//     const res = await findLookupTables("https://mainnet.helius-rpc.com/?api-key=f20cc51e-8516-4603-b26d-d27d7b49d49f", "7wXu1a3WDJ8fCM69YzQzW4hnaoU6HCTA1WCHMUCmu4D4Qcksvc6jPDu8VWzkomN9GwpSQ26Nuy2GRXfR42Bb9iN")
+//     console.log(res)
 // })()
