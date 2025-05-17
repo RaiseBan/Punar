@@ -2269,6 +2269,7 @@ export class MevLoadBalancer {
         }
 
         if (!this.isActive || this.mevProcesses.size === 0) {
+            console.log(this.mevProcesses.size)
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Пропуск проверки ликвидности: балансировщик неактивен или нет процессов');
             return;
         }

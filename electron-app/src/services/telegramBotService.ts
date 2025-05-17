@@ -648,11 +648,14 @@ class TelegramBotService {
      * @returns true если отправка успешна, false в противном случае
      */
     async sendSystemNotification(message: string): Promise<boolean> {
+
         if (!this.botToken || !this.isActive || this.chatIds.length === 0) {
             return false;
         }
 
         try {
+            console.log(`[TG DEBUG] Отправка: ${message.substring(0, 30)}...`);
+            console.log(`[TG DEBUG] Стек вызовов:`, new Error().stack);
             // Создаём уникальный ключ для сообщения, используя первые 50 символов
             const messageKey = message.substring(0, 50);
             const now = Date.now();
