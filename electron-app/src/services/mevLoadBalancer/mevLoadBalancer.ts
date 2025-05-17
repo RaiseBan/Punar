@@ -178,9 +178,9 @@ export class MevLoadBalancer {
         try {
             // Загружаем настройки пользователя
             this.userSettings = await getSettings();
-            this.settings.minProcessAgeForCleanup = (Number(this.userSettings.min_process_age_for_cleanup) | 4) * 60 * 1000;
+            this.settings.minProcessAgeForCleanup = (Number(this.userSettings.min_process_age_for_cleanup) || 5) * 60 * 1000;
             // this.settings.minProcessAgeForCleanup = 10 * 1000;
-            this.settings.liquidityCheckInterval = (Number(this.userSettings.processes_check_interval) | 20) * 60 * 1000;
+            this.settings.liquidityCheckInterval = (Number(this.userSettings.processes_check_interval) || 20) * 60 * 1000;
             // this.settings.liquidityCheckInterval = 15 * 1000;
             // Инициализируем обработчики IPC
             this.initIpcHandlers();
