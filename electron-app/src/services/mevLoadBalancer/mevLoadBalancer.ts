@@ -29,6 +29,7 @@ import {
     UsageMeteoraPools
 } from "../../types/types";
 import {formatUsage, structConfig} from "./meteoraPoolsService";
+import {logMeteoraPoolsUsage} from "../../utils/logUtil";
 
 
 export class MevLoadBalancer {
@@ -262,6 +263,8 @@ export class MevLoadBalancer {
      * @returns Конфигурации для добавления и идентификаторы процессов для удаления
      */
     async getConfigs(validSignals: SignalWithMeta[]): Promise<ProcessesToManage | undefined> {
+        logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `meteoraPoolsUsage start`);
+        logMeteoraPoolsUsage(this.meteoraPoolsUsage);
         try {
             // Группируем пулы по токенам
             const groupPoolsByToken = new Map<string, Pools>();
@@ -435,7 +438,10 @@ export class MevLoadBalancer {
                 logger.LOG_MODULES.MEV_LOAD_BALANCER,
                 `Результат распределения пулов: ${configsToAdd.length} процессов для создания, ${configsToDelete.length} для удаления`
             );
-
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `meteoraPoolsUsage start`);
+            logMeteoraPoolsUsage(this.meteoraPoolsUsage);
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, JSON.stringify(configsToAdd, null , 2));
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, configsToDelete);
             return {
                 configsToAdd,
                 processIdsToDelete: configsToDelete
