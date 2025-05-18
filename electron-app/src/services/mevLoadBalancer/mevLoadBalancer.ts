@@ -438,7 +438,7 @@ export class MevLoadBalancer {
                 logger.LOG_MODULES.MEV_LOAD_BALANCER,
                 `Результат распределения пулов: ${configsToAdd.length} процессов для создания, ${configsToDelete.length} для удаления`
             );
-            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `meteoraPoolsUsage start`);
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `meteoraPoolsUsage END`);
             logMeteoraPoolsUsage(this.meteoraPoolsUsage);
             logger.info(logger.LOG_MODULES.SPAWN_PROCESS, JSON.stringify(configsToAdd, null , 2));
             logger.info(logger.LOG_MODULES.SPAWN_PROCESS, configsToDelete);
