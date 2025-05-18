@@ -1427,12 +1427,13 @@ export class MevLoadBalancer {
             if (signalData) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Обнаружен MEV сигнал в логе процесса ${processId}, данные: ${JSON.stringify(signalData)}`);
 
-                const {tokenAddress, meteoraPool, pumpSwapPool, raydiumPool, type} = signalData;
+                const {tokenAddress, meteoraPools, pumpSwapPool, raydiumPool, type, lookupTables} = signalData;
                 axios.post(`http://localhost:${MASTER_NODE_PORT}/broadcast`, {
                     token: tokenAddress,
-                    meteora: meteoraPool,
+                    meteora: meteoraPools,
                     targetPool: pumpSwapPool ? pumpSwapPool : raydiumPool,
-                    type: type
+                    type: type,
+                    lookupTables: lookupTables
                 })
                     .then(response => {
                         console.log(`Сигнал успешно отправлен на веб-сервер: ${tokenAddress}`);
