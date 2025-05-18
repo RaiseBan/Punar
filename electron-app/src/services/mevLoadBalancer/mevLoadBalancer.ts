@@ -30,6 +30,7 @@ import {
 } from "../../types/types";
 import {formatUsage, structConfig} from "./meteoraPoolsService";
 import {MASTER_NODE_PORT} from "../../config/config";
+import {logMeteoraPoolsUsage} from "../../utils/logUtil";
 
 
 export class MevLoadBalancer {
@@ -179,9 +180,9 @@ export class MevLoadBalancer {
         try {
             // Загружаем настройки пользователя
             this.userSettings = await getSettings();
-            this.settings.minProcessAgeForCleanup = (Number(this.userSettings.min_process_age_for_cleanup) | 4) * 60 * 1000;
+            this.settings.minProcessAgeForCleanup = (Number(this.userSettings.min_process_age_for_cleanup) || 5) * 60 * 1000;
             // this.settings.minProcessAgeForCleanup = 10 * 1000;
-            this.settings.liquidityCheckInterval = (Number(this.userSettings.processes_check_interval) | 20) * 60 * 1000;
+            this.settings.liquidityCheckInterval = (Number(this.userSettings.processes_check_interval) || 20) * 60 * 1000;
             // this.settings.liquidityCheckInterval = 15 * 1000;
             // Инициализируем обработчики IPC
             this.initIpcHandlers();
@@ -263,6 +264,8 @@ export class MevLoadBalancer {
      * @returns Конфигурации для добавления и идентификаторы процессов для удаления
      */
     async getConfigs(validSignals: SignalWithMeta[]): Promise<ProcessesToManage | undefined> {
+        logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `meteoraPoolsUsage start`);
+        logMeteoraPoolsUsage(this.meteoraPoolsUsage);
         try {
             // Группируем пулы по токенам
             const groupPoolsByToken = new Map<string, Pools>();
@@ -436,7 +439,10 @@ export class MevLoadBalancer {
                 logger.LOG_MODULES.MEV_LOAD_BALANCER,
                 `Результат распределения пулов: ${configsToAdd.length} процессов для создания, ${configsToDelete.length} для удаления`
             );
-
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `meteoraPoolsUsage END`);
+            logMeteoraPoolsUsage(this.meteoraPoolsUsage);
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, JSON.stringify(configsToAdd, null , 2));
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, configsToDelete);
             return {
                 configsToAdd,
                 processIdsToDelete: configsToDelete
@@ -778,7 +784,7 @@ export class MevLoadBalancer {
         signalId?: string
     } = {}) {
         try {
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка токена "${config.tokenAddress}"`);
+            // logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверка токена "${config.tokenAddress}"`);
             if (!this.userTokens.has(config.tokenAddress.trim())) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Токен не найден, создаем...`);
                 this.userTokens.set(config.tokenAddress.trim(), (await createTokenAccount(this.userSettings?.mainRpc!, config.tokenAddress.trim(), this.USER, this.userTokens))!);
@@ -858,7 +864,7 @@ export class MevLoadBalancer {
             const currentTime = Date.now();
             // const initialCreationTime = options.isRestart ? options.initialCreationTime : currentTime;
             const initialCreationTime = options.initialCreationTime ? options.initialCreationTime : currentTime;
-
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `------- initialCreationTime: ${initialCreationTime} для сигнала ${signalId}`);
             // Сохраняем информацию о процессе
             this.mevProcesses.set(processId, {
                 pid: childProcess.pid,
@@ -952,28 +958,28 @@ export class MevLoadBalancer {
 
 
         // let meteoraVerdict = await this.checkMeteora(meteoraUrl);
-        if (!this.countMap.has(pair)){
+        if (!this.countMap.has(pair)) {
             this.countMap.set(pair, 0);
         }
 
         let dexscreenerVerdict = await this.checkDex(dexScreenerUrl);
-        if (!dexscreenerVerdict){
+        if (!dexscreenerVerdict) {
             this.countMap.set(pair, this.countMap.get(pair) + 1);
         }
+        logger.info(logger.LOG_MODULES.CLEANING_POOLS, `COUNT MAP STATE AFTER CHECK LIQ:::`);
+        console.table(Array.from(this.countMap));
 
-
-        if (this.countMap.get(pair) === 3){
+        if (this.countMap.get(pair) === 3) {
             return {
                 pool: pair,
                 verdict: false
             }
-        }else{
-            return{
+        } else {
+            return {
                 pool: pair,
                 verdict: true
             }
         }
-
 
 
     }
@@ -982,7 +988,7 @@ export class MevLoadBalancer {
 
         try {
             const dexData = (await axios.get(dexScreenerUrl)).data;
-            logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData, null, 2)}`);
+            logger.info(logger.LOG_MODULES.SYSTEM, `DEXSCREENER DATA: ${JSON.stringify(dexData.pair.txns, null, 2)}`);
 
             if (dexData.pair && dexData.pair.txns.m5) {
                 const buys = dexData.pair.txns.m5.buys;
@@ -1918,8 +1924,10 @@ export class MevLoadBalancer {
 
             // Шаг 11: Запускаем существующие сигналы с новыми задержками
             for (const signalId of updatedActiveSignalIds) {
+
                 const config = existingMevProcesses.get(signalId).config;
                 const initialCreationTime: number = existingMevProcesses.get(signalId).initialCreationTime;
+                logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `------- ЗАПУСКАЕМ ПРОШЛЫЕ ПРОЦЕСЫ ДЛЯ ${signalId} С initialCreationTime: ${initialCreationTime}`);
                 if (!config) continue;
 
                 const signalConfig = signalDistribution.get(signalId);
@@ -2282,6 +2290,9 @@ export class MevLoadBalancer {
         }
 
         if (!this.isActive || this.mevProcesses.size === 0) {
+            telegramBotService.sendSystemNotification(
+                `'🧹Пропуск проверки ликвидности: нет процессов`
+            );
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Пропуск проверки ликвидности: балансировщик неактивен или нет процессов');
             return;
         }
@@ -2419,7 +2430,7 @@ export class MevLoadBalancer {
                         if (processes.length === 0) continue;
 
                         // Берем первый процесс для получения информации о сигнале
-                        const mevProcess =  processes[0];
+                        const mevProcess = processes[0];
                         if (!mevProcess.config) continue;
 
                         // Получаем все активные пулы (исключаем неактивные)

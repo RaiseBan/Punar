@@ -317,14 +317,14 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
 
         // Убедимся, что taskId доступен и корректен
         const taskId = taskConfig.taskId || (taskConfig.sourceTaskId ? taskConfig.sourceTaskId : Date.now());
-        console.log(`🔖 SPAWN: Используем taskId: ${taskId} для процесса ${taskConfig.module_name}/${taskConfig.task_name}`);
+        // console.log(`🔖 SPAWN: Используем taskId: ${taskId} для процесса ${taskConfig.module_name}/${taskConfig.task_name}`);
 
         // Сохраняем taskId в конфигурации, если его там нет
         taskConfig.taskId = taskId;
 
         // Получаем правильную директорию конфигов
         const configDir = getConfigDirectory();
-        console.log(`📁 SPAWN: Директория конфигов: ${configDir}`);
+        // console.log(`📁 SPAWN: Директория конфигов: ${configDir}`);
 
         // Создаем папку, если её нет
         if (!fs.existsSync(configDir)) {
@@ -337,7 +337,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
         const taskName = sanitizeFileName(taskConfig.task_name);
         const configFileName = `${moduleName}_${taskName}.json`;
         const configPath = path.join(configDir, configFileName);
-        console.log(`📄 SPAWN: Путь к файлу конфигурации: ${configPath}`);
+        // console.log(`📄 SPAWN: Путь к файлу конфигурации: ${configPath}`);
 
         let updatedTaskConfig: any | undefined;
         if (taskConfig.module_name === "Tensor sniper (SDK)" || taskConfig.module_name === "Tensor reprice") {
@@ -352,12 +352,12 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
 
         // Записываем конфиг в файл
         fs.writeFileSync(configPath, JSON.stringify(updatedTaskConfig, null, 2), "utf-8");
-        console.log(`Конфигурация сохранена: ${configPath}`);
+        // console.log(`Конфигурация сохранена: ${configPath}`);
 
         // Запускаем дочерний процесс с заданным рабочим каталогом (cwd) и переменными окружения
         // console.log(JSON.stringify(userSettings, null, 2));
-        console.log(`scriptsDirectoryPath: ${userSettings.scriptDirectory}`);
-        console.log(`start process: \nPath: ${path.join(userSettings.scriptDirectory, "src", "index.ts")} \nConfigPath: ${configPath}`);
+        // console.log(`scriptsDirectoryPath: ${userSettings.scriptDirectory}`);
+        // console.log(`start process: \nPath: ${path.join(userSettings.scriptDirectory, "src", "index.ts")} \nConfigPath: ${configPath}`);
 
         let moduleDir = "";
         let fileToExecute = "index.ts";
@@ -392,8 +392,8 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
             const pythonScriptPath = path.join(userSettings.scriptDirectory, moduleDir);
             const venvPath = path.join(pythonScriptPath, '.venv');
 
-            console.log(`🐍 SPAWN: Запуск Python процесса для MEV из директории: ${pythonScriptPath}`);
-            console.log(`🌐 SPAWN: Используем виртуальное окружение: ${venvPath}`);
+            // console.log(`🐍 SPAWN: Запуск Python процесса для MEV из директории: ${pythonScriptPath}`);
+            // console.log(`🌐 SPAWN: Используем виртуальное окружение: ${venvPath}`);
 
             // 1. Активируем переменные окружения вручную
             const env = {
@@ -406,7 +406,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
 
             // 2. Путь к Python в виртуальном окружении
             const pythonExecutable = path.join(venvPath, 'Scripts', 'python.exe');
-            console.log(`🔧 SPAWN: Путь к исполняемому файлу Python: ${pythonExecutable}`);
+            // console.log(`🔧 SPAWN: Путь к исполняемому файлу Python: ${pythonExecutable}`);
 
             // 3. Аргументы для запуска
             const args = [
@@ -416,7 +416,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                 `--max-attempts=${taskConfig.max_attempts}`,
                 `--threads=${taskConfig.thread_workers}`
             ];
-            console.log(`⚡ SPAWN: Командная строка: ${pythonExecutable} ${args.join(' ')}`);
+            // console.log(`⚡ SPAWN: Командная строка: ${pythonExecutable} ${args.join(' ')}`);
 
             // 4. Запуск процесса
             child = spawn(pythonExecutable, args, {
@@ -426,7 +426,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                 env: env
             });
 
-            console.log(`✅ SPAWN: Python процесс запущен, PID: ${child.pid}`);
+            // console.log(`✅ SPAWN: Python процесс запущен, PID: ${child.pid}`);
         } else if (moduleDir === "new-token-release") {
             child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
                 stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
@@ -446,7 +446,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
 
             // Если есть прямые параметры meteoraPool и tokenAddress, используем generateSimpleMevConfig
             if (updatedTaskConfig.tokenAddress && (updatedTaskConfig.meteoraPools || updatedTaskConfig.poolAddress)) {
-                console.log(`Используем прямые параметры для генерации конфига mev_subtask`);
+                // console.log(`Используем прямые параметры для генерации конфига mev_subtask`);
 
                 if (!userSettings.mevBotDirectory) {
                     console.error("mevBotDirectory не указан в настройках пользователя");
@@ -484,9 +484,9 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                 return null;
             }
 
-            console.log(`toml file path: ${configFilePath}`);
+            // console.log(`toml file path: ${configFilePath}`);
             const wslPath = convertWindowsPathToWSL(configFilePath);
-            console.log(`wslPath: ${wslPath}`);
+            // console.log(`wslPath: ${wslPath}`);
 
             if (!userSettings.mevBotDirectory) {
                 console.error("mevBotDirectory не указан в настройках пользователя");
@@ -496,7 +496,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
             const program = `${convertWindowsPathToWSL(userSettings.mevBotDirectory)}/${fileToExecute}`;
             const configFilePathWSL = convertWindowsPathToWSL(configFilePath);
             // const wslCommand = `${fileToExecute} ${configFilePath}`;
-            console.log(`⚡ SPAWN: Запуск WSL процесса: wsl ${program} ${configFilePathWSL}`);
+            // console.log(`⚡ SPAWN: Запуск WSL процесса: wsl ${program} ${configFilePathWSL}`);
             // Получаем домашнюю директорию пользователя в WSL
 
             child = spawn('wsl.exe', [
@@ -510,7 +510,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                 detached: false,
                 cwd: userSettings.mevBotDirectory,
             });
-            console.log(`✅ SPAWN: WSL процесс запущен, PID: ${child.pid}`);
+            // console.log(`✅ SPAWN: WSL процесс запущен, PID: ${child.pid}`);
 
             // Проверяем, включен ли режим мониторинга
             if (updatedTaskConfig.enablePoolMonitoring === true) {
@@ -533,11 +533,11 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                 const meteoraPoolMatch = tomlContent.match(/meteora_dlmm_pool_list\s*=\s*\[\s*"([^"]+)"\s*\]/);
                 const currentMeteoraPair = meteoraPoolMatch ? meteoraPoolMatch[1] : null;
 
-                console.log(`МОНИТОРИНГ: Адрес токена: ${tokenAddress}, текущий пул Meteora: ${currentMeteoraPair}`);
+                // console.log(`МОНИТОРИНГ: Адрес токена: ${tokenAddress}, текущий пул Meteora: ${currentMeteoraPair}`);
 
                 // Устанавливаем интервал проверки (по умолчанию 5 минут)
                 const checkInterval = updatedTaskConfig.poolCheckInterval || 300000; // 5 минут в миллисекундах
-                console.log(`МОНИТОРИНГ: Настройка интервала проверки ${checkInterval}ms для задачи ${taskId}`);
+                // console.log(`МОНИТОРИНГ: Настройка интервала проверки ${checkInterval}ms для задачи ${taskId}`);
 
                 // Создаем структуру для хранения информации о процессе
                 const processInfo: ProcessInfo = {
@@ -759,7 +759,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                 console.log(`МОНИТОРИНГ: Мониторинг пулов запущен для задачи ${taskId}, интервал: ${checkInterval}ms`);
             }
         } else {
-            console.log(userSettings);
+            // console.log(userSettings);
             child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
                 stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
                 shell: true, // Используем shell для корректного выполнения
@@ -769,7 +769,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
             });
         }
 
-        console.log(`after child`);
+        // console.log(`after child`);
         // // Обработка стандартного вывода (stdout)
         // child.stdout.on("data", (data) => {
         //     console.log(`STDOUT: ${data}`);
@@ -788,11 +788,11 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
         // Добавляем обработчик завершения для mev_subtask процессов
         if (updatedTaskConfig.module_name === "mev_subtask" && updatedTaskConfig.enablePoolMonitoring) {
             child.on("exit", (code: number | null) => {
-                console.log(`🛑 SPAWN: mev_subtask процесс ${taskId} завершился с кодом ${code}, очищаем мониторинг`);
+                // console.log(`🛑 SPAWN: mev_subtask процесс ${taskId} завершился с кодом ${code}, очищаем мониторинг`);
 
                 // Даже если код равен null (принудительное завершение), мы должны корректно очистить ресурсы
                 if (code === null) {
-                    console.log(`⚠️ SPAWN: Процесс ${taskId} был завершен принудительно. Очищаем ресурсы.`);
+                    // console.log(`⚠️ SPAWN: Процесс ${taskId} был завершен принудительно. Очищаем ресурсы.`);
                 }
 
                 stopMevProcess(taskId);

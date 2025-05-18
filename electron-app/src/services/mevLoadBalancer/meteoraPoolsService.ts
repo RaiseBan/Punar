@@ -12,11 +12,14 @@ export async function structConfig<T extends MevLoadBalancer>(
     dammMeteora?: string,
     type?: string
 ): Promise<ProcessConfig> {
+    // Создаем копию массива, чтобы не модифицировать исходный
+    const updatedMeteoraPools = [...meteoraPools];
+
     // Если у нас только один пул Meteora, пробуем добавить самый ликвидный пул из существующих
-    if (meteoraPools.length === 1) {
+    if (updatedMeteoraPools.length === 1) {
         try {
             // Получаем все существующие пулы для данного токена, исключая текущий пул
-            const existingPools = getAllMeteoraPoolsForToken(target, tokenAddress, meteoraPools[0]);
+            const existingPools = getAllMeteoraPoolsForToken(target, tokenAddress, updatedMeteoraPools[0]);
 
             if (existingPools.length > 0) {
                 logger.info(
@@ -28,7 +31,8 @@ export async function structConfig<T extends MevLoadBalancer>(
                 const mostLiquidPool = await findMostLiquidPool(existingPools);
 
                 if (mostLiquidPool) {
-                    meteoraPools.push(mostLiquidPool.pool);
+                    // Добавляем к копии массива, а не к оригиналу
+                    updatedMeteoraPools.push(mostLiquidPool.pool);
 
                     logger.info(
                         logger.LOG_MODULES.MEV_LOAD_BALANCER,
@@ -49,10 +53,10 @@ export async function structConfig<T extends MevLoadBalancer>(
         }
     }
 
-    // Формируем и возвращаем конфигурацию
-    return {
+    // Формируем и возвращаем конфигурацию с обновленным массивом пулов
+    const struct = {
         tokenAddress,
-        meteoraPools: meteoraPools,
+        meteoraPools: updatedMeteoraPools, // Используем обновленную копию
         pumpSwapPool: pumpSwapPool ? pumpSwapPool : undefined,
         raydiumPool: raydiumPool ? raydiumPool : undefined,
         dammMeteoraPool: dammMeteora ? dammMeteora : undefined,
@@ -64,6 +68,9 @@ export async function structConfig<T extends MevLoadBalancer>(
         process_delay: null,
         task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
     };
+
+    logger.info(logger.LOG_MODULES.CONFIG_SERVICE, `STRUCT CONFIG::: ${JSON.stringify(struct, null, 2)}`);
+    return struct;
 }
 
 
