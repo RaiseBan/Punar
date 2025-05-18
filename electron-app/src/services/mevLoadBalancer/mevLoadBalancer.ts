@@ -1985,7 +1985,7 @@ export class MevLoadBalancer {
             for (const signalId of newSignalIds) {
                 await sleep(Number(this.userSettings.delay_between_nodes));
                 const config = newConfigs.get(signalId);
-                config.lookupTables = await this.getLookups(config);
+                // config.lookupTables = await this.getLookups(config);
                 if (!config) continue;
 
                 const signalConfig = signalDistribution.get(signalId);

@@ -297,10 +297,10 @@ export async function generateSimpleMevConfig(
                 uuid: "",
                 ip_addresses: [userSetting.primary_ip],
                 tip_config: {
-                    strategy: "Random",
-                    from: jito_lower_bound,
-                    to: jito_upper_bound,
-                    count: 1
+                    strategy: "ExponentialRandom",
+                    from: 20_000,
+                    to: 50_000_000,
+                    count: 3
                 },
                 use_separate_tip_account: true,
                 min_profit: 10000,
