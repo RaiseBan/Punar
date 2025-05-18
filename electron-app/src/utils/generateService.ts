@@ -134,10 +134,10 @@ export async function generateMevConfig(
             uuid: "",
             ip_addresses: [PRIMARY_IP],
             tip_config: {
-                strategy: "Random",
-                from: config.jito_lower_bound,
-                to: config.jito_upper_bound,
-                count: 1
+                strategy: "ExponentialRandom",
+                from: 20_000,
+                to: 50_000_000,
+                count: 3
             }
         },
         kamino_flashloan: {
