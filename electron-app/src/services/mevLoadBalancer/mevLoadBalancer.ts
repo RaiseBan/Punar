@@ -856,6 +856,7 @@ export class MevLoadBalancer {
             childProcess.stdout.on("data", (data: any) => {
                 const output = data.toString().trim();
                 if (output) {
+                    logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `${output}`);
                     this.writeProcessLog(processId, output, 'info');
                 }
             });
@@ -1395,7 +1396,7 @@ export class MevLoadBalancer {
                 return;
             }
 
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ПОЛУЧЕН ЛОГ от ${processId}: ${message.substring(0, 100)}...`);
+            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ПОЛУЧЕН ЛОГ от ${processId}: ${message}`);
 
             // Пропускаем логи от MEV процессов, чтобы избежать бесконечного цикла
             if (this.mevProcesses.has(processId)) {
