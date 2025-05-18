@@ -1964,7 +1964,7 @@ class TelegramBotService {
                 for (const meteoraPool of meteoraPools) {
                     const signal: Signal = {
                         tokenAddress: tokenAddress,
-                        meteoraPool: meteoraPool, // Для обратной совместимости оставляем первый пул
+                        meteoraPools: [meteoraPool], // Для обратной совместимости оставляем первый пул
                         timestamp: Date.now(),
                         type: poolType || '' // Добавляем тип пула
                     };

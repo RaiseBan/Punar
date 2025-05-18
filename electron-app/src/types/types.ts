@@ -47,12 +47,12 @@ export type UsageMeteoraPools = {
 
 export interface Signal {
     tokenAddress: string;
-    meteoraPool: string;
+    meteoraPools: string[];
     pumpSwapPool?: string;
     raydiumPool?: string;
     meteoraDAMMPool?: string;
     type: string;
-
+    lookupTables?: string[];
     timestamp: number;
 }
 export interface SignalWithMeta extends Signal{
