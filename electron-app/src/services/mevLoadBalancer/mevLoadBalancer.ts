@@ -856,7 +856,7 @@ export class MevLoadBalancer {
             childProcess.stdout.on("data", (data: any) => {
                 const output = data.toString().trim();
                 if (output) {
-                    logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `${output}`);
+                    // logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `${output}`);
                     this.writeProcessLog(processId, output, 'info');
                 }
             });
