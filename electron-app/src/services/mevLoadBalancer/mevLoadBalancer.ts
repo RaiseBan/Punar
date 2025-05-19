@@ -1924,10 +1924,11 @@ export class MevLoadBalancer {
                     pumpSwapPool,
                     raydiumPool,
                     meteoraDAMMPool,
-                    type
+                    type,
+                    lookupTables
                 } = signal;
 
-                const struct = {
+                const struct: ProcessConfig = {
                     tokenAddress,
                     meteoraPools: meteoraPools, // Используем обновленную копию
                     pumpSwapPool: pumpSwapPool ? pumpSwapPool : undefined,
@@ -1939,7 +1940,9 @@ export class MevLoadBalancer {
                     jito_lower_bound: Number(this.userSettings!.jito_lower_bound), // deprecated
                     jito_upper_bound: Number(this.userSettings!.jito_upper_bound), // deprecated
                     process_delay: null,
-                    task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
+                    task_name: `mev_task_${Date.now().toString().substring(8, 13)}`,
+                    lookupTables: lookupTables
+
                 };
 
                 newProcessConfigs.push(struct);
