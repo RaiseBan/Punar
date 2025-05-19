@@ -11,7 +11,7 @@ import {getSettings} from '../../utils/fsHelper';
 import telegramBotService from '../telegramBotService';
 import fs from 'fs';
 import bs58 from "bs58";
-import {createTokenAccount, getDetailedTokenAccounts, sleep, updateIfNotExistsAndGet} from '../../utils/solanaUtils';
+import {createTokenAccount, getDetailedTokenAccounts, sleep} from '../../utils/solanaUtils';
 import {Keypair} from "@solana/web3.js";
 import logger from '../loggerService';
 import axios from "axios";
@@ -19,23 +19,17 @@ import {
     AppSettings,
     CheckResult,
     MevProcess,
-    PairInfo,
-    Pools,
     ProcessConfig,
-    ProcessesToManage,
     RAYDIUM_TYPE,
     Signal,
     SignalWithMeta,
-    UsageMeteoraPools
 } from "../../types/types";
-import {formatUsage, structConfig} from "./meteoraPoolsService";
+
 import {MASTER_NODE_PORT} from "../../config/config";
-import {logMeteoraPoolsUsage} from "../../utils/logUtil";
 
 
 export class MevLoadBalancer {
     private mevProcesses: Map<string, MevProcess>;
-    private meteoraPoolsByToken: Map<string, string[]>;
     private tokenReleaseProcesses: Map<string, boolean>;
     private userTokens: Map<string, string>;
     private USER: Keypair;
@@ -50,7 +44,6 @@ export class MevLoadBalancer {
     stats: any;
     settings: any;
     userSettings: AppSettings | null;
-    private meteoraPoolsUsage: Map<string, UsageMeteoraPools> = new Map<string, UsageMeteoraPools>();
     private readonly DELAY_PERFORMANCE = {
         0: 670, // 0ms: 670 req/s
         1: 370, // 1ms: 370 req/s
@@ -73,14 +66,13 @@ export class MevLoadBalancer {
         18: 49,
         19: 46,
         20: 44,
-        
+
     };
 
     constructor() {
         // Карта для отслеживания MEV процессов
         // key = processId, value = { process, config, startTime, lastActivity, signals: [], status }
         this.mevProcesses = new Map();
-        this.meteoraPoolsByToken = new Map();
 
         // Карта для отслеживания процессов токен-релиза
         // key = processId, value = true
@@ -124,45 +116,6 @@ export class MevLoadBalancer {
 
         // Инициализация
         this.init();
-    }
-
-    getMeteoraUsagePoolsByToken(token: string): UsageMeteoraPools | undefined {
-        console.log(this.meteoraPoolsUsage);
-        return this.meteoraPoolsUsage.get(token);
-    }
-
-    setMeteoraUsagePoolsByToken(token: string, usage: UsageMeteoraPools): void {
-        this.meteoraPoolsUsage.set(token, usage);
-    }
-
-    async deleteMeteoraPoolFromProcess(processId: string, meteoraPool: string): Promise<boolean> {
-        const mevProcess = this.mevProcesses.get(processId);
-        if (!mevProcess) {
-            return false;
-        }
-        // this.mevProcesses.delete()
-
-        await this.stopProcess(processId);
-        let meteoraPools = mevProcess.meteoraPools.filter(pool => pool !== meteoraPool);
-        const processConfig: ProcessConfig = {
-            tokenAddress: mevProcess.tokenAddress,
-            meteoraPools: meteoraPools,
-            pumpSwapPool: mevProcess.pumpSwapPool,
-            type: mevProcess.config.type,
-            raydiumPool: mevProcess.config.raydiumPool,
-            main_rpc: mevProcess.config.main_rpc,
-            useJito: mevProcess.config.useJito,
-            jito_lower_bound: mevProcess.config.jito_lower_bound,
-            jito_upper_bound: mevProcess.config.jito_upper_bound,
-            process_delay: mevProcess.config.process_delay,
-            task_name: mevProcess.config.task_name
-        }
-        await this.startMevProcess(processConfig, {
-            isRestart: false,
-            initialCreationTime: mevProcess.initialCreationTime
-        })
-        return true;
-
     }
 
 
@@ -271,205 +224,6 @@ export class MevLoadBalancer {
         this.liquidityCheckerTimer = setInterval(() => {
             this.checkAndCleanProcessesByLiquidity();
         }, this.settings.liquidityCheckInterval);
-    }
-
-
-    /**
-     * Группирует пулы по токенам и создает конфигурации для процессов
-     * @param validSignals - Валидные сигналы для обработки
-     * @returns Конфигурации для добавления и идентификаторы процессов для удаления
-     */
-    async getConfigs(validSignals: SignalWithMeta[]): Promise<ProcessesToManage | undefined> {
-        logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `meteoraPoolsUsage start`);
-        logMeteoraPoolsUsage(this.meteoraPoolsUsage);
-        try {
-            // Группируем пулы по токенам
-            const groupPoolsByToken = new Map<string, Pools>();
-            const configsToAdd: ProcessConfig[] = [];
-            const configsToDelete: string[] = [];
-
-            // Шаг 1: Группируем все пулы по токенам
-            for (const signal of validSignals) {
-                if (groupPoolsByToken.has(signal.tokenAddress)) {
-                    // Если токен уже есть, добавляем новый пул Meteora
-                    const pools = groupPoolsByToken.get(signal.tokenAddress)!;
-                    // Добавляем только уникальные пулы
-                    if (!pools.meteora.includes(signal.meteoraPool)) {
-                        pools.meteora.push(signal.meteoraPool);
-                    }
-
-                    // Обновляем поля pump, raydium и type согласно новому сигналу
-                    if (signal.pumpSwapPool) {
-                        pools.pump = signal.pumpSwapPool;
-                        pools.raydium = undefined; // Обнуляем raydium если пришел pumpSwap
-                        pools.dammMeteora = undefined;
-                    } else if (signal.raydiumPool) {
-                        pools.raydium = signal.raydiumPool;
-                        pools.pump = undefined; // Обнуляем pumpSwap если пришел raydium
-                        pools.dammMeteora = undefined;
-                    } else if (signal.meteoraDAMMPool) {
-                        pools.raydium = undefined
-                        pools.pump = undefined; // Обнуляем pumpSwap если пришел raydium
-                        pools.dammMeteora = signal.meteoraDAMMPool;
-                    }
-
-                    // Обновляем тип, если он есть в сигнале
-                    if (signal.type) {
-                        pools.type = signal.type;
-                    }
-                } else {
-                    // Создаем новую запись для токена
-                    groupPoolsByToken.set(signal.tokenAddress, {
-                        meteora: [signal.meteoraPool],
-                        pump: signal.pumpSwapPool,
-                        raydium: signal.raydiumPool,
-                        dammMeteora: signal.meteoraDAMMPool,
-                        type: signal.type
-                    });
-                }
-            }
-
-
-            // Шаг 2: Для каждого токена распределяем пулы по процессам
-            for (const [token, pools] of groupPoolsByToken.entries()) {
-                logger.info(
-                    logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                    `Распределение пулов для токена ${token}: ${pools.meteora.length} пулов Meteora`
-                );
-
-                // Получаем или создаем структуру для отслеживания пулов токена
-                let meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
-                if (!meteoraUsageForToken) {
-                    this.setMeteoraUsagePoolsByToken(token, {
-                        pairs: new Map<string, PairInfo>(),
-                        hasFreeSingleSlot: false
-                    });
-                    meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
-                    if (!meteoraUsageForToken) {
-                        logger.error(
-                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                            `Не удалось создать структуру распределения пулов для токена ${token}`
-                        );
-                        return undefined;
-                    }
-                }
-
-                // Копируем список пулов, чтобы не изменять оригинал
-                const poolsToDistribute = [...pools.meteora];
-
-                // Шаг 2.1: Сначала пытаемся добавить пулы к существующим процессам с одним пулом
-                for (const [processId, pairInfo] of meteoraUsageForToken.pairs.entries()) {
-                    // Пропускаем stub и процессы, которые уже имеют 2 пула
-                    if (processId === "stub" || pairInfo.activePools.length >= 2) {
-                        continue;
-                    }
-
-                    // Если у процесса 1 пул и есть пулы для распределения
-                    if (pairInfo.activePools.length === 1 && poolsToDistribute.length > 0) {
-                        // Берем первый пул из списка
-                        const poolToAdd = poolsToDistribute.shift()!;
-
-                        // Добавляем пул к существующему процессу
-                        pairInfo.activePools.push(poolToAdd);
-
-                        // Если процесс не новый, помечаем его для удаления и последующего пересоздания
-                        if (!pairInfo.isNew) {
-                            configsToDelete.push(processId);
-                        }
-
-                        // Создаем новую конфигурацию с обновленным списком пулов
-                        configsToAdd.push(await structConfig(
-                            this,
-                            token,
-                            [...pairInfo.activePools],
-                            pools.pump,
-                            pools.raydium,
-                            pools.dammMeteora,
-                            pools.type
-                        ));
-
-                        // Обновляем запись в структуре с новым ID процесса
-                        meteoraUsageForToken.pairs.delete(processId);
-                        const newProcessId = this.generateProcessId(
-                            token,
-                            [...pairInfo.activePools],
-                            this.userSettings?.jito_lower_bound!
-                        );
-
-                        meteoraUsageForToken.pairs.set(newProcessId, {
-                            activePools: [...pairInfo.activePools],
-                            isNew: false
-                        });
-
-                        logger.info(
-                            logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                            `Добавлен пул ${poolToAdd} к существующему процессу ${processId} -> ${newProcessId}`
-                        );
-                    }
-                }
-
-                // Шаг 2.2: Создаем новые процессы для оставшихся пулов
-                while (poolsToDistribute.length > 0) {
-                    // Определяем, сколько пулов добавить в процесс (1 или 2)
-                    const poolsForProcess: string[] = [];
-
-                    // Добавляем первый пул
-                    poolsForProcess.push(poolsToDistribute.shift()!);
-
-                    // Если есть еще пулы, добавляем второй
-                    if (poolsToDistribute.length > 0) {
-                        poolsForProcess.push(poolsToDistribute.shift()!);
-                    }
-
-                    // Создаем новую конфигурацию
-                    configsToAdd.push(await structConfig(
-                        this,
-                        token,
-                        poolsForProcess,
-                        pools.pump,
-                        pools.raydium,
-                        pools.dammMeteora,
-                        pools.type
-                    ));
-
-                    // Добавляем запись в структуру
-                    const processId = this.generateProcessId(
-                        token,
-                        poolsForProcess,
-                        this.userSettings?.jito_lower_bound!
-                    );
-
-                    meteoraUsageForToken.pairs.set(processId, {
-                        activePools: poolsForProcess,
-                        isNew: false
-                    });
-
-                    logger.info(
-                        logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                        `Создан новый процесс ${processId} с ${poolsForProcess.length} пулами: ${poolsForProcess.join(', ')}`
-                    );
-                }
-            }
-
-            logger.info(
-                logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                `Результат распределения пулов: ${configsToAdd.length} процессов для создания, ${configsToDelete.length} для удаления`
-            );
-            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `meteoraPoolsUsage END`);
-            logMeteoraPoolsUsage(this.meteoraPoolsUsage);
-            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, JSON.stringify(configsToAdd, null , 2));
-            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, configsToDelete);
-            return {
-                configsToAdd,
-                processIdsToDelete: configsToDelete
-            };
-        } catch (error) {
-            logger.error(
-                logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                `Ошибка при распределении пулов: ${error.message}`
-            );
-            return undefined;
-        }
     }
 
 
@@ -770,7 +524,7 @@ export class MevLoadBalancer {
                 id: processId,
                 pid: processData.process ? processData.process.pid : null,
                 tokenAddress: processData.config ? processData.config.tokenAddress : 'unknown',
-                meteoraPools: processData.config ? processData.config.meteoraPools : null,
+                meteoraPool: processData.config ? processData.config.meteoraPool : null,
                 pumpSwapPool: processData.config ? processData.config.pumpSwapPool : null,
                 status: processData.status,
                 startTime: processData.startTime,
@@ -809,23 +563,23 @@ export class MevLoadBalancer {
 
             // Проверяем обязательные параметры
             const tokenAddress = config.tokenAddress;
-            const meteoraPools = config.meteoraPools;
+            const meteoraPool = config.meteoraPool;
             let pumpSwapPool = config.pumpSwapPool || undefined;
 
-            if (!tokenAddress || !meteoraPools) {
+            if (!tokenAddress || !meteoraPool) {
                 logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Не указаны обязательные параметры токена или пула.`);
-                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Токен: ${tokenAddress}, пулs: ${meteoraPools}`);
+                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Токен: ${tokenAddress}, пулs: ${meteoraPool}`);
                 return null;
             }
 
             // Генерируем signalId если не передан
-            const signalId = options.signalId || this.generateSignalId(tokenAddress, meteoraPools);
+            const signalId = options.signalId || this.generateSignalId(tokenAddress, [meteoraPool]);
 
             // Используем номер инстанса для создания уникального ID
             const instanceNumber = options.instanceNumber || 0;
             const processId = this.generateProcessId(
                 tokenAddress,
-                meteoraPools,
+                [meteoraPool],
                 this.userSettings.jito_lower_bound,
                 instanceNumber
             );
@@ -835,10 +589,9 @@ export class MevLoadBalancer {
                 ...config,
                 module_name: "mev_subtask",
                 tokenAddress,
-                meteoraPools,
+                meteoraPool,
                 pumpSwapPool,
-                task_name: config.task_name || `MEV Process ${processId}`,
-                lookupOwner: this.userSettings.lookupOwner
+                task_name: config.task_name || `MEV Process ${processId}`
             };
 
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Запуск MEV процесса [signalId: ${signalId}, инстанс: ${instanceNumber}] с задержкой ${config.process_delay}мс: ${JSON.stringify(processConfig)}`);
@@ -885,7 +638,7 @@ export class MevLoadBalancer {
             this.mevProcesses.set(processId, {
                 pid: childProcess.pid,
                 tokenAddress,
-                meteoraPools,
+                meteoraPool,
                 pumpSwapPool,
                 process: childProcess,
                 startTime: currentTime,
@@ -1026,42 +779,6 @@ export class MevLoadBalancer {
             return false;
         }
 
-
-    }
-
-    async checkMeteora(meteoraUrl: string) {
-        try {
-            const meteoraData = await (await this.forwardRequest(meteoraUrl)).json();
-            logger.info(logger.LOG_MODULES.SYSTEM, `METEOTA DATA: ${JSON.stringify(meteoraData, null, 2)}`);
-
-            if (meteoraData[0].onchain_timestamp) {
-                // Проверка, что timestamp был 20 минут назад
-                const currentTimestamp = Math.floor(Date.now() / 1000);
-                const twentyMinutesAgo = currentTimestamp - (20 * 60); // 20 минут в секундах
-
-
-                return meteoraData[0].onchain_timestamp < twentyMinutesAgo;
-            } else {
-                return false;
-            }
-
-        } catch (error) {
-            logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while checking Meteora: ${error}`);
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch 3: ${error.message}`);
-            if (error.cause) {
-                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
-            }
-            // Можно добавить дополнительные проверки сетевых ошибок
-            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сетевая ошибка: не удалось подключиться к серверу');
-            }
-            return false
-        }
-
-    }
-
-
-    dexRequest(url) {
 
     }
 
@@ -1783,14 +1500,14 @@ export class MevLoadBalancer {
 
 
     async addRaydiumSignal(token: string,
-                           meteoraPools: string[],
+                           meteoraPool: string,
                            rayPool: string,
                            type: RAYDIUM_TYPE
     ): Promise<string | undefined> {
 
         let procConfig: ProcessConfig = {
             tokenAddress: token,
-            meteoraPools: meteoraPools,
+            meteoraPool: meteoraPool,
             raydiumPool: rayPool,
             type: type,
             main_rpc: this.userSettings.mainRpc,
@@ -1805,24 +1522,6 @@ export class MevLoadBalancer {
             initialCreationTime: Date.now()
         })
 
-    }
-
-    async getLookups(config: ProcessConfig): Promise<string[] | undefined> {
-        if (config.meteoraPools.length > 1) {
-            let accountToExtendLookup: string[] = [];
-
-            if (config.pumpSwapPool) {
-                accountToExtendLookup.push(config.pumpSwapPool);
-            } else if (config.raydiumPool) {
-                accountToExtendLookup.push(config.raydiumPool);
-            } else if (config.dammMeteoraPool) {
-                accountToExtendLookup.push(config.dammMeteoraPool);
-            }
-
-            accountToExtendLookup.push(...config.meteoraPools);
-
-            return await updateIfNotExistsAndGet(config.main_rpc, accountToExtendLookup, this.userSettings.lookupOwner);
-        }
     }
 
 
@@ -1865,11 +1564,6 @@ export class MevLoadBalancer {
                 throw new Error('Нет валидных сигналов для обработки');
             }
 
-            // Шаг 2: Получаем конфигурации для новых сигналов
-            const processManageInfo: ProcessesToManage | undefined = await this.getConfigs(validSignals);
-            if (!processManageInfo) {
-                throw new Error('Не удалось получить информацию о конфигурациях процессов');
-            }
 
             // Шаг 3: Сохраняем конфигурации существующих сигналов ДО остановки процессов
             const existingMevProcesses = new Map<string, MevProcess>();
@@ -1882,30 +1576,47 @@ export class MevLoadBalancer {
                 }
             }
 
-            // Шаг 4: Останавливаем и удаляем процессы, которые нужно удалить
-            const deletedSignalIds = new Set<string>();
-            for (const processId of processManageInfo.processIdsToDelete) {
-                const process = this.mevProcesses.get(processId);
-                if (process && process.signalId && !deletedSignalIds.has(process.signalId)) {
-                    // Останавливаем все процессы этого сигнала
-                    await this.stopAllProcessesBySignalId(process.signalId);
-                    deletedSignalIds.add(process.signalId);
-                } else {
-                    // Если signalId нет или уже обработан, останавливаем отдельный процесс
-                    await this.stopProcess(processId);
-                }
-            }
-
-            // Шаг 5: Обновляем список активных сигналов после удаления
-            const updatedActiveSignalIds = activeSignalIds.filter(id => !deletedSignalIds.has(id));
 
             // Шаг 6: Добавляем новые signalIds
             const newSignalIds: string[] = [];
             const newConfigs = new Map<string, ProcessConfig>();
 
-            for (const config of processManageInfo.configsToAdd) {
-                const signalId = this.generateSignalId(config.tokenAddress, config.meteoraPools);
-                if (!newSignalIds.includes(signalId) && !updatedActiveSignalIds.includes(signalId)) {
+            let newProcessConfigs: ProcessConfig[] = [];
+
+            for (const signal of validSignals) {
+
+                const {
+                    tokenAddress,
+                    meteoraPool,
+                    pumpSwapPool,
+                    raydiumPool,
+                    meteoraDAMMPool,
+                    type
+                } = signal;
+
+                const struct: ProcessConfig = {
+                    tokenAddress,
+                    meteoraPool: meteoraPool, // Используем обновленную копию
+                    pumpSwapPool: pumpSwapPool ? pumpSwapPool : undefined,
+                    raydiumPool: raydiumPool ? raydiumPool : undefined,
+                    dammMeteoraPool: meteoraDAMMPool ? meteoraDAMMPool : undefined,
+                    type: type,
+                    main_rpc: this.userSettings?.mainRpc || "https://api.mainnet-beta.solana.com",
+                    useJito: true,
+                    jito_lower_bound: Number(this.userSettings!.jito_lower_bound), // deprecated
+                    jito_upper_bound: Number(this.userSettings!.jito_upper_bound), // deprecated
+                    process_delay: null,
+                    task_name: `mev_task_${Date.now().toString().substring(8, 13)}`,
+
+                };
+
+                newProcessConfigs.push(struct);
+            }
+
+
+            for (const config of newProcessConfigs) {
+                const signalId = this.generateSignalId(config.tokenAddress, [config.meteoraPool]);
+                if (!newSignalIds.includes(signalId) && !activeSignalIds.includes(signalId)) {
                     newSignalIds.push(signalId);
                     newConfigs.set(signalId, config);
                 }
@@ -1914,7 +1625,7 @@ export class MevLoadBalancer {
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `NEW SIGNAL IDS: ${newSignalIds}`);
 
             // Шаг 7: Объединяем существующие и новые signalIds
-            const allSignalIds = [...updatedActiveSignalIds, ...newSignalIds];
+            const allSignalIds = [...activeSignalIds, ...newSignalIds];
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `ALL SIGNAL IDS: ${allSignalIds}`);
             // Шаг 8: Рассчитываем оптимальное распределение инстансов и задержек
             const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
@@ -1930,7 +1641,7 @@ export class MevLoadBalancer {
             const performancePercent = (expectedPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
 
             // Шаг 9: Останавливаем все существующие процессы для перераспределения
-            for (const signalId of updatedActiveSignalIds) {
+            for (const signalId of activeSignalIds) {
                 await this.stopAllProcessesBySignalId(signalId, false);
             }
 
@@ -1939,7 +1650,7 @@ export class MevLoadBalancer {
             const signalInstances = new Map<string, string[]>();
 
             // Шаг 11: Запускаем существующие сигналы с новыми задержками
-            for (const signalId of updatedActiveSignalIds) {
+            for (const signalId of activeSignalIds) {
 
                 const config = existingMevProcesses.get(signalId).config;
                 const initialCreationTime: number = existingMevProcesses.get(signalId).initialCreationTime;
@@ -1958,7 +1669,6 @@ export class MevLoadBalancer {
             for (const signalId of newSignalIds) {
                 await sleep(Number(this.userSettings.delay_between_nodes));
                 const config = newConfigs.get(signalId);
-                config.lookupTables = await this.getLookups(config);
                 if (!config) continue;
 
                 const signalConfig = signalDistribution.get(signalId);
@@ -2328,14 +2038,10 @@ export class MevLoadBalancer {
             // Текущее время для проверки возраста
             const currentTime = Date.now();
 
-            // Кэш результатов проверки пулов для избежания повторных проверок
-            const poolLiquidityCache = new Map<string, boolean>();
 
             // Сигналы, которые нужно остановить
             const signalsToStop: string[] = [];
 
-            // Информация о пулах, которые нужно удалить для каждого сигнала
-            const poolsToRemove = new Map<string, string[]>();
 
             // Проверяем каждый сигнал
             for (const signalId of activeSignalIds) {
@@ -2362,133 +2068,36 @@ export class MevLoadBalancer {
                         continue;
                     }
 
-                    const meteoraPools = representativeProcess.config?.meteoraPools || representativeProcess.meteoraPools;
-                    if (!meteoraPools || meteoraPools.length === 0) {
+                    const meteoraPool = representativeProcess.config?.meteoraPool || representativeProcess.meteoraPool;
+                    if (!meteoraPool || meteoraPool.length === 0) {
                         logger.info(logger.LOG_MODULES.CLEANING_POOLS, `Пропуск проверки для сигнала ${signalId}: пулы не найдены`);
                         continue;
                     }
 
                     logger.info(
                         logger.LOG_MODULES.CLEANING_POOLS,
-                        `Проверка ликвидности пулов для сигнала ${signalId} (${meteoraPools.length} пулов, возраст: ${Math.floor(processAge / 1000 / 60)} минут)`
+                        `Проверка ликвидности пулов для сигнала ${signalId} (${meteoraPool.length} пулов, возраст: ${Math.floor(processAge / 1000 / 60)} минут)`
                     );
 
-                    // Проверяем ликвидность каждого пула с использованием кэша
-                    const checkResults: CheckResult[] = [];
+                    logger.info(logger.LOG_MODULES.CLEANING_POOLS, `check pool: ${meteoraPool}`)
+                    // Проверяем, есть ли результат в кэше
 
-                    for (const pool of meteoraPools) {
-                        logger.info(logger.LOG_MODULES.CLEANING_POOLS, `check pool: ${pool}`)
-                        // Проверяем, есть ли результат в кэше
-                        if (poolLiquidityCache.has(pool)) {
-                            const cachedVerdict = poolLiquidityCache.get(pool);
-                            checkResults.push({pool, verdict: cachedVerdict!});
-                            logger.info(
-                                logger.LOG_MODULES.CLEANING_POOLS,
-                                `Используем кэшированный результат для пула ${pool}: ${cachedVerdict ? 'активен' : 'неактивен'}`
-                            );
-                        } else {
-                            // Проверяем ликвидность пула
-                            const checkResult = await this.checkLiquidity(pool);
+                    // Проверяем ликвидность пула
+                    const checkResult = await this.checkLiquidity(meteoraPool);
 
-                            // Кэшируем результат
-                            poolLiquidityCache.set(pool, checkResult.verdict);
-
-                            checkResults.push(checkResult);
-                            logger.info(
-                                logger.LOG_MODULES.CLEANING_POOLS,
-                                `Проверка ликвидности пула ${pool}: ${checkResult.verdict ? 'активен' : 'неактивен'}`
-                            );
-                        }
-                    }
-
-                    // Анализируем результаты проверки
-                    const inactivePools = checkResults.filter(item => item.verdict === false).map(item => item.pool);
-                    const inactivePoolCount = inactivePools.length;
-
-                    if (inactivePoolCount === meteoraPools.length) {
-                        // Все пулы неактивны - останавливаем весь сигнал
+                    logger.info(
+                        logger.LOG_MODULES.CLEANING_POOLS,
+                        `Проверка ликвидности пула ${meteoraPool}: ${checkResult.verdict ? 'активен' : 'неактивен'}`
+                    );
+                    if (checkResult.verdict === false) {
                         signalsToStop.push(signalId);
                         logger.info(
                             logger.LOG_MODULES.CLEANING_POOLS,
-                            `Сигнал ${signalId} будет остановлен: все ${inactivePoolCount} пулов неактивны`
-                        );
-                    } else if (inactivePoolCount > 0) {
-                        // Часть пулов неактивна - удаляем только неактивные пулы
-                        poolsToRemove.set(signalId, inactivePools);
-                        logger.info(
-                            logger.LOG_MODULES.CLEANING_POOLS,
-                            `У сигнала ${signalId} удаляем ${inactivePoolCount} неактивных пулов из ${meteoraPools.length}`
-                        );
-                    } else {
-                        // Все пулы активны
-                        logger.info(
-                            logger.LOG_MODULES.CLEANING_POOLS,
-                            `Сигнал ${signalId} продолжит работу: все ${meteoraPools.length} пулов активны`
+                            `Сигнал ${signalId} будет остановлен`
                         );
                     }
                 } catch (error) {
                     logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Ошибка при проверке ликвидности для сигнала ${signalId}:`, error);
-                }
-            }
-
-            // Обрабатываем сигналы с частично неактивными пулами
-            if (poolsToRemove.size > 0) {
-                logger.info(
-                    logger.LOG_MODULES.CLEANING_POOLS,
-                    `Найдено ${poolsToRemove.size} сигналов с частично неактивными пулами`
-                );
-
-                for (const [signalId, inactivePools] of poolsToRemove.entries()) {
-                    logger.info(logger.LOG_MODULES.CLEANING_POOLS, `Удаление для сигнала: ${signalId}\nИнактивные пулы: ${inactivePools}`)
-                    try {
-                        // Получаем все процессы сигнала
-                        const processes = this.getProcessesBySignalId(signalId);
-                        if (processes.length === 0) continue;
-
-                        // Берем первый процесс для получения информации о сигнале
-                        const mevProcess = processes[0];
-                        if (!mevProcess.config) continue;
-
-                        // Получаем все активные пулы (исключаем неактивные)
-                        const activePools = mevProcess.config.meteoraPools.filter(pool => !inactivePools.includes(pool));
-
-                        if (activePools.length === 0) {
-                            // Если после фильтрации не осталось активных пулов, останавливаем сигнал
-                            signalsToStop.push(signalId);
-                            logger.info(
-                                logger.LOG_MODULES.MEV_LOAD_BALANCER,
-                                `Сигнал ${signalId} будет остановлен: после удаления неактивных пулов не осталось активных`
-                            );
-                        } else {
-                            // Останавливаем все процессы сигнала
-                            await this.stopAllProcessesBySignalId(signalId, false);
-
-                            // Создаем новую конфигурацию только с активными пулами
-                            const updatedConfig = {
-                                ...mevProcess.config,
-                                meteoraPools: activePools
-                            };
-
-                            // Заново рассчитываем оптимальное распределение для этого сигнала
-                            const distribution = this.calculateOptimalProcessDistribution(
-                                [signalId],
-                                Number(this.userSettings?.requests_per_second) || 2000
-                            );
-
-                            const signalConfig = distribution.signalDistribution.get(signalId);
-                            if (!signalConfig) continue;
-
-                            // Запускаем процессы с новой конфигурацией и оптимальными задержками
-                            await this.launchProcessesForSignal(signalId, updatedConfig, signalConfig.delays, mevProcess.initialCreationTime);
-
-                            logger.info(
-                                logger.LOG_MODULES.CLEANING_POOLS,
-                                `Сигнал ${signalId} перезапущен с ${activePools.length} активными пулами (удалено ${inactivePools.length} неактивных пулов)`
-                            );
-                        }
-                    } catch (error) {
-                        logger.error(logger.LOG_MODULES.CLEANING_POOLS, `Ошибка при обработке частично неактивных пулов для сигнала ${signalId}:`, error);
-                    }
                 }
             }
 
