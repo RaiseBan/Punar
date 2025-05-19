@@ -445,7 +445,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
             let configFilePath: string | undefined | null;
 
             // Если есть прямые параметры meteoraPool и tokenAddress, используем generateSimpleMevConfig
-            if (updatedTaskConfig.tokenAddress && (updatedTaskConfig.meteoraPools || updatedTaskConfig.poolAddress)) {
+            if (updatedTaskConfig.tokenAddress && (updatedTaskConfig.meteoraPool || updatedTaskConfig.poolAddress)) {
                 // console.log(`Используем прямые параметры для генерации конфига mev_subtask`);
 
                 if (!userSettings.mevBotDirectory) {
@@ -457,7 +457,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                     userSettings.mevBotDirectory,
                     updatedTaskConfig,
                     updatedTaskConfig.tokenAddress,
-                    updatedTaskConfig.meteoraPools || (Array.isArray(updatedTaskConfig.poolAddress)
+                    updatedTaskConfig.meteoraPool || (Array.isArray(updatedTaskConfig.poolAddress)
                         ? updatedTaskConfig.poolAddress
                         : [updatedTaskConfig.poolAddress as string]),
                     userSettings,
