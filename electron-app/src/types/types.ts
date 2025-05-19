@@ -11,8 +11,6 @@ export interface AppSettings {
 
     delay_between_nodes?: string;
 
-
-    lookupOwner?: string;
     // mev
     migration_wallet?: string;
     jito_lower_bound?: string;
@@ -36,14 +34,6 @@ export interface AppSettings {
 }
 
 
-export type PairInfo = {
-    activePools: string[];
-    isNew: boolean;
-};
-export type UsageMeteoraPools = {
-    pairs: Map<string, PairInfo>;
-    hasFreeSingleSlot: boolean;
-};
 
 export interface Signal {
     tokenAddress: string;
@@ -62,11 +52,10 @@ export interface SignalWithMeta extends Signal{
 
 export type ProcessConfig = {
     tokenAddress: string;
-    meteoraPools: string[];
+    meteoraPool: string;
     pumpSwapPool?: string;
     raydiumPool?: string;
     dammMeteoraPool?: string;
-    lookupTables?: string[];
     // Raydium pools:
     type: string;
 
@@ -77,25 +66,13 @@ export type ProcessConfig = {
     process_delay: number | null;
     task_name: string;
 }
-export type Pools = {
-    meteora: string[];
-    pump?: string;
-    raydium?: string;
-    dammMeteora?: string;
-    type?: string;
-}
-
-export type ProcessesToManage = {
-    configsToAdd: ProcessConfig[],
-    processIdsToDelete: string[]
-}
 
 // В файле с определением типов:
 export interface MevProcess {
     id?: string;
     pid: number;
     tokenAddress: string;
-    meteoraPools: string[];
+    meteoraPool: string;
     pumpSwapPool: string;
     process?: ChildProcess;
     startTime: number;
