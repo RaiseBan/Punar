@@ -3,7 +3,7 @@ import * as path from "path";
 import {getFilteredPairs, sortPairsByParameter, updateIfNotExistsAndGet} from "./solanaUtils";
 import TOML from '@iarna/toml';
 import {PRIMARY_IP, METEORA_OWNER} from "./constants";
-import logger from "@/services/loggerService";
+import logger from "../services/loggerService";
 
 /**
  * Интерфейс для конфигурации задачи
