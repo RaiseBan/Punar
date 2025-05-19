@@ -3,6 +3,7 @@ import * as path from "path";
 import {getFilteredPairs, sortPairsByParameter, updateIfNotExistsAndGet} from "./solanaUtils";
 import TOML from '@iarna/toml';
 import {PRIMARY_IP, METEORA_OWNER} from "./constants";
+import logger from "@/services/loggerService";
 
 /**
  * Интерфейс для конфигурации задачи
@@ -245,6 +246,7 @@ export async function generateSimpleMevConfig(
 
 
         // Формируем конфигурацию для mint_config_list
+        logger.info(logger.LOG_MODULES.CONFIG_SERVICE, `format config with lookup tables: ${config.lookupTables}`);
         const mint_config_list = [
             {
                 mint: tokenAddress,
