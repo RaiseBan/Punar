@@ -211,15 +211,15 @@ export async function generateSimpleMevConfig(
     botDir: string,
     config: any, // ProcessConfig
     tokenAddress: string,
-    meteoraPools: string[],
+    meteoraPool: string,
     userSetting: UserSettings,
     pumpSwapPool: string | null = null
 ): Promise<string | null> {
     try {
         // Проверяем обязательные параметры
-        if (!botDir || !tokenAddress || !meteoraPools) {
+        if (!botDir || !tokenAddress || !meteoraPool) {
             console.error(`[TOML Generator] Ошибка: не указаны обязательные параметры для генерации TOML-файла`);
-            console.error(`[TOML Generator] botDir: ${botDir}, token: ${tokenAddress}, pool: ${meteoraPools}`);
+            console.error(`[TOML Generator] botDir: ${botDir}, token: ${tokenAddress}, pool: ${meteoraPool}`);
             return null;
         }
 
@@ -249,7 +249,7 @@ export async function generateSimpleMevConfig(
             {
                 mint: tokenAddress,
                 pump_pool_list: pumpSwapPool ? [pumpSwapPool] : [],
-                meteora_dlmm_pool_list: meteoraPools,
+                meteora_dlmm_pool_list: [meteoraPool],
                 lookup_table_accounts: config.lookupTables,
                 process_delay: processDelay,
                 // This is the Raydium V4 AMM Pools
