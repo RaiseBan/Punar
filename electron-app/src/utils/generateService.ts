@@ -325,7 +325,7 @@ export async function generateSimpleMevConfig(
 
         // Формируем имя файла
         const taskId = config.taskId || Date.now();
-        const shortMeteora = meteoraPools[0]?.substring(0, 8) || '';
+        const shortMeteora = meteoraPool?.substring(0, 8) || '';
         const shortPump = pumpSwapPool ? pumpSwapPool.substring(0, 8) : '';
         const tomlFileName = `${tokenAddress}_${useJito ? "jito" : "default"}_task${taskId}_meteora${shortMeteora}${pumpSwapPool ? `_pump${shortPump}` : ''}_delay${processDelay}.toml`;
         const configPath = path.join(configDir, tomlFileName);
