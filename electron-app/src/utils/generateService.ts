@@ -27,11 +27,11 @@ interface TokenConfig {
     pump_swap_pairs: string[];
 
     [key: string]: any;
-}
-
-/**
+}/**
  * Интерфейс для пользовательских настроек
  */
+
+
 interface UserSettings {
     proxy_server_ip: string;
     proxy_server_port: string;
@@ -299,10 +299,10 @@ export async function generateSimpleMevConfig(
                 uuid: "",
                 ip_addresses: [userSetting.primary_ip],
                 tip_config: {
-                    strategy: "ExponentialRandom",
-                    from: 20_000,
-                    to: 50_000_000,
-                    count: 3
+                    strategy: "Random",
+                    from: jito_lower_bound,
+                    to: jito_upper_bound,
+                    count: 1
                 },
                 use_separate_tip_account: true,
                 min_profit: 10000,
