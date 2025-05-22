@@ -1791,7 +1791,7 @@ class TelegramBotService {
                         targetPool = mevProc.config.dammMeteoraPool
                     }
 
-                    message += `${i}. <code>/mev_add_signal ${mevProc.config.tokenAddress} ${JSON.stringify(mevProc.config.meteoraPools)} ${targetPool} ${mevProc.config.type}</code>\n`;
+                    message += `${i}. <code>/mev_add_signal ${mevProc.config.tokenAddress} ${mevProc.config.meteoraPool} ${targetPool} ${mevProc.config.type}</code>\n`;
                     message += `<b>============================================</b>\n`;
                     i++;
                 }
