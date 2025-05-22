@@ -17,8 +17,10 @@ interface AppSettings {
     lookupOwner?: string;
     // mev
     migration_wallet?: string;
+    jito_strategy?: string;
     jito_lower_bound?: string;
     jito_upper_bound?: string;
+    tx_count?: string;
     compute_unit_limit?: string;
 
 
@@ -159,17 +161,19 @@ export default function Settings() {
 
             </Box>
 
+            {/* Jito config */}
             <Box sx={{ mb: 4 }}>
                 <Typography variant="h6" gutterBottom>
-                    Migrate token settings
+                    Jito config
 
                     <TextField
-                        label="Migration wallet"
+                        label="Strategy"
                         fullWidth
-                        value={settings.migration_wallet || ""}
-                        onChange={handleChange('migration_wallet')}
+                        value={settings.jito_strategy || ""}
+                        onChange={handleChange('jito_strategy')}
                         margin="normal"
                     />
+
                     <TextField
                         label="Jito lower bound"
                         fullWidth
@@ -184,6 +188,32 @@ export default function Settings() {
                         onChange={handleChange('jito_upper_bound')}
                         margin="normal"
                     />
+
+                    <TextField
+                        label="transaction count"
+                        fullWidth
+                        value={settings.tx_count || ""}
+                        onChange={handleChange('tx_count')}
+                        margin="normal"
+                    />
+
+                </Typography>
+
+
+            </Box>
+
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                    Migrate token settings
+
+                    <TextField
+                        label="Migration wallet"
+                        fullWidth
+                        value={settings.migration_wallet || ""}
+                        onChange={handleChange('migration_wallet')}
+                        margin="normal"
+                    />
+
                     <TextField
                         label="Compute units"
                         fullWidth
