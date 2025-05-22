@@ -1425,7 +1425,8 @@ export class MevLoadBalancer {
             // Проверяем наличие MEV сигнала в логе
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Проверяем наличие MEV сигнала в логе: ${message.substring(0, 100)}...`);
             const signalData: Signal | null = this.parseLogForMevSignal(message);
-            if (signalData) {
+            console.log(`signal data: ${JSON.stringify(signalData, null, 2)}`);
+            if (signalData !== null) {
                 logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Обнаружен MEV сигнал в логе процесса ${processId}, данные: ${JSON.stringify(signalData)}`);
 
                 const {tokenAddress, meteoraPools, pumpSwapPool, raydiumPool, type, lookupTables} = signalData;
