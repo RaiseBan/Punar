@@ -305,8 +305,8 @@ export async function generateSimpleMevConfig(
                 ip_addresses: [userSetting.primary_ip],
                 tip_config: {
                     strategy: updatedSettings.jito_strategy,
-                    from: updatedSettings.jito_lower_bound,
-                    to: updatedSettings.jito_upper_bound,
+                    from: Number(updatedSettings.jito_lower_bound),
+                    to: Number(updatedSettings.jito_upper_bound),
                     count: Number(updatedSettings.tx_count)
                 },
                 use_separate_tip_account: true,
