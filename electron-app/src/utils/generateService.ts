@@ -4,6 +4,7 @@ import {getFilteredPairs, sortPairsByParameter, updateIfNotExistsAndGet} from ".
 import TOML from '@iarna/toml';
 import {PRIMARY_IP, METEORA_OWNER} from "./constants";
 import logger from "../services/loggerService";
+import {getSettings} from "../utils/fsHelper";
 
 /**
  * Интерфейс для конфигурации задачи
@@ -234,8 +235,12 @@ export async function generateSimpleMevConfig(
 
         // Параметры Jito
         const useJito = config.useJito !== undefined ? config.useJito : true;
-        const jito_lower_bound = Number(userSetting.jito_lower_bound) || 100000;
-        const jito_upper_bound = Number(userSetting.jito_upper_bound) || 200000;
+
+        const updatedSettings = getSettings();
+
+
+        const jito_lower_bound = Number(updatedSettings.jito_lower_bound) || 100000;
+        const jito_upper_bound = Number(updatedSettings.jito_upper_bound) || 200000;
 
         // Формируем массив пулов
 
@@ -299,10 +304,10 @@ export async function generateSimpleMevConfig(
                 uuid: "",
                 ip_addresses: [userSetting.primary_ip],
                 tip_config: {
-                    strategy: "Random",
-                    from: jito_lower_bound,
-                    to: jito_upper_bound,
-                    count: 1
+                    strategy: updatedSettings.jito_strategy,
+                    from: updatedSettings.jito_lower_bound,
+                    to: updatedSettings.jito_upper_bound,
+                    count: Number(updatedSettings.tx_count)
                 },
                 use_separate_tip_account: true,
                 min_profit: 10000,
@@ -310,7 +315,7 @@ export async function generateSimpleMevConfig(
 
             },
             kamino_flashloan: {
-                enabled: true
+                enabled: false
             },
             bot: {
                 compute_unit_limit: Number(userSetting.compute_unit_limit) || 650000,
