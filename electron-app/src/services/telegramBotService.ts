@@ -1791,7 +1791,7 @@ class TelegramBotService {
                         targetPool = mevProc.config.dammMeteoraPool
                     }
 
-                    message += `${i}. <code>/mev_add_signal ${mevProc.config.tokenAddress} ${JSON.stringify(mevProc.config.meteoraPools)} ${targetPool} ${mevProc.config.type}</code>\n`;
+                    message += `${i}. <code>/mev_add_signal ${mevProc.config.tokenAddress} ${JSON.stringify(mevProc.config.meteoraPools)} ${targetPool} ${mevProc.config.type} ${JSON.stringify(mevProc.config.lookupTables)}</code>\n`;
                     message += `<b>============================================</b>\n`;
                     i++;
                 }
@@ -1914,81 +1914,76 @@ class TelegramBotService {
         });
 
         this.registerCommand('mev_add_signal', async (chatId, args) => {
-            if (!args || args.length < 3) {
-                this.sendMessage(chatId, '❌ Неверный формат команды. Использование: \n/mev_add_signal <token_address> <["meteoraPool1", "meteoraPool2"]> <pump/ray pool> <type>\ntypes: [clmm | cpmm | v4 | pumpswap]');
+            if (!args || args.length < 4) {
+                this.sendMessage(chatId, '❌ Неверный формат команды. Использование: \n/mev_add_signal <token_address> <["meteoraPool1", "meteoraPool2"]> <pump/ray pool> <type> <["lookup1", "lookup2"]>\ntypes: [clmm | cpmm | v4 | pumpswap | meteora]');
                 return;
             }
 
             const tokenAddress = args[0]?.trim();
             const meteoraPoolsStr = args[1]?.trim();
             const targetPool = args[2]?.trim();
-            const poolType = args.length > 3 ? args[3]?.toLowerCase() : null;
+            const poolType = args[3]?.toLowerCase();
+            const lookupTablesStr = args.length > 4 ? args[4]?.trim() : '[]';
 
             if (!tokenAddress || !meteoraPoolsStr || !targetPool || !poolType) {
                 this.sendMessage(chatId, '❌ Не хватает обязательных аргументов');
                 return;
             }
 
-            // Проверка типа пула, если указан
-            if (poolType) {
-                const validTypes = ["clmm", "cpmm", "v4", "pumpswap", "meteora"];
-                if (!validTypes.includes(poolType)) {
-                    this.sendMessage(chatId, `❌ Неверный тип пула. Допустимые значения: ${validTypes.join(', ')}`);
-                    return;
-                }
+            // Проверка типа пула
+            const validTypes = ["clmm", "cpmm", "v4", "pumpswap", "meteora"];
+            if (!validTypes.includes(poolType)) {
+                this.sendMessage(chatId, `❌ Неверный тип пула. Допустимые значения: ${validTypes.join(', ')}`);
+                return;
             }
 
             try {
-                // Парсим массив Meteora pools
-                const parseMeteoraPools = (str: string): string[] => {
+                // Функция для парсинга строки в массив
+                const parseArray = (str: string): string[] => {
                     try {
                         const cleanStr = str.replace(/^\[|\]$/g, '').replace(/"/g, '');
                         return cleanStr.split(',').map(p => p.trim()).filter(p => p);
                     } catch (e) {
-                        throw new Error(`Неверный формат списка Meteora пулов. Используйте: ["pool1","pool2"]`);
+                        throw new Error(`Неверный формат массива. Используйте: ["item1","item2"]`);
                     }
                 };
 
-                const meteoraPools = parseMeteoraPools(meteoraPoolsStr);
+                const meteoraPools = parseArray(meteoraPoolsStr);
+                const lookupTables = parseArray(lookupTablesStr);
+
                 if (meteoraPools.length === 0) {
                     throw new Error("Список Meteora пулов не может быть пустым");
                 }
 
                 logger.info(
                     logger.LOG_MODULES.TELEGRAM_SERVICE,
-                    `[TG Bot] Добавление MEV сигнала: ${tokenAddress}, Meteora pools: ${meteoraPools.join(', ')}, Target pool: ${targetPool}${poolType ? ', тип: ' + poolType : ''}`
+                    `[TG Bot] Добавление MEV сигнала: ${tokenAddress}, Meteora pools: ${meteoraPools.join(', ')}, Target pool: ${targetPool}, тип: ${poolType}, lookup tables: ${lookupTables.join(', ')}`
                 );
 
-                // Создаем сигнал с учетом типа пула
-                const results = []
-                for (const meteoraPool of meteoraPools) {
-                    const signal: Signal = {
-                        tokenAddress: tokenAddress,
-                        meteoraPools: [meteoraPool], // Для обратной совместимости оставляем первый пул
-                        timestamp: Date.now(),
-                        type: poolType || '' // Добавляем тип пула
-                    };
+                // Создаем сигнал
+                const signal: Signal = {
+                    tokenAddress: tokenAddress,
+                    meteoraPools: meteoraPools, // Записываем все пулы сразу
+                    timestamp: Date.now(),
+                    type: poolType,
+                    lookupTables: lookupTables.length > 0 ? lookupTables : undefined
+                };
 
-                    // Определяем, куда сохранить адрес пула на основе типа
-                    if (poolType === 'pumpswap') {
-                        signal.pumpSwapPool = targetPool;
-                    } else if (poolType === "meteora") {
-                        signal.meteoraDAMMPool = targetPool;
-                    } else {
-                        signal.raydiumPool = targetPool;
-                    }
-
-                    const result = mevLoadBalancer.handleExternalMevSignal(signal, 'telegram_' + chatId);
-                    results.push(result);
+                // Определяем, куда сохранить адрес пула на основе типа
+                if (poolType === 'pumpswap') {
+                    signal.pumpSwapPool = targetPool;
+                } else if (poolType === "meteora") {
+                    signal.meteoraDAMMPool = targetPool;
+                } else {
+                    signal.raydiumPool = targetPool;
                 }
 
+                const result = mevLoadBalancer.handleExternalMevSignal(signal, 'telegram_' + chatId);
 
-                const isValid = results.every(item => item.success === true);
-
-                if (isValid) {
-                    this.sendMessage(chatId, `✅ MEV сигналы успешно добавлеы в буфер ${results.length}`);
+                if (result.success) {
+                    this.sendMessage(chatId, `✅ MEV сигнал успешно добавлен в буфер`);
                 } else {
-                    this.sendMessage(chatId, `❌ Ошибка добавления MEV сигнала`);
+                    this.sendMessage(chatId, `❌ Ошибка добавления MEV сигнала: ${result.message || 'неизвестная ошибка'}`);
                 }
             } catch (error) {
                 logger.error(logger.LOG_MODULES.TELEGRAM_SERVICE, '[TG Bot] Ошибка при добавлении MEV сигнала:', error);
