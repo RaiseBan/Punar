@@ -1707,7 +1707,7 @@ class TelegramBotService {
 
                     message += `<b>${i + 1}. ID:</b> <code>${signalId}</code>\n`;
                     message += `<b>${i + 1}. Token:</b> <code>${firstProcess.tokenAddress}</code>\n`;
-                    message += `<b>${i + 1}. Meteora pools:</b> <code>${firstProcess.meteoraPools?.join(', ') || 'N/A'}</code>\n`;
+                    message += `<b>${i + 1}. Meteora pool:</b> <code>${firstProcess.meteoraPool || 'N/A'}</code>\n`;
                     message += `<b>${i + 1}. Pumpswap pool:</b> <code>${firstProcess.pumpSwapPool || 'N/A'}</code>\n`;
                     message += `<b>${i + 1}. Raydium pool:</b> <code>${firstProcess.config?.raydiumPool || 'N/A'}</code>\n`;
                     message += `<b>${i + 1}. Raydium type:</b> <code>${firstProcess.config?.type || 'N/A'}</code>\n`;
