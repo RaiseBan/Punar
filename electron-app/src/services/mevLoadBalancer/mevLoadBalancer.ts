@@ -2002,6 +2002,7 @@ export class MevLoadBalancer {
             const replacedSignals: string[] = [];
             const newSignalIds: string[] = [];
             const processedSignalKeys = new Set<string>();
+            const signalInstances = new Map<string, string[]>(); // Для отслеживания инстансов по сигналам
 
             for (const signal of sortedSignals) {
                 try {
@@ -2128,6 +2129,7 @@ export class MevLoadBalancer {
 
                     if (instanceIds.length > 0) {
                         newProcesses.push(...instanceIds);
+                        signalInstances.set(signalId, instanceIds); // Сохраняем для отчета
 
                         if (!existingSignalId) {
                             newSignalIds.push(signalId);
@@ -2161,40 +2163,65 @@ export class MevLoadBalancer {
             this.stats.totalMevActions += validSignals.length;
             this.stats.successfulSignals += (validSignals.length - this.stats.failedSignals);
 
-            // Шаг 5: Отправляем уведомление в Telegram
+            // Шаг 5: Вычисляем реальную производительность запущенных процессов
+            const actualProcesses = newProcesses
+                .map(id => this.mevProcesses.get(id))
+                .filter(p => p !== undefined);
+
+            const actualDelays = actualProcesses.map(p => p!.config!.process_delay || 0);
+            const actualPerformance = actualDelays.reduce(
+                (total, delay) => total + (this.DELAY_PERFORMANCE[delay] || 0), 0
+            );
+
+            const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
+            const actualPercent = (actualPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
+
+            // Шаг 6: Отправляем уведомление в Telegram (оригинальный формат)
             if (this.settings.notifyTelegram && newProcesses.length > 0) {
-                const actualProcesses = newProcesses
-                    .map(id => this.mevProcesses.get(id))
-                    .filter(p => p !== undefined);
-
-                const actualDelays = actualProcesses.map(p => p!.config!.process_delay || 0);
-                const actualPerformance = actualDelays.reduce(
-                    (total, delay) => total + (this.DELAY_PERFORMANCE[delay] || 0), 0
-                );
-
-                const TOTAL_REQUESTS_PER_SECOND = Number(this.userSettings?.requests_per_second) || 2000;
-                const actualPercent = (actualPerformance / TOTAL_REQUESTS_PER_SECOND * 100).toFixed(1);
-
+                // Информация о распределении задержек
                 const delayBreakdown = this.countDelays(actualDelays);
                 const delayLines = Object.entries(delayBreakdown)
                     .map(([delay, count]) => `- ${count} процессов с задержкой ${delay}мс (${this.DELAY_PERFORMANCE[delay]} req/s)`)
                     .join('\n');
 
-                // Формируем информацию о сигналах с количеством meteora пулов
-                const signalInfoLines = [];
-                if (newSignalIds.length > 0) {
-                    signalInfoLines.push(`📈 Новые сигналы: ${newSignalIds.length}`);
-                }
-                if (replacedSignals.length > 0) {
-                    signalInfoLines.push(`🔄 Замененные сигналы: ${replacedSignals.length}`);
-                }
+                // Информация о сигналах и инстансах
+                const signalLines = Array.from(signalInstances.entries())
+                    .map(([signalId, instanceIds]) => {
+                        // Получаем процесс для информации о токене
+                        const processInfo = instanceIds.length > 0
+                            ? this.mevProcesses.get(instanceIds[0])
+                            : null;
+
+                        if (!processInfo) return null;
+
+                        // Собираем информацию о задержках для этого сигнала
+                        const instanceDelays = instanceIds
+                            .map(id => this.mevProcesses.get(id)?.config?.process_delay || 0)
+                            .reduce((acc, delay) => {
+                                acc[delay] = (acc[delay] || 0) + 1;
+                                return acc;
+                            }, {});
+
+                        const delayInfo = Object.entries(instanceDelays)
+                            .map(([delay, count]) => `${count}x${delay}мс`)
+                            .join(', ');
+
+                        return `- ${processInfo.tokenAddress.substring(0, 8)}... (${instanceIds.length} инстансов: ${delayInfo})`;
+                    })
+                    .filter(line => line !== null)
+                    .join('\n');
+
+                // Получаем все активные сигналы для подсчета общего количества
+                const allActiveSignalIds = this.getActiveSignalIds();
 
                 const message = `🚀 Обработано ${validSignals.length} MEV сигналов\n\n` +
-                    `✅ Результаты:\n` +
-                    `${signalInfoLines.join('\n')}\n` +
+                    `✅ Результаты перераспределения ресурсов:\n` +
+                    `- Всего активных сигналов: ${allActiveSignalIds.length}\n` +
+                    `- Средн. инстансов на сигнал: ${Math.ceil(newProcesses.length / Math.max(signalInstances.size, 1))}\n` +
                     `- Всего запущено процессов: ${newProcesses.length}\n` +
                     `- Суммарная производительность: ${actualPerformance} из ${TOTAL_REQUESTS_PER_SECOND} req/s (${actualPercent}%)\n\n` +
-                    `📊 Распределение задержек:\n${delayLines}`;
+                    `📊 Распределение задержек:\n${delayLines}\n\n` +
+                    `🔄 Активные сигналы:\n${signalLines}`;
 
                 telegramBotService.sendSystemNotification(message);
             }
@@ -2209,13 +2236,11 @@ export class MevLoadBalancer {
                 newSignals: newSignalIds.length,
                 replacedSignals: replacedSignals.length,
                 totalProcesses: newProcesses.length,
-                delays: this.countDelays(newProcesses.map(id => this.mevProcesses.get(id)?.config?.process_delay || 0)),
+                delays: this.countDelays(actualDelays),
                 performance: {
-                    actual: newProcesses.reduce((total, id) => {
-                        const delay = this.mevProcesses.get(id)?.config?.process_delay || 0;
-                        return total + (this.DELAY_PERFORMANCE[delay] || 0);
-                    }, 0),
-                    total: Number(this.userSettings?.requests_per_second) || 2000
+                    actual: actualPerformance,
+                    total: TOTAL_REQUESTS_PER_SECOND,
+                    percent: actualPercent
                 }
             };
         } catch (error) {
