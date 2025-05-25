@@ -314,8 +314,8 @@ export async function generateSimpleMevConfig(
                 use_min_profit: true,
 
             },
-            kamino_flashloan: {
-                enabled: false
+            flashloan: {
+                enabled: true
             },
             bot: {
                 compute_unit_limit: Number(userSetting.compute_unit_limit) || 650000,
