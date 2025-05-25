@@ -1269,6 +1269,7 @@ export class MevLoadBalancer {
      * @param {string} level - Уровень логирования (info, error, warning)
      */
     writeProcessLog(processId, message, level = 'info') {
+        return;
         try {
             // Записываем в файл только ошибки (сообщения, начинающиеся с "Error")
             if (level !== 'error' && !message.trim().startsWith('Error')) {
