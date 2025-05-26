@@ -292,12 +292,7 @@ export async function generateSimpleMevConfig(
             jito: {
                 enabled: useJito,
                 block_engine_urls: [
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoNY/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoTOKIO/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoSLC/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoAMSTERDAM/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoFRANKFURT/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoLONDON/api/v1`
+                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/sendTx/api/v1`
                 ],
                 uuid: "",
                 ip_addresses: [userSetting.primary_ip],
