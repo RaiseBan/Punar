@@ -367,12 +367,12 @@ async function spawnProcess(taskConfig, userSettings) {
             console.log(`✅ SPAWN: Python процесс запущен, PID: ${child.pid}`);
         } else if (moduleDir === "new-token-release") {
             const exePath = path.join(userSettings.scriptDirectory, moduleDir, "new-token-release.exe");
-            child = spawn(exePath, ["--port", userSettings.token_release_port], {
-                stdio: "pipe",
-                shell: true,
+            child = spawn("npx", ["tsx", path.join(userSettings.scriptDirectory, moduleDir, "src", fileToExecute)], {
+                stdio: "pipe", // или 'inherit', если нужно выводить логи в терминал
+                shell: true, // Используем shell для корректного выполнения
                 detached: false,
-                cwd: userSettings.scriptDirectory,
-                env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath }
+                cwd: userSettings.scriptDirectory, // Устанавливаем рабочую директорию для процесса
+                env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath } // Передаем CONFIG_PATH в переменные окружения
             });
 
         } else if (moduleDir === "mev_subtask") {

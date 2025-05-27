@@ -202,7 +202,16 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
                 pump_pool_list: pumpPool,
                 meteora_dlmm_pool_list: [meteoraPool],
                 lookup_table_accounts: [],
-                process_delay: processDelay
+                process_delay: processDelay,
+                // This is the Raydium V4 AMM Pools
+                raydium_pool_list: [],
+
+                // This is the Raydium CPMM Pools
+                raydium_cp_pool_list: [],
+
+                // This is the Raydium CLMM(Centralized Liquidity) Pools
+                raydium_clmm_pool_list: [],
+                meteora_damm_pool_list: [],
             }
         ];
 
@@ -229,12 +238,7 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
             jito: {
                 enabled: useJito,
                 block_engine_urls: [
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoNY/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoTOKIO/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoSLC/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoAMSTERDAM/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoFRANKFURT/api/v1`,
-                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/jitoLONDON/api/v1`
+                    `http://${userSetting.proxy_server_ip}:${userSetting.proxy_server_port}/sendTx/api/v1`
                 ],
                 uuid: "",
                 ip_addresses: [userSetting.primary_ip],
@@ -247,12 +251,13 @@ async function generateSimpleMevConfig(botDir, config, tokenAddress, meteoraPool
                 use_separate_tip_account: true,
                 min_profit: 10000,
                 use_min_profit: true,
+
             },
-            kamino_flashloan: {
+            flashloan: {
                 enabled: true
             },
             bot: {
-                compute_unit_limit: Number(userSetting.compute_unit_limit) || 650000,
+                compute_unit_limit: Number(userSetting.compute_unit_limit) || 420000,
                 merge_mints: false
             },
             wallet: {}
