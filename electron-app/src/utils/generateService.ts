@@ -141,7 +141,7 @@ export async function generateMevConfig(
                 count: 1
             }
         },
-        kamino_flashloan: {
+        flashloan: {
             enabled: true
         },
         bot: {
