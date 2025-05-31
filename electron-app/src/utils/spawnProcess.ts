@@ -1,11 +1,11 @@
-import { spawn, execSync } from "child_process";
+import {spawn, execSync} from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { app, BrowserWindow } from "electron";
+import {app, BrowserWindow} from "electron";
 import axios from "axios";
-import { updateConfigCollectionId } from "./updateService";
-import { generateMevConfig, generateSimpleMevConfig } from "./generateService";
-import { convertWindowsPathToWSL } from "./fsHelper";
+import {updateConfigCollectionId} from "./updateService";
+import {generateMevConfig, generateSimpleMevConfig} from "./generateService";
+import {convertWindowsPathToWSL} from "./fsHelper";
 
 // Типы и интерфейсы
 interface TaskConfig {
@@ -26,6 +26,7 @@ interface TaskConfig {
     poolAddress?: string | string[];
     meteoraPools?: string[];
     pumpSwapPool?: string;
+
     [key: string]: any;
 }
 
@@ -64,42 +65,42 @@ const mevSubtaskProcesses = new Map<string | number, ProcessInfo>();
 
 // Объект для отслеживания идентификаторов процессов WSL
 const wslProcessTracking = {
-        pidMap: new Map<string | number, number>(),  // Map taskId -> wsl PID
+    pidMap: new Map<string | number, number>(),  // Map taskId -> wsl PID
 
-    registerProcess: function(taskId: string | number, childProcess: any): void {
-    // При создании процесса сохраняем его PID
-    if (childProcess && childProcess.pid) {
-        console.log(`WSL КОНТРОЛЬ: Регистрируем процесс для задачи ${taskId}, PID: ${childProcess.pid}`);
-        this.pidMap.set(taskId, childProcess.pid);
+    registerProcess: function (taskId: string | number, childProcess: any): void {
+        // При создании процесса сохраняем его PID
+        if (childProcess && childProcess.pid) {
+            console.log(`WSL КОНТРОЛЬ: Регистрируем процесс для задачи ${taskId}, PID: ${childProcess.pid}`);
+            this.pidMap.set(taskId, childProcess.pid);
+        }
+    },
+
+    removeProcess: function (taskId: string | number): boolean {
+        // Удаляем процесс из отслеживания
+        if (this.pidMap.has(taskId)) {
+            console.log(`WSL КОНТРОЛЬ: Удаляем процесс из отслеживания для задачи ${taskId}`);
+            this.pidMap.delete(taskId);
+            return true;
+        }
+        return false;
+    },
+
+    getProcessPid: function (taskId: string | number): number | null {
+        return this.pidMap.get(taskId) || null;
+    },
+
+    getAllProcesses: function (): Array<{ taskId: string | number, pid: number }> {
+        return Array.from(this.pidMap.entries()).map(([taskId, pid]) => ({taskId, pid}));
+    },
+
+    updateProcess: function (taskId: string | number, newPid: number): boolean {
+        if (this.pidMap.has(taskId)) {
+            console.log(`WSL КОНТРОЛЬ: Обновляем процесс для задачи ${taskId}, новый PID: ${newPid}`);
+            this.pidMap.set(taskId, newPid);
+            return true;
+        }
+        return false;
     }
-},
-
-removeProcess: function(taskId: string | number): boolean {
-    // Удаляем процесс из отслеживания
-    if (this.pidMap.has(taskId)) {
-        console.log(`WSL КОНТРОЛЬ: Удаляем процесс из отслеживания для задачи ${taskId}`);
-        this.pidMap.delete(taskId);
-        return true;
-    }
-    return false;
-},
-
-getProcessPid: function(taskId: string | number): number | null {
-    return this.pidMap.get(taskId) || null;
-},
-
-getAllProcesses: function(): Array<{taskId: string | number, pid: number}> {
-    return Array.from(this.pidMap.entries()).map(([taskId, pid]) => ({ taskId, pid }));
-},
-
-updateProcess: function(taskId: string | number, newPid: number): boolean {
-    if (this.pidMap.has(taskId)) {
-        console.log(`WSL КОНТРОЛЬ: Обновляем процесс для задачи ${taskId}, новый PID: ${newPid}`);
-        this.pidMap.set(taskId, newPid);
-        return true;
-    }
-    return false;
-}
 };
 
 // Улучшаем функцию для принудительного завершения процесса в Windows
@@ -134,7 +135,7 @@ async function forceKillWindowsProcess(pid: number): Promise<boolean> {
         }
 
         // Если tree-kill не сработал, используем taskkill
-        const { exec } = require('child_process');
+        const {exec} = require('child_process');
         console.log(`🔴 KILL: Попытка taskkill /F /T для PID ${pid}`);
 
         try {
@@ -232,7 +233,7 @@ async function findBestMeteoraPool(tokenAddress: string, currentPairAddress: str
 function stopMevProcess(taskId: string | number): Promise<KillProcessResult> {
     if (!taskId) {
         console.warn(`МОНИТОРИНГ: Вызов stopMevProcess без taskId!`);
-        return Promise.resolve({ success: false, error: 'Не указан ID процесса' });
+        return Promise.resolve({success: false, error: 'Не указан ID процесса'});
     }
 
     return new Promise(async (resolve) => {
@@ -246,12 +247,12 @@ function stopMevProcess(taskId: string | number): Promise<KillProcessResult> {
                     console.log(`МОНИТОРИНГ: Результат остановки процесса ${taskId}: ${killResult ? 'успешно' : 'не удалось'}`);
 
                     if (!killResult) {
-                        resolve({ success: false, error: `Не удалось завершить процесс с PID ${pid}` });
+                        resolve({success: false, error: `Не удалось завершить процесс с PID ${pid}`});
                         return;
                     }
                 } catch (err) {
                     console.error(`МОНИТОРИНГ: Ошибка при остановке процесса ${taskId}:`, err);
-                    resolve({ success: false, error: (err as Error).message || 'Ошибка при завершении процесса' });
+                    resolve({success: false, error: (err as Error).message || 'Ошибка при завершении процесса'});
                     return;
                 }
             } else {
@@ -275,14 +276,14 @@ function stopMevProcess(taskId: string | number): Promise<KillProcessResult> {
                 mevSubtaskProcesses.delete(taskId);
 
                 console.log(`МОНИТОРИНГ: Мониторинг для задачи ${taskId} остановлен полностью`);
-                resolve({ success: true, message: `Процесс ${taskId} успешно остановлен` });
+                resolve({success: true, message: `Процесс ${taskId} успешно остановлен`});
             } else {
                 console.log(`МОНИТОРИНГ: Процесс ${taskId} не найден в карте мониторинга, но останавливаем по PID`);
-                resolve({ success: true, message: `Процесс ${taskId} остановлен по PID` });
+                resolve({success: true, message: `Процесс ${taskId} остановлен по PID`});
             }
         } catch (error) {
             console.error(`МОНИТОРИНГ: Общая ошибка при остановке процесса ${taskId}:`, error);
-            resolve({ success: false, error: (error as Error).message || 'Неизвестная ошибка при остановке процесса' });
+            resolve({success: false, error: (error as Error).message || 'Неизвестная ошибка при остановке процесса'});
         }
     });
 }
@@ -329,7 +330,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
         // Создаем папку, если её нет
         if (!fs.existsSync(configDir)) {
             console.log(`📂 SPAWN: Создаем директорию конфигов: ${configDir}`);
-            fs.mkdirSync(configDir, { recursive: true });
+            fs.mkdirSync(configDir, {recursive: true});
         }
 
         // Формируем имя файла из module_name и task_name
@@ -433,7 +434,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                 shell: true, // Используем shell для корректного выполнения
                 detached: false,
                 cwd: userSettings.scriptDirectory, // Устанавливаем рабочую директорию для процесса
-                env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath } // Передаем CONFIG_PATH в переменные окружения
+                env: {...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath} // Передаем CONFIG_PATH в переменные окружения
             });
 
 
@@ -462,7 +463,6 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                         : [updatedTaskConfig.poolAddress as string]),
                     userSettings,
                     updatedTaskConfig.pumpSwapPool || undefined,
-
                 );
             } else {
                 // Иначе используем старый способ через rowData
@@ -499,11 +499,77 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
             // console.log(`⚡ SPAWN: Запуск WSL процесса: wsl ${program} ${configFilePathWSL}`);
             // Получаем домашнюю директорию пользователя в WSL
 
+            // Подробная диагностика окружения
+            const diagnosticCommand = `
+echo "=== ДИАГНОСТИКА ОКРУЖЕНИЯ ==="
+echo "Время: $(date)"
+echo "Пользователь: $(whoami)"
+echo "PWD: $(pwd)"
+echo "HOME: $HOME"
+echo "PATH: $PATH"
+echo ""
+
+echo "=== СИСТЕМНЫЕ ЛИМИТЫ ==="
+echo "ulimit -n (файлы): $(ulimit -n)"
+echo "ulimit -u (процессы): $(ulimit -u)"
+echo "ulimit -v (память): $(ulimit -v)"
+echo "ulimit -a (все лимиты):"
+ulimit -a
+echo ""
+
+echo "=== СЕТЕВЫЕ НАСТРОЙКИ ==="
+echo "TCP настройки:"
+sysctl net.core.somaxconn 2>/dev/null || echo "somaxconn: недоступно"
+sysctl net.ipv4.ip_local_port_range 2>/dev/null || echo "port_range: недоступно"
+sysctl net.ipv4.tcp_tw_reuse 2>/dev/null || echo "tcp_tw_reuse: недоступно"
+echo ""
+
+echo "=== КОНФИГУРАЦИЯ ==="
+echo "Config файл: ${configFilePathWSL}"
+echo "Существует ли конфиг: $(test -f "${configFilePathWSL}" && echo "ДА" || echo "НЕТ")"
+if [ -f "${configFilePathWSL}" ]; then
+    echo "Размер конфига: $(stat -c%s "${configFilePathWSL}") байт"
+    echo "Содержимое конфига:"
+    cat "${configFilePathWSL}"
+else
+    echo "❌ КОНФИГ НЕ НАЙДЕН!"
+fi
+echo ""
+
+echo "=== ПРОГРАММА ==="
+echo "Программа: ${program}"
+echo "Путь к программе: $(which ${program} 2>/dev/null || echo "не найдено в PATH")"
+echo "Тип файла: $(file $(which ${program}) 2>/dev/null || echo "недоступно")"
+echo "Версия (если есть): $(${program} --version 2>/dev/null || echo "недоступно")"
+echo ""
+
+echo "=== ПРОЦЕССЫ ==="
+echo "Активные процессы sbm-onchain:"
+ps aux | grep sbm-onchain | grep -v grep || echo "нет активных процессов"
+echo ""
+
+echo "=== СЕТЕВЫЕ СОЕДИНЕНИЯ ==="
+echo "Активные соединения к порту 8080:"
+netstat -an | grep :8080 | wc -l || echo "недоступно"
+echo ""
+
+echo "=== ЗАПУСК ПРОГРАММЫ ==="
+echo "Команда: ${program} run \"${configFilePathWSL}\""
+echo "Начало выполнения: $(date)"
+echo "==============================================="
+
+# Устанавливаем лимиты перед запуском
+ulimit -n 65535
+
+# Запускаем программу
+${program} run "${configFilePathWSL}"
+`;
+
             child = spawn('wsl.exe', [
                 '-e',
                 'bash',
                 '-c',
-                `ulimit -n 65535 && ${program} run "${configFilePathWSL}"`
+                diagnosticCommand
             ], {
                 stdio: 'pipe',
                 shell: false,
@@ -660,7 +726,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                                     path.join(pythonScriptPath, "tokens"),
                                     updatedTaskConfig,
                                     betterPairAddress // Передаем новый пул
-                            );
+                                );
 
                                 if (!newConfigFilePath) {
                                     console.error(`МОНИТОРИНГ: Не удалось создать новый конфиг с обновленным пулом Meteora для задачи ${taskId}`);
@@ -765,7 +831,7 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
                 shell: true, // Используем shell для корректного выполнения
                 detached: false,
                 cwd: userSettings.scriptDirectory, // Устанавливаем рабочую директорию для процесса
-                env: { ...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath } // Передаем CONFIG_PATH в переменные окружения
+                env: {...process.env, NODE_ENV: process.env.NODE_ENV, CONFIG_PATH: configPath} // Передаем CONFIG_PATH в переменные окружения
             });
         }
 
