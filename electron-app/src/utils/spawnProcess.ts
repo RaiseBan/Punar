@@ -534,36 +534,6 @@ ${program} run "${configFilePathWSL}"
                 cwd: userSettings.mevBotDirectory,
             });
 
-// Добавляем детальное логирование
-            child.stdout.on('data', (data) => {
-                const output = data.toString();
-                console.log('[STDOUT]:', output);
-
-                // Сохраняем диагностику в файл
-                fs.appendFileSync('spawn_diagnostic.log', `[STDOUT ${new Date().toISOString()}]: ${output}\n`);
-            });
-
-            child.stderr.on('data', (data) => {
-                const output = data.toString();
-                console.error('[STDERR]:', output);
-
-                // Сохраняем ошибки в файл
-                fs.appendFileSync('spawn_diagnostic.log', `[STDERR ${new Date().toISOString()}]: ${output}\n`);
-            });
-
-            child.on('close', (code) => {
-                console.log(`[PROCESS] Завершен с кодом: ${code}`);
-                fs.appendFileSync('spawn_diagnostic.log', `[PROCESS ${new Date().toISOString()}]: Завершен с кодом ${code}\n`);
-            });
-
-            child.on('error', (error) => {
-                console.error('[ERROR]:', error);
-                fs.appendFileSync('spawn_diagnostic.log', `[ERROR ${new Date().toISOString()}]: ${error}\n`);
-            });
-
-
-// Очищаем лог файл при запуске
-            fs.writeFileSync('spawn_diagnostic.log', `=== НОВЫЙ ЗАПУСК ${new Date().toISOString()} ===\n`);
             // console.log(`✅ SPAWN: WSL процесс запущен, PID: ${child.pid}`);
 
             // Проверяем, включен ли режим мониторинга
