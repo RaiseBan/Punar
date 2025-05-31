@@ -503,67 +503,22 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
             // Подробная диагностика окружения
             // Подробная диагностика окружения
             const diagnosticCommand = `
-echo "=== ДИАГНОСТИКА ОКРУЖЕНИЯ ==="
-echo "Время: $(date)"
-echo "Пользователь: $(whoami)"
-echo "PWD: $(pwd)"
-echo "HOME: $HOME"
-echo "PATH: $PATH"
-echo ""
+# Принудительно читаем .bashrc
+source ~/.bashrc
 
-echo "=== СИСТЕМНЫЕ ЛИМИТЫ ==="
-echo "ulimit -n (файлы): $(ulimit -n)"
-echo "ulimit -u (процессы): $(ulimit -u)"
-echo "ulimit -v (память): $(ulimit -v)"
-echo "ulimit -a (все лимиты):"
-ulimit -a
-echo ""
+echo "=== ПРОВЕРКА ЛИМИТОВ ==="
+echo "ulimit -n после source: $(ulimit -n)"
 
-echo "=== СЕТЕВЫЕ НАСТРОЙКИ ==="
-echo "TCP настройки:"
-sysctl net.core.somaxconn 2>/dev/null || echo "somaxconn: недоступно"
-sysctl net.ipv4.ip_local_port_range 2>/dev/null || echo "port_range: недоступно"
-sysctl net.ipv4.tcp_tw_reuse 2>/dev/null || echo "tcp_tw_reuse: недоступно"
-echo ""
-
-echo "=== КОНФИГУРАЦИЯ ==="
-echo "Config файл: ${configFilePathWSL}"
-echo "Существует ли конфиг: $(test -f "${configFilePathWSL}" && echo "ДА" || echo "НЕТ")"
-if [ -f "${configFilePathWSL}" ]; then
-    echo "Размер конфига: $(stat -c%s "${configFilePathWSL}") байт"
-    echo "Содержимое конфига:"
-    cat "${configFilePathWSL}"
-else
-    echo "❌ КОНФИГ НЕ НАЙДЕН!"
+# Если все еще мало, устанавливаем принудительно
+if [ $(ulimit -n) -lt 65535 ]; then
+    echo "Устанавливаем ulimit принудительно..."
+    ulimit -n 65535
+    ulimit -u 32768
 fi
-echo ""
 
-echo "=== ПРОГРАММА ==="
-echo "Программа: ${program}"
-echo "Путь к программе: $(which ${program} 2>/dev/null || echo "не найдено в PATH")"
-echo "Тип файла: $(file $(which ${program}) 2>/dev/null || echo "недоступно")"
-echo "Версия (если есть): $(${program} --version 2>/dev/null || echo "недоступно")"
-echo ""
-
-echo "=== ПРОЦЕССЫ ==="
-echo "Активные процессы sbm-onchain:"
-ps aux | grep sbm-onchain | grep -v grep || echo "нет активных процессов"
-echo ""
-
-echo "=== СЕТЕВЫЕ СОЕДИНЕНИЯ ==="
-echo "Активные соединения к порту 8080:"
-netstat -an | grep :8080 | wc -l || echo "недоступно"
-echo ""
-
-echo "=== ЗАПУСК ПРОГРАММЫ ==="
-echo "Команда: ${program} run \"${configFilePathWSL}\""
-echo "Начало выполнения: $(date)"
+echo "Финальный ulimit -n: $(ulimit -n)"
 echo "==============================================="
 
-# Устанавливаем лимиты перед запуском
-ulimit -n 65535
-
-# Запускаем программу
 ${program} run "${configFilePathWSL}"
 `;
 
