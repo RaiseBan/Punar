@@ -499,11 +499,31 @@ async function spawnProcess(taskConfig: any, userSettings: any): Promise<any | n
             // console.log(`⚡ SPAWN: Запуск WSL процесса: wsl ${program} ${configFilePathWSL}`);
             // Получаем домашнюю директорию пользователя в WSL
 
+            const diagnosticCommand = `
+# Принудительно читаем .bashrc
+source ~/.bashrc
+
+echo "=== ПРОВЕРКА ЛИМИТОВ ==="
+echo "ulimit -n после source: $(ulimit -n)"
+
+# Если все еще мало, устанавливаем принудительно
+if [ $(ulimit -n) -lt 65535 ]; then
+    echo "Устанавливаем ulimit принудительно..."
+    ulimit -n 65535
+    ulimit -u 32768
+fi
+
+echo "Финальный ulimit -n: $(ulimit -n)"
+echo "==============================================="
+
+${program} run "${configFilePathWSL}"
+`;
+
             child = spawn('wsl.exe', [
                 '-e',
                 'bash',
                 '-c',
-                `ulimit -n 65535 && ${program} run "${configFilePathWSL}"`
+                diagnosticCommand
             ], {
                 stdio: 'pipe',
                 shell: false,
