@@ -60,7 +60,7 @@ export default function Sidebar() {
                         textTransform: "uppercase"
                     }}
                 >
-                    TRAHER V1.0
+                    PUNAR V1.0
                 </Typography>
             </Toolbar>
 

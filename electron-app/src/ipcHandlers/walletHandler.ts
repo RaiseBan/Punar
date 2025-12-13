@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { getGlobalConfigDirectory } from "../utils/wallet.js";
 import { IpcMain } from "electron";
+import {mkdirSync} from "node:fs";
 
 interface Wallet {
     publicKey: string;
@@ -12,6 +13,12 @@ function initializeWalletHandlers(ipcMain: IpcMain): void {
     ipcMain.handle("getWallets", async (): Promise<Wallet[] | { message: string }> => {
         try {
             const configDir = getGlobalConfigDirectory();
+
+            // Создаём директорию если её нет
+            if (!existsSync(configDir)) {
+                mkdirSync(configDir, { recursive: true });
+            }
+
             const walletsFilePath = path.join(configDir, "wallets.json");
 
             if (!existsSync(walletsFilePath)) {
@@ -25,7 +32,6 @@ function initializeWalletHandlers(ipcMain: IpcMain): void {
             return { message: "Error loading wallets." };
         }
     });
-
     ipcMain.handle("addWallet", async (_, wallet: Wallet): Promise<void> => {
         try {
             const configDir = getGlobalConfigDirectory();
