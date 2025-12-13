@@ -1,0 +1,31 @@
+{
+    "name": "solana-trading-hub",
+    "version": "1.0.0",
+    "private": true,
+    "workspaces": [
+      "react-app",
+      "electron-app"
+    ],
+    "scripts": {
+      "prepare": "husky install",
+      "lint": "npm run lint --workspace=react-app",
+      "format": "npm run format --workspace=react-app",
+      "typecheck": "npm run typecheck --workspace=react-app && npm run typecheck --workspace=electron-app"
+    },
+    "devDependencies": {
+      "husky": "^8.0.3",
+      "lint-staged": "^15.2.0"
+    },
+    "lint-staged": {
+      "react-app/**/*.{ts,tsx}": [
+        "eslint --fix",
+        "prettier --write"
+      ],
+      "electron-app/**/*.ts": [
+        "prettier --write"
+      ],
+      "**/*.{json,md}": [
+        "prettier --write"
+      ]
+    }
+  }

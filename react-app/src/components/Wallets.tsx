@@ -19,7 +19,7 @@ import { Visibility, VisibilityOff, Delete, Add } from '@mui/icons-material';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { styled } from '@mui/system';
-import {AppSettings} from "../global";
+import { AppSettings } from "../../../shared/types";
 
 // ----------------------------------------------------------------------------
 // СТИЛИЗАЦИЯ (пример из вашего старого кода)
