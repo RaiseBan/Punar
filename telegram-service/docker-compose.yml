@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  telegram-service:
+    build: .
+    container_name: telegram-service
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - BOT_TOKEN=${BOT_TOKEN}
+      - CHAT_IDS=${CHAT_IDS}
+      - ELECTRON_API_URL=http://host.docker.internal:3002
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
