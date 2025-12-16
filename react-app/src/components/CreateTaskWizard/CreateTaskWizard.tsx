@@ -271,22 +271,22 @@ export default function CreateTaskWizard({
             let walletSet: Wallet[] = [];
 
             if (p.walletApproach === "single") {
-                // Один кошелёк
                 walletSource = "manaully";
                 if (p.singleWalletMethod === "existing") {
-                    // ищем в массиве wallets
-                    const found = wallets.find((w) => w.publicKey === p.selectedWalletPublicKey);
-                    if (found) {
-                        singleWalletPk = found.privateKey;
+                    // ✅ ДОБАВЬ ПРОВЕРКУ:
+                    if (Array.isArray(wallets)) {
+                        const found = wallets.find((w) => w.publicKey === p.selectedWalletPublicKey);
+                        if (found) {
+                            singleWalletPk = found.privateKey;
+                        }
                     }
                 } else {
-                    // manual
                     singleWalletPk = p.manualPrivateKey.trim();
                 }
             } else {
-                // set
                 walletSource = "set";
-                if (p.chosenSetName && settings?.walletsSet?.[p.chosenSetName]) {
+                // ✅ ДОБАВЬ ПРОВЕРКУ:
+                if (p.chosenSetName && settings?.walletsSet?.[p.chosenSetName] && Array.isArray(settings.walletsSet[p.chosenSetName])) {
                     walletSet = settings.walletsSet[p.chosenSetName];
                 }
             }

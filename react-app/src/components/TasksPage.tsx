@@ -5,16 +5,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { addOrUpdateTask } from '../store/tasksSlice';
 import { RootState } from '../store/store';
 import CreateTaskWizard from './CreateTaskWizard/CreateTaskWizard';
-import { useProcessEvents } from '../hooks';
 
 export default function TasksPage() {
   const tasks = useSelector((state: RootState) => state.tasks.tasks);
   const dispatch = useDispatch();
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  // Используем хук для управления IPC событиями
-  // Он автоматически подпишется и отпишется от всех событий
-  useProcessEvents();
 
   const handleCreateTask = useCallback(
     (config: unknown) => {
