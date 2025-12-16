@@ -2,16 +2,16 @@ import { spawn, execSync } from 'child_process';
 import treeKill from 'tree-kill';
 import { getSettings } from '../utils/fsHelper';
 import { spawnProcess, stopMevProcess, forceKillWindowsProcess } from '../utils/spawnProcess';
-import telegramBotService from '../services/telegramBotService';
 import mevLoadBalancer from '../services/mevLoadBalancer/mevLoadBalancer';
 import fs from 'fs';
 import path from 'path';
 import { app, shell, IpcMain, BrowserWindow } from 'electron';
 import { EventBus, PROCESS_EVENTS } from '../../../shared/eventBus';
 
+import { telegramClient } from '../api/telegram-client';
 
-// Карта для отслеживания процессов
 const processes: any = {};
+
 
 // Константы для конфигурации логирования
 const MAX_LOGS_IN_MEMORY = 1000; // Максимальное количество логов для одной задачи в памяти
@@ -343,7 +343,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                             `Время работы: ${runTime}с\n` +
                             `Время остановки: ${exitTime}`;
 
-                        await telegramBotService.sendSystemNotification(message);
+                        await telegramClient.sendSystemNotification(message);
                     } catch (error) {
                         console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
                     }
@@ -425,7 +425,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                         `Время запуска: ${startTime}\n` +
                         `PID: ${pid}`;
 
-                    await telegramBotService.sendSystemNotification(message);
+                    await telegramClient.sendSystemNotification(message);
                 } catch (error) {
                     console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram при возобновлении:`, error);
                 }
@@ -482,7 +482,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                                 `Время работы: ${runTime}с\n` +
                                 `Время завершения: ${exitTime}`;
 
-                            await telegramBotService.sendSystemNotification(message);
+                            await telegramClient.sendSystemNotification(message);
                         } catch (error) {
                             console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram о завершении:`, error);
                         }
@@ -551,7 +551,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                             `Время работы: ${runTime}с\n` +
                             `Время остановки: ${exitTime}`;
 
-                        await telegramBotService.sendSystemNotification(message);
+                        await telegramClient.sendSystemNotification(message);
                     } catch (error) {
                         console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
                     }
@@ -639,4 +639,8 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             processInfo.exitReason = 'already_stopped';
         }
     });
+}
+
+export function getProcesses() {
+  return processes;
 }

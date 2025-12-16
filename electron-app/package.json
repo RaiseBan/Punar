@@ -18,7 +18,11 @@
     "electron-build": "tsc && electron-builder",
     "clear-cache": "rimraf %LOCALAPPDATA%\\electron-builder\\Cache dist",
     "test": "jest",
-    "watch-ts": "tsc --watch"
+    "watch-ts": "tsc --watch",
+    "lint": "eslint 'src/**/*.{ts,js}'",
+    "lint:fix": "eslint 'src/**/*.{ts,js}' --fix",
+    "format": "prettier --write 'src/**/*.{ts,js,json}'",
+    "typecheck": "tsc --noEmit"
   },
   "build": {
     "appId": "com.example.electronapp",
@@ -60,8 +64,10 @@
     "@iarna/toml": "^2.2.5",
     "@solana/spl-token": "^0.4.13",
     "@solana/web3.js": "^1.95.4",
+    "@types/express": "^5.0.6",
     "axios": "^1.8.1",
     "bs58": "^6.0.0",
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "express": "^5.2.1"
   }
 }

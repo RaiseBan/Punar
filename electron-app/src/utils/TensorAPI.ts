@@ -2,13 +2,6 @@ import { getSettings } from "./fsHelper";
 import { TENSOR_ENDPOINTS } from "./constants";
 import { sleep } from "./solanaUtils";
 
-// Интерфейсы для параметров
-interface CollectionNftsParams {
-    collId: string;
-    limit?: number;
-    onlyListings?: boolean;
-}
-
 interface TxHistoryParams {
     collId: string;
     limit?: number;
@@ -24,7 +17,7 @@ class TensorAPI {
     private static instance: TensorAPI | null = null;
     private apiKey: string;
     private endpoint: string | null;
-    private params: Record<string, any>;
+    private params: Record<string, unknown>;
 
     constructor(apiKey: string) {
         if (!apiKey) {
@@ -35,7 +28,6 @@ class TensorAPI {
         this.params = {};
     }
 
-    // === Singleton: получаем один объект на все приложение ===
     static getInstance(): TensorAPI {
         if (!TensorAPI.instance) {
             const settings = getSettings();
@@ -45,28 +37,25 @@ class TensorAPI {
         return TensorAPI.instance;
     }
 
-    // === Сброс параметров запроса ===
     reset(): void {
         this.endpoint = null;
         this.params = {};
     }
 
-    // === Поиск ID коллекции по slug ===
     fetchCollections(slug: string): TensorAPI {
-        this.reset(); // Очищаем перед новым запросом
+        this.reset();
         this.endpoint = TENSOR_ENDPOINTS.SEARCH_COLLECTION;
         this.params.query = slug;
         return this;
     }
 
-    // === Получение списка NFT по коллекции ===
     fetchCollectionNfts(collId: string, limit: number = 1, onlyListings: boolean = false): TensorAPI {
         this.reset();
         this.endpoint = TENSOR_ENDPOINTS.NFTS_BY_COLLECTION;
         this.params = {
             collId,
             sortBy: "ListingPriceAsc",
-            limit: String(limit), // Приведение к строке
+            limit: String(limit),
             onlyListings: String(onlyListings),
         };
         return this;
@@ -85,12 +74,10 @@ class TensorAPI {
         this.reset();
         this.endpoint = TENSOR_ENDPOINTS.TX_HISTORY;
 
-        // Формируем объект параметров
         this.params = {
             collId,
             limit,
-            // Особые случаи:
-            ...(txTypes?.length && {txTypes}), // Добавляем только если массив не пустой
+            ...(txTypes?.length && {txTypes}),
             ...(minPrice !== undefined && {minPrice}),
             ...(maxPrice !== undefined && {maxPrice}),
             ...(traits && {traits: JSON.stringify(traits)}),
@@ -102,23 +89,20 @@ class TensorAPI {
         return this;
     }
 
-    // Метод send() (обновленная обработка параметров)
-    async send(): Promise<any | null> {
+    async send(): Promise<unknown> {
         if (!this.endpoint) {
             throw new Error("Endpoint не установлен! Вызови fetchCollectionId() или fetchCollectionNfts() перед send().");
         }
 
         const url = new URL(this.endpoint);
 
-        // Обрабатываем параметры с поддержкой массивов
         Object.entries(this.params).forEach(([key, value]) => {
             if (value === undefined) return;
 
             if (Array.isArray(value)) {
-                // Добавляем каждый элемент массива отдельно
-                value.forEach(item => url.searchParams.append(key, item));
+                value.forEach(item => url.searchParams.append(key, item as string));
             } else {
-                url.searchParams.append(key, value);
+                url.searchParams.append(key, value as string);
             }
         });
 
@@ -155,7 +139,6 @@ class TensorAPI {
             attempt++;
         }
 
-        // Если все попытки исчерпаны, возвращаем null
         return null;
     }
 }

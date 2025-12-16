@@ -8,7 +8,6 @@ import {app, ipcMain} from 'electron';
 import path from 'path';
 import {forceKillWindowsProcess, spawnProcess} from '../../utils/spawnProcess';
 import {getSettings} from '../../utils/fsHelper';
-import telegramBotService from '../telegramBotService';
 import fs from 'fs';
 import bs58 from "bs58";
 import {createTokenAccount, getDetailedTokenAccounts, sleep} from '../../utils/solanaUtils';
@@ -26,6 +25,7 @@ import {
 } from "../../types/types";
 
 import {MASTER_NODE_PORT} from "../../config/config";
+import { telegramClient } from '@/api/telegram-client';
 
 
 export class MevLoadBalancer {
@@ -295,7 +295,7 @@ export class MevLoadBalancer {
 
             // Отправляем уведомление о начале обработки
             if (this.settings.notifyTelegram) {
-                telegramBotService.sendSystemNotification(
+                telegramClient.sendSystemNotification(
                     `🔄 Начало обработки ${signalsToProcess.length} MEV сигналов из буфера`
                 );
             }
@@ -307,7 +307,7 @@ export class MevLoadBalancer {
                 this.signalBuffer.push(...signalsToProcess);
 
                 if (this.settings.notifyTelegram) {
-                    telegramBotService.sendSystemNotification(
+                    telegramClient.sendSystemNotification(
                         `⏱️ Обработка ${signalsToProcess.length} MEV сигналов отложена: идет очистка процессов`
                     );
                 }
@@ -356,7 +356,7 @@ export class MevLoadBalancer {
 
             // Уведомляем о запуске в Telegram
             if (this.settings.notifyTelegram) {
-                telegramBotService.sendSystemNotification('✅ MEV LoadBalancer запущен');
+                telegramClient.sendSystemNotification('✅ MEV LoadBalancer запущен');
             }
 
             return {
@@ -408,7 +408,7 @@ export class MevLoadBalancer {
 
             // Уведомляем об остановке в Telegram
             if (this.settings.notifyTelegram) {
-                telegramBotService.sendSystemNotification('❌ MEV LoadBalancer остановлен');
+                telegramClient.sendSystemNotification('❌ MEV LoadBalancer остановлен');
             }
 
             return {
@@ -1740,7 +1740,7 @@ export class MevLoadBalancer {
                     `📊 Распределение задержек:\n${delayLines}\n\n` +
                     `🔄 Активные сигналы:\n${signalLines}`;
 
-                telegramBotService.sendSystemNotification(message);
+                telegramClient.sendSystemNotification(message);
             }
 
             return {
@@ -1760,7 +1760,7 @@ export class MevLoadBalancer {
             this.stats.failedSignals += signals.length;
 
             if (this.settings?.notifyTelegram) {
-                telegramBotService.sendSystemNotification(
+                telegramClient.sendSystemNotification(
                     `❌ Ошибка обработки ${signals.length} MEV сигналов:\nОшибка: ${error.message}`
                 );
             }
@@ -1977,7 +1977,7 @@ export class MevLoadBalancer {
                     `📊 Распределение задержек:\n${delayLines}\n\n` +
                     `🔄 Активные сигналы:\n${signalLines}`;
 
-                telegramBotService.sendSystemNotification(message);
+                telegramClient.sendSystemNotification(message);
             }
 
             return {
@@ -2004,12 +2004,12 @@ export class MevLoadBalancer {
      * Проверяет ликвидность пулов всех сигналов и удаляет сигналы с низкой ликвидностью
      */
     async checkAndCleanProcessesByLiquidity() {
-        telegramBotService.sendSystemNotification(
+        telegramClient.sendSystemNotification(
             `🧹 Начало проверки пулов meteora`
         );
         // Проверяем, что очистка уже не запущена и не идёт обработка сигналов
         if (this.isCleaningProcesses || this.processingSignals) {
-            telegramBotService.sendSystemNotification(
+            telegramClient.sendSystemNotification(
                 `'🧹Пропуск проверки ликвидности: уже выполняется другая операция с процессами`
             );
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Пропуск проверки ликвидности: уже выполняется другая операция с процессами');
@@ -2017,7 +2017,7 @@ export class MevLoadBalancer {
         }
 
         if (!this.isActive || this.mevProcesses.size === 0) {
-            telegramBotService.sendSystemNotification(
+            telegramClient.sendSystemNotification(
                 `'🧹Пропуск проверки ликвидности: нет процессов`
             );
             logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Пропуск проверки ликвидности: балансировщик неактивен или нет процессов');
@@ -2108,7 +2108,7 @@ export class MevLoadBalancer {
 
                 // Уведомляем в Telegram о начале очистки
                 if (this.settings.notifyTelegram) {
-                    telegramBotService.sendSystemNotification(
+                    telegramClient.sendSystemNotification(
                         `🧹 Начало очистки ${signalsToStop.length} MEV сигналов с низкой ликвидностью`
                     );
                 }
@@ -2125,7 +2125,7 @@ export class MevLoadBalancer {
 
                     // Уведомляем об окончании процесса очистки
                     if (this.settings.notifyTelegram) {
-                        telegramBotService.sendSystemNotification(
+                        telegramClient.sendSystemNotification(
                             `✅ Завершена очистка ${signalsToStop.length} MEV сигналов с низкой ликвидностью.\n` +
                             `Запущен перерасчет и перезапуск оставшихся сигналов.`
                         );

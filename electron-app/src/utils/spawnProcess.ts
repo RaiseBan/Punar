@@ -6,6 +6,7 @@ import axios from "axios";
 import { updateConfigCollectionId } from "./updateService";
 import { generateMevConfig, generateSimpleMevConfig } from "./generateService";
 import { convertWindowsPathToWSL } from "./fsHelper";
+import { telegramClient } from "@/api/telegram-client";
 
 // Типы и интерфейсы
 interface TaskConfig {
@@ -617,8 +618,6 @@ ${program} run "${configFilePathWSL}"
 
                                 // Отправляем уведомление о смене пула через Telegram
                                 try {
-                                    // Импортируем telegramBotService прямо здесь для прямого обращения
-                                    const telegramBotService = require('../services/telegramBotService');
 
                                     // Формируем подробное сообщение о смене пула
                                     const poolChangeMessage = `🔄 Обнаружена смена пула Meteora\n\n` +
@@ -631,7 +630,7 @@ ${program} run "${configFilePathWSL}"
                                         `Процесс будет перезапущен автоматически с новым пулом.`;
                                     // Отправляем прямое уведомление с приоритетом
                                     console.log(`МОНИТОРИНГ: Отправка подробного уведомления о смене пула для задачи ${taskId}`);
-                                    telegramBotService.sendSystemNotification(poolChangeMessage);
+                                    telegramClient.sendSystemNotification(poolChangeMessage);
 
                                     // Получаем BrowserWindow и отправляем события для UI
                                     const mainWindow = BrowserWindow.getAllWindows()[0];
