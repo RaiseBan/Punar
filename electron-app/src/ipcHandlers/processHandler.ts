@@ -7,6 +7,8 @@ import mevLoadBalancer from '../services/mevLoadBalancer/mevLoadBalancer';
 import fs from 'fs';
 import path from 'path';
 import { app, shell, IpcMain, BrowserWindow } from 'electron';
+import { EventBus, PROCESS_EVENTS } from '../../../shared/eventBus';
+
 
 // Карта для отслеживания процессов
 const processes: any = {};
@@ -266,6 +268,13 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
 
             console.log(`ПРОЦЕСС: Процесс ${taskId} успешно запущен, PID: ${child.pid}`);
 
+            EventBus.emit(PROCESS_EVENTS.STARTED, {
+                processId: taskId.toString(),
+                taskId: taskId,
+                moduleName: config.module_name,
+                config: config
+            });
+
             // Записываем в файл лога о запуске процесса
             writeLogToFile(taskId, `Процесс запущен, PID: ${child.pid}`, 'system');
 
@@ -290,6 +299,12 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
 
             child.on("exit", (code: any) => {
                 console.log(`ПРОЦЕСС: Процесс ${taskId} завершился с кодом ${code}`);
+
+                EventBus.emit(PROCESS_EVENTS.STOPPED, {
+                    processId: taskId.toString(),
+                    taskId: taskId,
+                    exitCode: code
+                });
 
                 // Записываем в файл лога о завершении процесса
                 writeLogToFile(taskId, `Процесс завершился с кодом ${code}`, 'system');
@@ -390,6 +405,13 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             processes[taskId].moduleName = config.module_name || 'Unknown';
 
             console.log(`ПРОЦЕСС: Процесс ${taskId} успешно запущен с PID ${pid}`);
+
+            EventBus.emit(PROCESS_EVENTS.STARTED, {
+                processId: taskId.toString(),
+                taskId: taskId,
+                moduleName: config.module_name,
+                config: config
+            });
 
             // Отправляем уведомление о запуске процесса в Telegram - асинхронно и не блокируя
             setImmediate(async () => {
@@ -509,6 +531,12 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                 processInfo.exitReason = 'ручная остановка пользователем';
                 processInfo.exitTime = Date.now();
                 const runTime = Math.floor((processInfo.exitTime - processInfo.startTime) / 1000);
+
+                EventBus.emit(PROCESS_EVENTS.STOPPED, {
+                    processId: taskId.toString(),
+                    taskId: taskId,
+                    exitCode: null
+                });
 
                 // Отправляем уведомление в Telegram перед остановкой
                 setImmediate(async () => {

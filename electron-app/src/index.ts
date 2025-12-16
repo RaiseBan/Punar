@@ -7,6 +7,7 @@ import { initializeWindowHandlers } from "./ipcHandlers/windowHandler";
 import { initializeApiHandlers } from "./ipcHandlers/tensorApiHandler";
 import telegramBotService from './services/telegramBotService';
 import mevLoadBalancer from './services/mevLoadBalancer/mevLoadBalancer';
+import logger from './services/loggerService';
 import config from './config/config';
 
 // Интерфейсы и типы
@@ -74,6 +75,9 @@ function createWindow(): void {
 // Добавляем асинхронную обработку событий для Telegram
 app.whenReady().then(() => {
   createWindow();
+
+  logger.initializeEventBusListeners();
+  logger.success(logger.LOG_MODULES.SYSTEM, 'EventBus интеграция инициализирована');
 
   if (mainWindow) {
     initializeProcessHandlers(ipcMain, mainWindow);
