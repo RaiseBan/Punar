@@ -1,108 +1,86 @@
-import {
-    AppSettings,
-    Wallet,
-    ConfigType,
-    ProcessStartedEvent,
-    ProcessOutputEvent,
-    ProcessExitEvent,
-    ProcessErrorEvent,
-    TaskConfig,
-  } from '../../shared/types';
-  
-  declare module '*.module.css' {
-    const classes: { [key: string]: string };
-    export default classes;
-  }
-  
-  // Re-export types for components to use
-  export {
-    AppSettings,
-    Wallet,
-    ConfigType,
-    ProcessStartedEvent,
-    ProcessOutputEvent,
-    ProcessExitEvent,
-    ProcessErrorEvent,
-    TaskConfig,
-  };
-  
-  declare global {
-    interface Window {
-      electronAPI?: {
-        // ============= Process Management =============
-        startProcess: (taskId: number, config: TaskConfig) => void;
-        stopProcess: (taskId: number) => void;
-        resumeProcess: (taskId: number, config: TaskConfig) => void;
-        removeAllListeners: () => void;
-  
-        // ============= Process Events =============
-        onProcessStarted: (callback: (event: unknown, data: ProcessStartedEvent) => void) => void;
-        onProcessOutput: (callback: (event: unknown, data: ProcessOutputEvent) => void) => void;
-        onProcessExit: (callback: (event: unknown, data: ProcessExitEvent) => void) => void;
-        onProcessError: (callback: (event: unknown, data: ProcessErrorEvent) => void) => void;
-        removeListener: (channel: string, callback: (...args: unknown[]) => void) => void;
-  
-        // ============= Settings =============
-        getSettings: () => Promise<AppSettings>;
-        saveSettings: (settings: AppSettings) => Promise<void>;
-  
-        // ============= Wallets =============
-        getWallets: () => Promise<Wallet[]>;
-        addWallet: (wallet: Wallet) => Promise<void>;
-        deleteWallet: (publicKey: string) => Promise<void>;
-  
-        // ============= Configs =============
-        saveConfig: (configType: ConfigType, fileName: string, content: unknown) => Promise<boolean>;
-        getConfigs: (configType: ConfigType) => Promise<string[]>;
-        getConfig: (configType: ConfigType, fileName: string) => Promise<unknown>;
-        deleteConfig: (configType: ConfigType, fileName: string) => Promise<boolean>;
-        getConfigPaths: (configType: ConfigType) => Promise<{ name: string; path: string }[]>;
-  
-        // ============= Window Controls =============
-        minimizeWindow: () => Promise<void>;
-        closeWindow: () => Promise<void>;
-        enableDrag: () => void;
-  
-        // ============= Tensor API =============
-        tensorAPI: {
-          getCollectionInfo: (slug: string) => Promise<string | null>;
-          getCollIdByUrl: (url: string) => Promise<string | null>;
-          getNftsForCollection: (
-            collId: string,
-            limit?: number,
-            onlyListings?: boolean
-          ) => Promise<unknown>;
-          getTxHistory: (params: unknown) => Promise<unknown>;
-        };
-  
-        // ============= Telegram Bot =============
-        setTelegramBotToken: (token: string) => Promise<void>;
-        getTelegramBotConfig: () => Promise<unknown>;
-        sendTelegramTask: (taskData: unknown) => Promise<void>;
-        sendTaskStatus: (taskId: number) => Promise<void>;
-  
-        onTelegramRunTask: (callback: (...args: unknown[]) => void) => void;
-        onTelegramDeleteTask: (callback: (...args: unknown[]) => void) => void;
-        onTelegramStopTask: (callback: (...args: unknown[]) => void) => void;
-        onTelegramRemoveTask: (callback: (...args: unknown[]) => void) => void;
-        onTelegramResumeTask: (callback: (...args: unknown[]) => void) => void;
-  
-        getTelegramBotStatus: () => Promise<unknown>;
-        startTelegramBotStream: () => Promise<void>;
-        stopTelegramBotStream: () => Promise<void>;
-        onPoolChanged: (callback: (data: unknown) => void) => void;
-  
-        // ============= Tasks Management =============
-        listenForTasks: (callback: () => void) => void;
-        removeTasksListener: () => void;
-        sendToMain: (channel: string, data: unknown) => void;
-  
-        // ============= Logs =============
-        openLogFile: (taskId: number) => Promise<void>;
-        invoke: (channel: string, data: unknown) => Promise<unknown>;
+// global.d.ts
+declare module "*.module.css" {
+  const classes: { [key: string]: string };
+  export default classes;
+}
+
+export {};
+
+declare global {
+  interface Window {
+    electronAPI: {
+      // Process Management
+      startProcess: (taskId: number, config: any) => void;
+      stopProcess: (taskId: number) => void;
+      resumeProcess: (taskId: number, config: any) => void;
+
+      // Process Events
+      onProcessStarted: (callback: (event: any, data: { taskId: number; config: any }) => void) => void;
+      onProcessOutput: (callback: (event: any, data: { taskId: number; log: string }) => void) => void;
+      onProcessExit: (callback: (event: any, data: { taskId: number; code: number }) => void) => void;
+      onProcessError: (callback: (event: any, data: { taskId: number; error: string }) => void) => void;
+      removeListener: (channel: string, callback: (...args: any[]) => void) => void;
+      removeAllListeners: () => void;
+
+      // Settings
+      getSettings: () => Promise<any>;
+      saveSettings: (settings: any) => Promise<void>;
+
+      // Wallets
+      getWallets: () => Promise<{ publicKey: string; privateKey: string }[]>;
+      addWallet: (wallet: { publicKey: string; privateKey: string }) => Promise<void>;
+      deleteWallet: (publicKey: string) => Promise<void>;
+
+      // Configs
+      saveConfig: (configType: string, fileName: string, content: any) => Promise<boolean>;
+      getConfigs: (configType: string) => Promise<string[]>;
+      getConfig: (configType: string, fileName: string) => Promise<any>;
+      deleteConfig: (configType: string, fileName: string) => Promise<boolean>;
+      getConfigPaths: (configType: string) => Promise<{ name: string; path: string }[]>;
+
+      // Window Controls
+      minimizeWindow: () => Promise<void>;
+      closeWindow: () => Promise<void>;
+      enableDrag: () => void;
+
+      // Tensor API
+      tensorAPI: {
+        getCollectionInfo: (slug: string) => Promise<string | null>;
+        getCollIdByUrl: (url: string) => Promise<string | null>;
+        getNftsForCollection: (collId: string, limit?: number, onlyListings?: boolean) => Promise<any>;
+        getTxHistory: (params: any) => Promise<any>;
       };
-  
-      // Redux state getter (injected by App.tsx)
-      getReduxState?: () => unknown;
-    }
+
+      // Telegram Bot
+      telegramBot: {
+        getConfig: () => Promise<{
+          token: string;
+          enabled: boolean;
+          chatIds?: number[];
+        }>;
+        setToken: (token: string) => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
+        getStatus: () => Promise<{
+          isRunning: boolean;
+          isConfigured: boolean;
+          chatCount: number;
+          lastActivity?: string;
+        }>;
+        start: () => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
+        stop: () => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
+        testConnection: () => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
+      };
+    };
   }
+}

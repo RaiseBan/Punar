@@ -42,6 +42,14 @@ const IPC_CHANNELS = {
   TENSOR_GET_COLLECTION_INFO: 'tensor-get-collection-info',
   TENSOR_GET_COLL_ID_BY_URL: 'tensor-get-coll-id-by-url',
   TENSOR_GET_NFTS_FOR_COLLECTION: 'tensor-get-nfts-for-collection',
+
+  // Telegram Bot
+  TELEGRAM_GET_CONFIG: 'telegram-bot:get-config',
+  TELEGRAM_SET_TOKEN: 'telegram-bot:set-token',
+  TELEGRAM_GET_STATUS: 'telegram-bot:get-status',
+  TELEGRAM_START_BOT: 'telegram-bot:start',
+  TELEGRAM_STOP_BOT: 'telegram-bot:stop',
+  TELEGRAM_TEST_CONNECTION: 'telegram-bot:test-connection',
 } as const;
 
 // Типы (копируй из shared/types если нужны)
@@ -78,6 +86,19 @@ type ConfigType = 'reprice_config' | 'snipe_config';
 
 interface TaskConfig {
   [key: string]: any;
+}
+
+interface TelegramBotConfig {
+  token: string;
+  enabled: boolean;
+  chatIds?: number[];
+}
+
+interface TelegramBotStatus {
+  isRunning: boolean;
+  isConfigured: boolean;
+  chatCount: number;
+  lastActivity?: string;
 }
 
 // Типы для callback функций
@@ -193,9 +214,9 @@ const electronAPI = {
     },
 
     getNftsForCollection: (
-      collId: string,
-      limit: number = 1,
-      onlyListings: boolean = false
+        collId: string,
+        limit: number = 1,
+        onlyListings: boolean = false
     ): Promise<unknown> => {
       return ipcRenderer.invoke(IPC_CHANNELS.TENSOR_GET_NFTS_FOR_COLLECTION, collId, limit, onlyListings);
     },
@@ -206,183 +227,58 @@ const electronAPI = {
   },
 
   // ============= Telegram Bot =============
-  setTelegramBotToken: (token: string): Promise<void> => {
-    return ipcRenderer.invoke('telegram-bot:set-token', token);
-  },
-
-  getTelegramBotConfig: (): Promise<unknown> => {
-    return ipcRenderer.invoke('telegram-bot:get-config');
-  },
-
-  sendTelegramTask: (taskData: unknown): Promise<void> => {
-    return ipcRenderer.invoke('telegram-bot:send-task', taskData);
-  },
-
-  sendTaskStatus: (taskId: number): Promise<void> => {
-    return ipcRenderer.invoke('telegram-bot:send-task-status', taskId);
-  },
-
-  onTelegramRunTask: (callback: (...args: unknown[]) => void): void => {
-    ipcRenderer.on('telegram-bot:run-task', callback);
-  },
-
-  onTelegramDeleteTask: (callback: (...args: unknown[]) => void): void => {
-    ipcRenderer.on('telegram-bot:delete-task', callback);
-  },
-
-  onTelegramStopTask: (callback: (...args: unknown[]) => void): void => {
-    ipcRenderer.on('telegram-bot:stop-task', callback);
-  },
-
-  onTelegramRemoveTask: (callback: (...args: unknown[]) => void): void => {
-    ipcRenderer.on('telegram-bot:remove-task', callback);
-  },
-
-  onTelegramResumeTask: (callback: (...args: unknown[]) => void): void => {
-    ipcRenderer.on('telegram-bot:resume-task', callback);
-  },
-
-  getTelegramBotStatus: (): Promise<unknown> => {
-    return ipcRenderer.invoke('telegram-bot:get-status');
-  },
-
-  startTelegramBotStream: (): Promise<void> => {
-    return ipcRenderer.invoke('telegram-bot:start-stream');
-  },
-
-  stopTelegramBotStream: (): Promise<void> => {
-    return ipcRenderer.invoke('telegram-bot:stop-stream');
-  },
-
-  onPoolChanged: (callback: (data: unknown) => void): void => {
-    ipcRenderer.on('telegram-notify-pool-change', (_event, data) => callback(data));
-  },
-
-  // ============= Tasks Management =============
-  listenForTasks: (callback: () => void): void => {
-    const wrappedCallback = () => {
-      console.log('[Preload] Received get-tasks-from-redux request from main, forwarding to renderer');
-      callback();
-    };
-
-    // @ts-expect-error - saving reference for cleanup
-    ipcRenderer._tasksListener = wrappedCallback;
-    ipcRenderer.on('get-tasks-from-redux', wrappedCallback);
-  },
-
-  removeTasksListener: (): void => {
-    // @ts-expect-error - accessing saved reference
-    if (ipcRenderer._tasksListener) {
-      // @ts-expect-error
-      ipcRenderer.removeListener('get-tasks-from-redux', ipcRenderer._tasksListener);
-      // @ts-expect-error
-      ipcRenderer._tasksListener = null;
-    }
-  },
-
-  sendToMain: (channel: string, data: unknown): void => {
-    if (channel === 'telegram-tasks-response') {
-      console.log(`[Preload] Sending tasks to main process`);
-      ipcRenderer.send(channel, data);
-    }
-  },
-
-  // ============= Logs =============
-  openLogFile: (taskId: number): Promise<void> => {
-    console.log(`Opening log file for task ${taskId}`);
-    return ipcRenderer.invoke('open-log-file', { taskId });
-  },
-
-  invoke: (channel: string, data: unknown): Promise<unknown> => {
-    const validChannels = ['get-task-logs', 'open-log-file'];
-    if (!validChannels.includes(channel)) {
-      console.error(`Попытка вызвать неразрешенный канал: ${channel}`);
-      return Promise.reject(new Error(`Неразрешенный канал: ${channel}`));
-    }
-    return ipcRenderer.invoke(channel, data);
-  },
-
-  // ============= MEV LoadBalancer =============
-  mevLoadBalancer: {
-    getStatus: (): Promise<unknown> => {
-      return ipcRenderer.invoke('mev-loadbalancer:get-status');
+  telegramBot: {
+    /**
+     * Получить конфигурацию бота
+     */
+    getConfig: (): Promise<TelegramBotConfig> => {
+      return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_GET_CONFIG);
     },
 
-    start: (): Promise<void> => {
-      return ipcRenderer.invoke('mev-loadbalancer:start');
+    /**
+     * Установить токен бота
+     */
+    setToken: (token: string): Promise<{ success: boolean; error?: string }> => {
+      return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_SET_TOKEN, token);
     },
 
-    stop: (): Promise<void> => {
-      return ipcRenderer.invoke('mev-loadbalancer:stop');
+    /**
+     * Получить статус бота
+     */
+    getStatus: (): Promise<TelegramBotStatus> => {
+      return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_GET_STATUS);
     },
 
-    getProcesses: (): Promise<unknown[]> => {
-      return ipcRenderer.invoke('mev-loadbalancer:get-processes');
+    /**
+     * Запустить бота
+     */
+    start: (): Promise<{ success: boolean; error?: string }> => {
+      return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_START_BOT);
     },
 
-    stopProcess: (processId: string): Promise<void> => {
-      return ipcRenderer.invoke('mev-loadbalancer:stop-process', processId);
+    /**
+     * Остановить бота
+     */
+    stop: (): Promise<{ success: boolean; error?: string }> => {
+      return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_STOP_BOT);
     },
 
-    updateSettings: (settings: unknown): Promise<void> => {
-      return ipcRenderer.invoke('mev-loadbalancer:update-settings', settings);
+    /**
+     * Проверить подключение к telegram-service
+     */
+    testConnection: (): Promise<{ success: boolean; error?: string }> => {
+      return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_TEST_CONNECTION);
     },
   },
 };
 
-// Expose electronAPI to renderer
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+console.log('✅ [PRELOAD] Exposing electronAPI to window...');
 
-console.log('✅ [PRELOAD] electronAPI exposed to window!');
-console.log('✅ [PRELOAD] electronAPI methods:', Object.keys(electronAPI));
+try {
+  contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+  console.log('✅ [PRELOAD] electronAPI exposed successfully');
+} catch (error) {
+  console.error('❌ [PRELOAD] Error exposing electronAPI:', error);
+}
 
-// ============= IPC Handlers =============
-ipcRenderer.on('telegram-get-tasks', () => {
-  const tasksState = document.getElementById('redux-store-data');
-  let tasks: unknown[] = [];
-
-  if (tasksState && tasksState.textContent) {
-    try {
-      const state = JSON.parse(tasksState.textContent);
-      tasks = state.tasks.tasks;
-    } catch (e) {
-      console.error('Error parsing tasks:', e);
-    }
-  }
-
-  ipcRenderer.send('telegram-tasks-response', tasks);
-});
-
-ipcRenderer.on('get-tasks-from-redux', () => {
-  console.log('[Preload] Received get-tasks-from-redux request from main.');
-  try {
-    // @ts-expect-error - window.getReduxState injected by renderer
-    if (typeof window.getReduxState === 'function') {
-      console.log('[Preload] window.getReduxState function found. Attempting to get Redux state...');
-      // @ts-expect-error
-      const state = window.getReduxState();
-
-      if (state?.tasks) {
-        console.log(`[Preload] Got state.tasks. Keys: ${Object.keys(state.tasks)}`);
-      } else {
-        console.warn('[Preload] Redux state or state.tasks is missing after calling getReduxState.');
-      }
-
-      const tasks = state?.tasks?.tasks || [];
-
-      console.log(`[Preload] Extracted tasks. Length: ${tasks.length}`);
-      if (tasks.length > 0) {
-        console.log('[Preload] First task being sent:', JSON.stringify(tasks[0], null, 2));
-      }
-
-      console.log('[Preload] Sending tasks-from-redux response back to main.');
-      ipcRenderer.send('tasks-from-redux', tasks);
-    } else {
-      console.warn('[Preload] window.getReduxState is not available yet.');
-      ipcRenderer.send('tasks-from-redux', []);
-    }
-  } catch (error) {
-    console.error('[Preload] Error getting/sending tasks from Redux:', error);
-    ipcRenderer.send('tasks-from-redux', []);
-  }
-});
+console.log('✅ [PRELOAD] Preload script completed');

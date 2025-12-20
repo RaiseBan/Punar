@@ -2,11 +2,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { ensureConfigDirectory } from '../utils/wallet';
 import { IpcMain, IpcMainInvokeEvent } from 'electron';
-import { ConfigType, ConfigFile } from '../../../shared/types';
+import { ConfigType, IPC_CHANNELS } from '../../../shared/types';
 
-/**
- * Проверяет существование директории
- */
 async function directoryExists(dirPath: string): Promise<boolean> {
     try {
         await fs.access(dirPath);
@@ -16,15 +13,9 @@ async function directoryExists(dirPath: string): Promise<boolean> {
     }
 }
 
-/**
- * Инициализирует IPC handlers для работы с конфигурациями
- */
 export function initializeConfigHandlers(ipcMain: IpcMain): void {
-    /**
-     * Сохранение конфигурации
-     */
     ipcMain.handle(
-        'save-config',
+        IPC_CHANNELS.SAVE_CONFIG,
         async (
             _event: IpcMainInvokeEvent,
             configType: ConfigType,
@@ -48,11 +39,8 @@ export function initializeConfigHandlers(ipcMain: IpcMain): void {
         }
     );
 
-    /**
-     * Получение списка конфигураций
-     */
     ipcMain.handle(
-        'get-configs',
+        IPC_CHANNELS.GET_CONFIGS,
         async (_event: IpcMainInvokeEvent, configType: ConfigType): Promise<string[]> => {
             try {
                 const baseDir = await ensureConfigDirectory();
@@ -73,11 +61,8 @@ export function initializeConfigHandlers(ipcMain: IpcMain): void {
         }
     );
 
-    /**
-     * Получение конфигурации по имени
-     */
     ipcMain.handle(
-        'get-config',
+        IPC_CHANNELS.GET_CONFIG,
         async (
             _event: IpcMainInvokeEvent,
             configType: ConfigType,
@@ -87,27 +72,17 @@ export function initializeConfigHandlers(ipcMain: IpcMain): void {
                 const baseDir = await ensureConfigDirectory();
                 const filePath = path.join(baseDir, configType, `${fileName}.json`);
 
-                if (!(await directoryExists(path.dirname(filePath)))) {
-                    return null;
-                }
-
-                const data = await fs.readFile(filePath, 'utf-8');
-                return JSON.parse(data);
+                const fileContent = await fs.readFile(filePath, 'utf-8');
+                return JSON.parse(fileContent);
             } catch (error) {
-                const err = error as NodeJS.ErrnoException;
-                if (err.code !== 'ENOENT') {
-                    console.error('Error reading config:', error);
-                }
+                console.error('Error reading config:', error);
                 return null;
             }
         }
     );
 
-    /**
-     * Удаление конфигурации
-     */
     ipcMain.handle(
-        'delete-config',
+        IPC_CHANNELS.DELETE_CONFIG,
         async (
             _event: IpcMainInvokeEvent,
             configType: ConfigType,
@@ -116,16 +91,6 @@ export function initializeConfigHandlers(ipcMain: IpcMain): void {
             try {
                 const baseDir = await ensureConfigDirectory();
                 const filePath = path.join(baseDir, configType, `${fileName}.json`);
-
-                if (!(await directoryExists(path.dirname(filePath)))) {
-                    return false;
-                }
-
-                try {
-                    await fs.access(filePath);
-                } catch {
-                    return false;
-                }
 
                 await fs.unlink(filePath);
                 return true;
@@ -136,12 +101,9 @@ export function initializeConfigHandlers(ipcMain: IpcMain): void {
         }
     );
 
-    /**
-     * Получение путей всех конфигураций
-     */
     ipcMain.handle(
-        'get-all-config-paths',
-        async (_event: IpcMainInvokeEvent, configType: ConfigType): Promise<ConfigFile[]> => {
+        IPC_CHANNELS.GET_CONFIG_PATHS,
+        async (_event: IpcMainInvokeEvent, configType: ConfigType): Promise<{ name: string; path: string }[]> => {
             try {
                 const baseDir = await ensureConfigDirectory();
                 const configDir = path.join(baseDir, configType);

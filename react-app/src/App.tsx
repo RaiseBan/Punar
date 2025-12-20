@@ -34,15 +34,12 @@ function IpcHandler() {
         // Слушатель для запроса задач из main процесса
         const handleGetTasks = () => {
             console.log('[IpcHandler] Received get-tasks-request, sending tasks:', tasks.length);
-            // @ts-ignore - игнорируем ошибку TS о том, что electronAPI может не существовать
             window.electronAPI?.sendToMain('telegram-tasks-response', tasks);
         };
 
-        // @ts-ignore - регистрируем слушатель
         window.electronAPI?.listenForTasks?.(handleGetTasks);
 
         return () => {
-            // @ts-ignore - удаляем слушатель при размонтировании компонента
             window.electronAPI?.removeTasksListener?.();
         };
     }, [tasks]); // Перерегистрируем слушатель при изменении задач

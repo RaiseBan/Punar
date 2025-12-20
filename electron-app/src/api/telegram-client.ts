@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 
 const TELEGRAM_SERVICE_URL = process.env.TELEGRAM_SERVICE_URL || 'http://localhost:3003';
+const TELEGRAM_API_KEY = process.env.TELEGRAM_API_KEY || 'your-secret-api-key-here';
 
 class TelegramClient {
   private client: AxiosInstance;
@@ -9,6 +10,10 @@ class TelegramClient {
     this.client = axios.create({
       baseURL: TELEGRAM_SERVICE_URL,
       timeout: 5000,
+      headers: {
+        'x-api-key': TELEGRAM_API_KEY,
+        'Content-Type': 'application/json',
+      },
     });
   }
 

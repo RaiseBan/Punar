@@ -1,20 +1,12 @@
 import { IpcMain, BrowserWindow } from 'electron';
+import { IPC_CHANNELS } from '../../../shared/types';
 
-/**
- * Инициализирует IPC handlers для управления окном
- */
 export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWindow): void {
-    /**
-     * Минимизация окна
-     */
-    ipcMain.handle('minimizeWindow', (): void => {
+    ipcMain.handle(IPC_CHANNELS.MINIMIZE_WINDOW, (): void => {
         mainWindow.minimize();
     });
 
-    /**
-     * Закрытие окна
-     */
-    ipcMain.handle('closeWindow', (): void => {
+    ipcMain.handle(IPC_CHANNELS.CLOSE_WINDOW, (): void => {
         mainWindow.close();
     });
 }

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import fs from "fs";
+import { IPC_CHANNELS } from '../../shared/types';
 
 console.log('📝 [INDEX] Module start loading...');
 
@@ -10,9 +11,6 @@ const config = {
 
 let mainWindow: BrowserWindow | null = null;
 
-/**
- * Создает главное окно приложения
- */
 function createWindow(): void {
   console.log('🪟 [INDEX] Creating main window...');
 
@@ -37,16 +35,11 @@ function createWindow(): void {
       },
       autoHideMenuBar: true,
       frame: false,
-      show: false, // ← НЕ показываем пока не загрузится
+      show: false,
     });
 
     console.log('✅ [INDEX] BrowserWindow created');
 
-    // ========================================
-    // КРИТИЧЕСКИ ВАЖНЫЕ ОБРАБОТЧИКИ ОШИБОК!
-    // ========================================
-
-    // Ловим ошибки preload
     mainWindow.webContents.on('preload-error', (event, preloadPath, error) => {
       console.error('❌❌❌ [INDEX] PRELOAD ERROR!');
       console.error('Preload path:', preloadPath);
@@ -54,26 +47,22 @@ function createWindow(): void {
       console.error('Error stack:', error.stack);
     });
 
-    // Пробрасываем console.log из preload/renderer
     mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
       const levelName = ['verbose', 'info', 'warning', 'error'][level] || 'log';
       console.log(`[RENDERER ${levelName}] ${message} (${sourceId}:${line})`);
     });
 
-    // Ловим ошибки загрузки страницы
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
       console.error('❌ [INDEX] Failed to load:', validatedURL);
       console.error('Error code:', errorCode);
       console.error('Description:', errorDescription);
     });
 
-    // Когда preload загружен
     mainWindow.webContents.on('did-finish-load', () => {
       console.log('✅ [INDEX] Page finished loading');
-      mainWindow?.show(); // Показываем окно
+      mainWindow?.show();
     });
 
-    // Когда DOM готов
     mainWindow.webContents.on('dom-ready', () => {
       console.log('✅ [INDEX] DOM ready');
     });
@@ -115,6 +104,7 @@ app.whenReady().then(async () => {
     const { initializeWalletHandlers } = await import('./ipcHandlers/walletHandler');
     const { initializeConfigHandlers } = await import('./ipcHandlers/configHandler');
     const { initializeApiHandlers } = await import('./ipcHandlers/tensorApiHandler');
+    const { initializeTelegramHandlers } = await import('./ipcHandlers/telegramHandler');
     const { getSettings, saveSettings } = await import('./utils/fsHelper');
 
     if (mainWindow) {
@@ -130,14 +120,16 @@ app.whenReady().then(async () => {
     initializeConfigHandlers(ipcMain);
     console.log('  - Initializing API handlers...');
     initializeApiHandlers(ipcMain);
+    console.log('  - Initializing telegram handlers...');
+    initializeTelegramHandlers(ipcMain);
 
-    // Settings handlers - используем существующие функции из fsHelper
+    // Settings handlers с IPC_CHANNELS
     console.log('  - Initializing settings handlers...');
-    ipcMain.handle('get-settings', async () => {
+    ipcMain.handle(IPC_CHANNELS.GET_SETTINGS, async () => {
       return getSettings();
     });
 
-    ipcMain.handle('save-settings', async (_event, settings) => {
+    ipcMain.handle(IPC_CHANNELS.SAVE_SETTINGS, async (_event, settings) => {
       await saveSettings(settings);
     });
 
@@ -159,7 +151,6 @@ app.whenReady().then(async () => {
     console.error('❌❌❌ [INDEX] CRITICAL ERROR during initialization:', error);
     console.error('Stack:', (error as Error).stack);
 
-    // Показываем диалог с ошибкой
     if (mainWindow) {
       mainWindow.webContents.executeJavaScript(`
         alert('Critical initialization error: ${(error as Error).message}. Check console logs.');

@@ -1,4 +1,4 @@
-// src/pages/TelegramSettingsPage.tsx
+// src/components/TelegramBotSettings.tsx
 import React, { useState, useEffect } from "react";
 import {
     TextField,
@@ -16,10 +16,14 @@ import {
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
-export default function TelegramSettingsPage() {
+export default function TelegramBotSettings() {
     const [botToken, setBotToken] = useState("");
-    const [chatIds, setChatIds] = useState<string[]>([]);
-    const [isActive, setIsActive] = useState(false);
+    const [chatIds, setChatIds] = useState("");
+    const [botStatus, setBotStatus] = useState<{
+        isRunning: boolean;
+        isConfigured: boolean;
+        chatCount: number;
+    } | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
@@ -32,20 +36,20 @@ export default function TelegramSettingsPage() {
     const loadSettings = async () => {
         setLoading(true);
         try {
-            const config = await window.electronAPI?.getTelegramBotConfig();
-            const status = await window.electronAPI?.getTelegramBotStatus();
-
-            console.log(JSON.stringify(config, null, 2), status);
-
-            if (config) {
-                setBotToken(config.botToken || "");
-                setChatIds(config.chatIds || []);
+            if (!window.electronAPI?.telegramBot) {
+                setError("Telegram API not available");
+                setLoading(false);
+                return;
             }
-            if (status) {
-                setIsActive(status.isActive);
-            }
+
+            const config = await window.electronAPI.telegramBot.getConfig();
+            const status = await window.electronAPI.telegramBot.getStatus();
+
+            setBotToken(config.token || "");
+            setChatIds(config.chatIds?.join(", ") || "");
+            setBotStatus(status);
         } catch (err) {
-            console.log(err);
+            console.error("Failed to load settings:", err);
             setError("Failed to load settings");
         } finally {
             setLoading(false);
@@ -53,25 +57,102 @@ export default function TelegramSettingsPage() {
     };
 
     const handleSaveToken = async () => {
+        if (!botToken.trim()) {
+            setError("Token is required");
+            return;
+        }
+
+        if (!window.electronAPI?.telegramBot) {
+            setError("Telegram API not available");
+            return;
+        }
+
+        setError("");
+        setSuccess("");
+
         try {
-            await window.electronAPI?.setTelegramBotToken(botToken);
-            setSuccess("Token saved successfully");
-            setTimeout(() => setSuccess(""), 2000);
+            // Парсим chat IDs
+            const parsedChatIds = chatIds
+                .split(",")
+                .map(id => parseInt(id.trim()))
+                .filter(id => !isNaN(id));
+
+            // Сохраняем токен
+            const result = await window.electronAPI.telegramBot.setToken(botToken);
+
+            if (result.success) {
+                // Обновляем настройки с chat IDs
+                const settings = await window.electronAPI.getSettings();
+                settings.telegramChatIds = parsedChatIds;
+                await window.electronAPI.saveSettings(settings);
+
+                setSuccess("Token saved successfully!");
+                await loadSettings();
+
+                setTimeout(() => setSuccess(""), 2000);
+            } else {
+                setError(result.error || "Failed to save token");
+            }
         } catch (err) {
-            setError("Error saving token");
+            console.error("Error saving token:", err);
+            setError((err as Error).message);
         }
     };
 
-    const handleToggleStream = async () => {
+    const handleStart = async () => {
+        if (!window.electronAPI?.telegramBot) {
+            setError("Telegram API not available");
+            return;
+        }
+
+        if (!botToken.trim()) {
+            setError("Please set bot token first");
+            return;
+        }
+
+        setError("");
         try {
-            if (isActive) {
-                await window.electronAPI?.stopTelegramBotStream();
+            const result = await window.electronAPI.telegramBot.start();
+            if (result.success) {
+                setSuccess("Bot started successfully!");
+                await loadSettings();
+                setTimeout(() => setSuccess(""), 2000);
             } else {
-                await window.electronAPI?.startTelegramBotStream();
+                setError(result.error || "Failed to start bot");
             }
-            setIsActive(!isActive);
         } catch (err) {
-            setError("Error toggling stream");
+            console.error("Error starting bot:", err);
+            setError((err as Error).message);
+        }
+    };
+
+    const handleStop = async () => {
+        if (!window.electronAPI?.telegramBot) {
+            setError("Telegram API not available");
+            return;
+        }
+
+        setError("");
+        try {
+            const result = await window.electronAPI.telegramBot.stop();
+            if (result.success) {
+                setSuccess("Bot stopped successfully!");
+                await loadSettings();
+                setTimeout(() => setSuccess(""), 2000);
+            } else {
+                setError(result.error || "Failed to stop bot");
+            }
+        } catch (err) {
+            console.error("Error stopping bot:", err);
+            setError((err as Error).message);
+        }
+    };
+
+    const handleToggle = async () => {
+        if (botStatus?.isRunning) {
+            await handleStop();
+        } else {
+            await handleStart();
         }
     };
 
@@ -92,6 +173,24 @@ export default function TelegramSettingsPage() {
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
             {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
+            {/* Bot Status */}
+            {botStatus && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: "background.paper", borderRadius: 2 }}>
+                    <Typography variant="h6" gutterBottom>Bot Status</Typography>
+                    <Typography>
+                        Status: <strong style={{ color: botStatus.isRunning ? '#4caf50' : '#f44336' }}>
+                        {botStatus.isRunning ? '🟢 Running' : '🔴 Stopped'}
+                    </strong>
+                    </Typography>
+                    <Typography>
+                        Configured: <strong>{botStatus.isConfigured ? '✅ Yes' : '❌ No'}</strong>
+                    </Typography>
+                    <Typography>
+                        Connected Chats: <strong>{botStatus.chatCount}</strong>
+                    </Typography>
+                </Box>
+            )}
+
             <Box sx={{ mb: 4 }}>
                 <TextField
                     fullWidth
@@ -99,45 +198,41 @@ export default function TelegramSettingsPage() {
                     value={botToken}
                     onChange={(e) => setBotToken(e.target.value)}
                     margin="normal"
-                    placeholder="Enter your Telegram bot token"
+                    placeholder="123456:ABC-DEF..."
                 />
 
-                <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
+                <TextField
+                    fullWidth
+                    label="Chat IDs (comma-separated)"
+                    value={chatIds}
+                    onChange={(e) => setChatIds(e.target.value)}
+                    margin="normal"
+                    placeholder="123456789, 987654321"
+                    helperText="Get your chat ID: send /start to @userinfobot"
+                />
+
+                <Box sx={{ mt: 2, display: "flex", gap: 2, alignItems: "center" }}>
                     <Button
                         variant="contained"
                         color="primary"
                         onClick={handleSaveToken}
                     >
-                        Save Token
+                        Save Configuration
                     </Button>
 
                     <FormControlLabel
                         control={
                             <Switch
-                                checked={isActive}
-                                onChange={handleToggleStream}
+                                checked={botStatus?.isRunning || false}
+                                onChange={handleToggle}
                                 color="primary"
+                                disabled={!botStatus?.isConfigured}
                             />
                         }
-                        label={isActive ? "Stream Active" : "Stream Inactive"}
+                        label={botStatus?.isRunning ? "Bot Active" : "Bot Inactive"}
                     />
                 </Box>
             </Box>
-
-            <Typography variant="h6" gutterBottom>
-                Connected Chats
-            </Typography>
-
-            <List sx={{ bgcolor: "background.paper", borderRadius: 2 }}>
-                {chatIds.map((chatId) => (
-                    <React.Fragment key={chatId}>
-                        <ListItem>
-                            <ListItemText primary={`Chat ID: ${chatId}`} />
-                        </ListItem>
-                        <Divider />
-                    </React.Fragment>
-                ))}
-            </List>
 
             <Box sx={{ mt: 4 }}>
                 <Button
@@ -146,6 +241,12 @@ export default function TelegramSettingsPage() {
                     sx={{ mr: 2 }}
                 >
                     Back
+                </Button>
+                <Button
+                    variant="outlined"
+                    onClick={loadSettings}
+                >
+                    Refresh Status
                 </Button>
             </Box>
         </Box>

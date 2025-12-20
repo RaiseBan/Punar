@@ -2,24 +2,15 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
 import { getGlobalConfigDirectory } from '../utils/wallet';
 import { IpcMain, IpcMainInvokeEvent } from 'electron';
-import { Wallet } from '../../../shared/types';
+import { Wallet, IPC_CHANNELS } from '../../../shared/types';
 
-/**
- * Результат операции с кошельками
- */
 interface WalletOperationResult {
     message?: string;
 }
 
-/**
- * Инициализирует IPC handlers для работы с кошельками
- */
 export function initializeWalletHandlers(ipcMain: IpcMain): void {
-    /**
-     * Получение списка кошельков
-     */
     ipcMain.handle(
-        'get-wallets',
+        IPC_CHANNELS.GET_WALLETS,
         async (): Promise<Wallet[] | WalletOperationResult> => {
             try {
                 const configDir = getGlobalConfigDirectory();
@@ -44,11 +35,8 @@ export function initializeWalletHandlers(ipcMain: IpcMain): void {
         }
     );
 
-    /**
-     * Добавление нового кошелька
-     */
     ipcMain.handle(
-        'add-wallet',
+        IPC_CHANNELS.ADD_WALLET,
         async (_event: IpcMainInvokeEvent, wallet: Wallet): Promise<void> => {
             try {
                 const configDir = getGlobalConfigDirectory();
@@ -70,11 +58,8 @@ export function initializeWalletHandlers(ipcMain: IpcMain): void {
         }
     );
 
-    /**
-     * Удаление кошелька по публичному ключу
-     */
     ipcMain.handle(
-        'delete-wallets',
+        IPC_CHANNELS.DELETE_WALLET,
         async (_event: IpcMainInvokeEvent, publicKey: string): Promise<void> => {
             try {
                 const configDir = getGlobalConfigDirectory();
