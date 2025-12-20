@@ -2,8 +2,10 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
 import { getGlobalConfigDirectory } from '../utils/wallet.js';
 import { IpcMain } from 'electron';
-import { Wallet } from '../shared/types';
-
+export interface Wallet {
+    publicKey: string;
+    privateKey: string;
+}
 function initializeWalletHandlers(ipcMain: IpcMain): void {
     ipcMain.handle('getWallets', async (): Promise<Wallet[] | { message: string }> => {
         try {
