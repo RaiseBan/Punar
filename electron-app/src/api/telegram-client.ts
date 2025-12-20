@@ -43,19 +43,6 @@ class TelegramClient {
       console.error('[Telegram Client] Error sending system notification:', error);
     }
   }
-
-  async sendPoolChangeNotification(data: {
-    taskId: string;
-    oldPool?: string;
-    newPool?: string;
-    tokenAddress?: string;
-  }): Promise<void> {
-    try {
-      await this.client.post('/api/notifications/pool-change', data);
-    } catch (error) {
-      console.error('[Telegram Client] Error sending pool change notification:', error);
-    }
-  }
 }
 
 export const telegramClient = new TelegramClient();

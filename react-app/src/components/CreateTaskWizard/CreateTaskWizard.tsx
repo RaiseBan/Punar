@@ -18,9 +18,8 @@ import StepConfigureLaunchMyNft from "./StepConfigureLaunchMyNft";
 import StepReview from "./StepReview";
 
 // Типы (скорректируйте пути под свой проект)
-import {Wallet, TensorSdkParams, LaunchMyNftParams, MeteoraParams, MevParams} from "../../types";
+import {Wallet, TensorSdkParams, LaunchMyNftParams, MeteoraParams} from "../../types";
 import StepConfigureMeteora from "./StepConfigureMeteora";
-import StepConfigureMevModule from "./StepConfigureMevModule";
 
 // ------------------------
 const STEPS = ["Choose module", "Configure module", "Review & Create"];
@@ -65,17 +64,6 @@ export default function CreateTaskWizard({
         delta: 50000,
         walletSource: "existing",
         privateKey: ""
-    });
-    const [mevParams, setMevParams] = useState<MevParams>({
-        volumeThreshold: 500,
-        checkInterval: 30,
-        maxAttempts: 5,
-        threadWorkers: 2,
-        walletSource: "existing",
-        privateKey: "",
-        mode: "manual",
-        default_bound: 500,
-        globalStrategy: "jito_only"
     });
 
 
@@ -328,26 +316,7 @@ export default function CreateTaskWizard({
 
             };
             onCreateTask(cfg);
-        }else if (selectedModule === "mev_module") {
-            const cfg = {
-                module_name: "MEV Module",
-                task_name: taskName,
-                volume_threshold: mevParams.volumeThreshold,
-                default_bound: mevParams.default_bound,
-                check_interval: mevParams.checkInterval,
-                max_attempts: mevParams.maxAttempts,
-                thread_workers: mevParams.threadWorkers,
-                private_key: mevParams.privateKey,
-                main_rpc: settings?.mainRpc || "",
-                mode: mevParams.mode,
-                globalStrategy: mevParams.globalStrategy,
-                grpc_token: settings?.thor_streamer_address,
-                grpc_address: settings?.thor_streamer_address
-                
-            };
-            onCreateTask(cfg);
         }
-
         handleClose();
     };
 
@@ -415,15 +384,6 @@ export default function CreateTaskWizard({
                         wallets={wallets}
                     />
                 )}
-                {step === 1 && selectedModule === "mev_module" && (
-                    <StepConfigureMevModule
-                        taskName={taskName}
-                        setTaskName={setTaskName}
-                        mevParams={mevParams}
-                        setMevParams={setMevParams}
-                        wallets={wallets}
-                    />
-                )}
 
                 {/* Шаг 2: Review & Create */}
                 {step === 2 && (
@@ -434,7 +394,6 @@ export default function CreateTaskWizard({
                         launchMyNftParams={launchMyNftParams}
                         meteoraParams={meteoraParams}
                         wallets={wallets}
-                        mevParams={mevParams}
                     />
                 )}
             </DialogContent>

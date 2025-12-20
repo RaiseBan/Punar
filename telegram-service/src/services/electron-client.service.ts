@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { config } from '../config/config';
-import { Task, MevProcess, ApiResponse } from '../types/api.types';
+import { Task, ApiResponse } from '../types/api.types';
 
 export class ElectronClient {
   private client: AxiosInstance;
@@ -44,34 +44,6 @@ export class ElectronClient {
     const response = await this.client.get<ApiResponse<string[]>>(
       `/api/tasks/${taskId}/logs`,
       { params: { limit } }
-    );
-    return response.data.data || [];
-  }
-
-  async startMev(): Promise<ApiResponse> {
-    const response = await this.client.post<ApiResponse>('/api/mev/start');
-    return response.data;
-  }
-
-  async stopMev(): Promise<ApiResponse> {
-    const response = await this.client.post<ApiResponse>('/api/mev/stop');
-    return response.data;
-  }
-
-  async getMevProcesses(): Promise<MevProcess[]> {
-    const response = await this.client.get<ApiResponse<MevProcess[]>>('/api/mev/processes');
-    return response.data.data || [];
-  }
-
-  async stopMevProcess(processId: string): Promise<ApiResponse> {
-    const response = await this.client.post<ApiResponse>(`/api/mev/processes/${processId}/stop`);
-    return response.data;
-  }
-
-  async getMevLogs(processId: string, lines?: number): Promise<string[]> {
-    const response = await this.client.get<ApiResponse<string[]>>(
-      `/api/mev/processes/${processId}/logs`,
-      { params: { lines } }
     );
     return response.data.data || [];
   }

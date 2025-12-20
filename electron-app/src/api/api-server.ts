@@ -6,39 +6,13 @@ import { ApiResponse, TaskApiInfo } from '../../../shared/types';
 console.log('📦 [API-SERVER] Module loading...');
 
 /**
- * Интерфейс для MEV Load Balancer
- */
-interface IMevLoadBalancer {
-  start(): Promise<{ success: boolean; status?: string; message?: string; error?: string }>;
-  stop(): Promise<{ success: boolean; message?: string; error?: string }>;
-  getProcesses(): Array<{
-    id?: string;
-    pid?: number | null;
-    tokenAddress: string;
-    meteoraPool?: string | null;
-    pumpSwapPool?: string | null;
-    raydiumPool?: string;
-    config?: Record<string, unknown>;
-    status?: string;
-    startTime?: number;
-    lastActivity?: number | string;
-    signals?: number;
-  }>;
-  stopProcess(processId: string): Promise<{ success: boolean; message?: string; error?: string }>;
-  getProcessLogs(processId: string, lines: number): Promise<string[] | null>;
-}
-
-/**
  * Создает Express API сервер
  */
 export function createApiServer(
-    mainWindow: BrowserWindow | null,
-    mevLoadBalancer: IMevLoadBalancer
+    mainWindow: BrowserWindow | null
 ): Application {
   console.log('🌐 [API-SERVER] createApiServer called');
   console.log(`  - mainWindow: ${!!mainWindow}`);
-  console.log(`  - mevLoadBalancer: ${!!mevLoadBalancer}`);
-
   try {
     const app = express();
     console.log('✅ [API-SERVER] Express app created');
@@ -177,86 +151,6 @@ export function createApiServer(
     });
 
     console.log('✅ [API-SERVER] Tasks routes registered');
-
-    // ============= MEV Endpoints =============
-
-    /**
-     * POST /api/mev/start - Запуск MEV балансировщика
-     */
-    app.post('/api/mev/start', async (_req: Request, res: Response): Promise<void> => {
-      try {
-        const result = await mevLoadBalancer.start();
-        res.json(result);
-      } catch (error) {
-        console.error('[API-SERVER] Error in /api/mev/start:', error);
-        res.json({ success: false, error: (error as Error).message } as ApiResponse);
-      }
-    });
-
-    /**
-     * POST /api/mev/stop - Остановка MEV балансировщика
-     */
-    app.post('/api/mev/stop', async (_req: Request, res: Response): Promise<void> => {
-      try {
-        const result = await mevLoadBalancer.stop();
-        res.json(result);
-      } catch (error) {
-        console.error('[API-SERVER] Error in /api/mev/stop:', error);
-        res.json({ success: false, error: (error as Error).message } as ApiResponse);
-      }
-    });
-
-    /**
-     * GET /api/mev/processes - Получение списка MEV процессов
-     */
-    app.get('/api/mev/processes', async (_req: Request, res: Response): Promise<void> => {
-      try {
-        const processes = mevLoadBalancer.getProcesses();
-        res.json({ success: true, data: processes } as ApiResponse<typeof processes>);
-      } catch (error) {
-        console.error('[API-SERVER] Error in /api/mev/processes:', error);
-        res.json({ success: false, error: (error as Error).message } as ApiResponse);
-      }
-    });
-
-    /**
-     * POST /api/mev/processes/:processId/stop - Остановка MEV процесса
-     */
-    app.post(
-        '/api/mev/processes/:processId/stop',
-        async (req: Request, res: Response): Promise<void> => {
-          try {
-            const { processId } = req.params;
-            const result = await mevLoadBalancer.stopProcess(processId);
-            res.json(result);
-          } catch (error) {
-            console.error('[API-SERVER] Error in /api/mev/processes/:processId/stop:', error);
-            res.json({ success: false, error: (error as Error).message } as ApiResponse);
-          }
-        }
-    );
-
-    /**
-     * GET /api/mev/processes/:processId/logs - Получение логов MEV процесса
-     */
-    app.get(
-        '/api/mev/processes/:processId/logs',
-        async (req: Request, res: Response): Promise<void> => {
-          try {
-            const { processId } = req.params;
-            const lines = parseInt(req.query.lines as string) || 20;
-
-            const logs = await mevLoadBalancer.getProcessLogs(processId, lines);
-            res.json({ success: true, data: logs || [] } as ApiResponse<string[]>);
-          } catch (error) {
-            console.error('[API-SERVER] Error in /api/mev/processes/:processId/logs:', error);
-            res.json({ success: false, error: (error as Error).message } as ApiResponse);
-          }
-        }
-    );
-
-    console.log('✅ [API-SERVER] MEV routes registered');
-
     // ============= Health Endpoint =============
 
     /**

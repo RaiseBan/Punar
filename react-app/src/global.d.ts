@@ -100,16 +100,6 @@ import {
         // ============= Logs =============
         openLogFile: (taskId: number) => Promise<void>;
         invoke: (channel: string, data: unknown) => Promise<unknown>;
-  
-        // ============= MEV LoadBalancer =============
-        mevLoadBalancer: {
-          getStatus: () => Promise<unknown>;
-          start: () => Promise<void>;
-          stop: () => Promise<void>;
-          getProcesses: () => Promise<unknown[]>;
-          stopProcess: (processId: string) => Promise<void>;
-          updateSettings: (settings: unknown) => Promise<void>;
-        };
       };
   
       // Redux state getter (injected by App.tsx)

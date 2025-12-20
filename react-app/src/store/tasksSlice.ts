@@ -1,6 +1,5 @@
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { TaskDataRow, TaskProps } from "../components/Task/types";
-
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { TaskDataRow, TaskProps } from '../components/Task/types';
 
 interface TaskState {
     id: number;
@@ -11,22 +10,19 @@ interface TaskState {
     data: TaskDataRow[];
     logs: string[];
     config?: any;
-    processedTelegramRows?: string[]; // Add support for processed Telegram rows
+    processedTelegramRows?: string[];
 }
 
 interface TasksState {
     tasks: TaskState[];
 }
 
-// Custom action type for middleware to handle token removal
-export const REMOVE_MEV_TOKEN = 'tasks/removeMevToken';
-
 const initialState: TasksState = {
     tasks: [],
 };
 
 export const tasksSlice = createSlice({
-    name: "tasks",
+    name: 'tasks',
     initialState,
     reducers: {
         addTask: (state, action: PayloadAction<TaskProps>) => {
@@ -41,17 +37,21 @@ export const tasksSlice = createSlice({
                 data,
                 logs: [],
                 config,
-                processedTelegramRows: [], // Initialize as empty array
+                processedTelegramRows: [],
             });
         },
+
         removeTask: (state, action: PayloadAction<number>) => {
             console.log(`REMOVE TASK CALLED`);
             state.tasks = state.tasks.filter((task) => task.id !== action.payload);
         },
+
         updateTask: (state, action) => {
             console.log(`UPDATE TASK CALLED`, action.payload);
-            const { id, name, moduleName, status, columns, config, data, processedTelegramRows } = action.payload;
+            const { id, name, moduleName, status, columns, config, data, processedTelegramRows } =
+                action.payload;
             const task = state.tasks.find((t) => t.id === id);
+
             if (task) {
                 if (name !== undefined) task.name = name;
                 if (moduleName !== undefined) task.moduleName = moduleName;
@@ -59,56 +59,45 @@ export const tasksSlice = createSlice({
                 if (columns !== undefined) task.columns = columns;
                 if (config !== undefined) task.config = config;
                 if (data !== undefined) task.data = data;
-
-                // Handle processedTelegramRows specially - merge with existing array if provided
-                if (processedTelegramRows) {
-                    task.processedTelegramRows = Array.from(new Set([
-                        ...(task.processedTelegramRows || []),
-                        ...processedTelegramRows
-                    ]));
+                if (processedTelegramRows !== undefined) {
+                    task.processedTelegramRows = processedTelegramRows;
                 }
             }
         },
+
         addTaskLog: (state, action: PayloadAction<{ taskId: number; log: string }>) => {
-            console.log(`🟠 Redux addTaskLog called for Task ${action.payload.taskId}:`, action.payload.log);
-            const task = state.tasks.find((t) => t.id === action.payload.taskId);
+            const { taskId, log } = action.payload;
+            const task = state.tasks.find((t) => t.id === taskId);
             if (task) {
-                task.logs.push(action.payload.log);
+                task.logs.push(log);
             }
         },
 
         addOrUpdateTask: (state, action: PayloadAction<{ taskId: number; config: any }>) => {
             const { taskId, config } = action.payload;
-            console.log("🟢 Redux: addOrUpdateTask called", action.payload);
+            const existingTask = state.tasks.find((t) => t.id === taskId);
 
-            const existing = state.tasks.find((t) => t.id === taskId);
-
-            if (existing) {
-                console.log("🟡 Updating existing task", taskId);
-                existing.status = "Running";
-                existing.config = config;
-                if (config.module_name) {
-                    existing.moduleName = config.module_name;
-                }
-                if (config.task_name) {
-                    existing.name = config.task_name;
-                }
+            if (existingTask) {
+                console.log('🔵 Updating existing task', taskId);
+                existingTask.config = config;
+                existingTask.status = 'Running';
             } else {
-                console.log("🟠 Creating new task", taskId);
-                const name = config.task_name || `Task ${config.module_name || ""}`;
+                console.log('🟠 Creating new task', taskId);
+                const name = config.task_name || `Task ${config.module_name || ''}`;
                 state.tasks.push({
                     id: taskId,
                     name,
-                    moduleName: config.module_name || "",
-                    status: "Running",
+                    moduleName: config.module_name || '',
+                    status: 'Running',
                     columns: [],
                     data: [],
                     logs: [],
                     config,
-                    processedTelegramRows: [], // Initialize as empty array for new tasks
+                    processedTelegramRows: [],
                 });
             }
         },
+
         addTaskRow: (
             state,
             action: PayloadAction<{ taskId: number; rowCells: string[] }>
@@ -120,14 +109,6 @@ export const tasksSlice = createSlice({
                 task.data.push({ cells: rowCells });
             }
         },
-        // Действие только для миддлвера, не изменяет состояние
-        removeMevToken: (
-            state,
-            action: PayloadAction<{ taskId: number; token: string }>
-        ) => {
-            // Это действие не меняет состояние напрямую, а обрабатывается в middleware
-            console.log(`REMOVE_MEV_TOKEN CALLED for task ${action.payload.taskId}, token ${action.payload.token}`);
-        }
     },
 });
 
@@ -138,7 +119,6 @@ export const {
     addTaskLog,
     addOrUpdateTask,
     addTaskRow,
-    removeMevToken,
 } = tasksSlice.actions;
 
 export default tasksSlice.reducer;

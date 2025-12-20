@@ -26,7 +26,6 @@ export type LogLevel = typeof LOG_LEVELS[keyof typeof LOG_LEVELS];
 export const LOG_MODULES = {
     SYSTEM: 'SYSTEM',
     EVENT_BUS: 'EVENT_BUS',
-    MEV_LOAD_BALANCER: 'MEV_LOAD_BALANCER',
     PROCESS: 'PROCESS',
     IPC: 'IPC',
     API: 'API',

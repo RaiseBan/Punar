@@ -1,8 +1,5 @@
-import { ChildProcess, spawn, execSync } from 'child_process';
-import treeKill from 'tree-kill';
 import { getSettings } from '../utils/fsHelper';
-import { spawnProcess, stopMevProcess, forceKillWindowsProcess } from '../utils/spawnProcess';
-import mevLoadBalancer from '../services/mevLoadBalancer/mevLoadBalancer';
+import { spawnProcess, forceKillWindowsProcess } from '../utils/spawnProcess';
 import fs from 'fs';
 import path from 'path';
 import { app, shell, IpcMain, BrowserWindow, IpcMainInvokeEvent } from 'electron';
@@ -116,20 +113,6 @@ function addLogToQueue(
                 (error as Error).message
             );
         }
-    }
-
-    // Передаем лог в MEV LoadBalancer для анализа
-    try {
-        mevLoadBalancer.handleProcessLog({
-            processId: taskId.toString(),
-            message: logMessage,
-            level: logType === 'stderr' || logMessage.includes('[ERROR]') ? 'error' : 'info',
-        });
-    } catch (error) {
-        console.error(
-            `Ошибка при передаче лога в MEV LoadBalancer для задачи ${taskId}:`,
-            (error as Error).message
-        );
     }
 
     // Добавляем лог в очередь для записи в файл

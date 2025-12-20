@@ -19,7 +19,7 @@ export function initializeWalletHandlers(ipcMain: IpcMain): void {
      * Получение списка кошельков
      */
     ipcMain.handle(
-        'getWallets',
+        'get-wallets',
         async (): Promise<Wallet[] | WalletOperationResult> => {
             try {
                 const configDir = getGlobalConfigDirectory();
@@ -48,7 +48,7 @@ export function initializeWalletHandlers(ipcMain: IpcMain): void {
      * Добавление нового кошелька
      */
     ipcMain.handle(
-        'addWallet',
+        'add-wallet',
         async (_event: IpcMainInvokeEvent, wallet: Wallet): Promise<void> => {
             try {
                 const configDir = getGlobalConfigDirectory();
@@ -74,7 +74,7 @@ export function initializeWalletHandlers(ipcMain: IpcMain): void {
      * Удаление кошелька по публичному ключу
      */
     ipcMain.handle(
-        'deleteWallet',
+        'delete-wallets',
         async (_event: IpcMainInvokeEvent, publicKey: string): Promise<void> => {
             try {
                 const configDir = getGlobalConfigDirectory();

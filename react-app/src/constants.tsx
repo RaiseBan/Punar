@@ -58,12 +58,6 @@ export const MODULES: ModuleItem[] = [
         label: "Meteora DLMM",
         icon: <CloudIcon />,
         isDisabled: false,
-    },
-    {
-        id: "mev_module",
-        label: "MEV Module",
-        icon: <OfflineBolt />,
-        isDisabled: false
     }
 ];
 

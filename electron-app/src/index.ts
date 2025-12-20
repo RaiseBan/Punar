@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
+import fs from "fs";
 
 console.log('📝 [INDEX] Module start loading...');
 
@@ -10,41 +11,79 @@ const config = {
 let mainWindow: BrowserWindow | null = null;
 
 /**
- * Интерфейс для уведомления о смене пула
- */
-interface PoolChangeNotification {
-  taskId: string;
-  oldPool?: string;
-  newPool?: string;
-  tokenAddress?: string;
-}
-
-/**
  * Создает главное окно приложения
  */
 function createWindow(): void {
-  console.log('🪟 [INDEX] createWindow called');
+  console.log('🪟 [INDEX] Creating main window...');
+
+  const preloadPath = path.join(__dirname, 'preload.js');
+  console.log(`📄 [INDEX] Preload path: ${preloadPath}`);
+
+  if (fs.existsSync(preloadPath)) {
+    console.log('✅ [INDEX] Preload file EXISTS');
+  } else {
+    console.error('❌ [INDEX] Preload file NOT FOUND!');
+    console.log('📁 [INDEX] Files in __dirname:', fs.readdirSync(__dirname));
+  }
 
   try {
     mainWindow = new BrowserWindow({
       width: 1200,
       height: 800,
       webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
+        preload: preloadPath,
         contextIsolation: true,
         nodeIntegration: false,
       },
       autoHideMenuBar: true,
       frame: false,
+      show: false, // ← НЕ показываем пока не загрузится
     });
 
     console.log('✅ [INDEX] BrowserWindow created');
 
-    mainWindow.loadURL(
-        process.env.NODE_ENV === 'production'
-            ? `file://${path.join(app.getAppPath(), 'react-app', 'build', 'index.html')}`
-            : `http://localhost:${config.port}`
-    );
+    // ========================================
+    // КРИТИЧЕСКИ ВАЖНЫЕ ОБРАБОТЧИКИ ОШИБОК!
+    // ========================================
+
+    // Ловим ошибки preload
+    mainWindow.webContents.on('preload-error', (event, preloadPath, error) => {
+      console.error('❌❌❌ [INDEX] PRELOAD ERROR!');
+      console.error('Preload path:', preloadPath);
+      console.error('Error:', error);
+      console.error('Error stack:', error.stack);
+    });
+
+    // Пробрасываем console.log из preload/renderer
+    mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+      const levelName = ['verbose', 'info', 'warning', 'error'][level] || 'log';
+      console.log(`[RENDERER ${levelName}] ${message} (${sourceId}:${line})`);
+    });
+
+    // Ловим ошибки загрузки страницы
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+      console.error('❌ [INDEX] Failed to load:', validatedURL);
+      console.error('Error code:', errorCode);
+      console.error('Description:', errorDescription);
+    });
+
+    // Когда preload загружен
+    mainWindow.webContents.on('did-finish-load', () => {
+      console.log('✅ [INDEX] Page finished loading');
+      mainWindow?.show(); // Показываем окно
+    });
+
+    // Когда DOM готов
+    mainWindow.webContents.on('dom-ready', () => {
+      console.log('✅ [INDEX] DOM ready');
+    });
+
+    const url = process.env.NODE_ENV === 'production'
+        ? `file://${path.join(app.getAppPath(), 'react-app', 'build', 'index.html')}`
+        : `http://localhost:${config.port}`;
+
+    console.log(`🌐 [INDEX] Loading URL: ${url}`);
+    mainWindow.loadURL(url);
 
     console.log('✅ [INDEX] Window created successfully');
   } catch (error) {
@@ -104,33 +143,16 @@ app.whenReady().then(async () => {
 
     console.log('✅ [INDEX] All handlers initialized');
 
-    console.log('📝 [INDEX] Step 5: Loading MEV Load Balancer...');
-    const mevLoadBalancerModule = await import('./services/mevLoadBalancer/mevLoadBalancer');
-    const mevLoadBalancer = mevLoadBalancerModule.default;
-    console.log('✅ [INDEX] MEV Load Balancer loaded');
-
     console.log('📝 [INDEX] Step 6: Creating Express API server...');
     const { createApiServer } = await import('./api/api-server');
     console.log('  - createApiServer function loaded');
     console.log('  - Starting server with mainWindow:', !!mainWindow);
-    console.log('  - Starting server with mevLoadBalancer:', !!mevLoadBalancer);
 
-    const server = createApiServer(mainWindow, mevLoadBalancer);
+    const server = createApiServer(mainWindow);
     console.log('✅ [INDEX] Express API server created:', !!server);
 
     console.log('📝 [INDEX] Step 7: Loading Telegram client...');
-    const { telegramClient } = await import('./api/telegram-client');
     console.log('✅ [INDEX] Telegram client loaded');
-
-    // Обработчик уведомлений о смене пула
-    ipcMain.on('telegram-notify-pool-change', (_event, data: PoolChangeNotification) => {
-      try {
-        telegramClient.sendPoolChangeNotification(data);
-      } catch (e) {
-        console.error('❌ [INDEX] Error sending pool change notification:', e);
-      }
-    });
-    console.log('✅ [INDEX] Telegram pool change handler registered');
 
     console.log('✅✅✅ [INDEX] ALL INITIALIZATION COMPLETED SUCCESSFULLY ✅✅✅');
   } catch (error) {

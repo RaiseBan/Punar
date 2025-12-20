@@ -31,15 +31,15 @@ const TaskLogs: React.FC<TaskLogsProps> = ({ logs, taskId }) => {
       setIsLoading(true);
       const newOffset = reset ? 0 : offset;
 
-      const result = await window.electronAPI.invoke('get-task-logs', {
+      const result = (await window.electronAPI.invoke('get-task-logs', {
         taskId,
         offset: newOffset,
-        limit: LOG_DISPLAY_LIMIT
-      });
+        limit: LOG_DISPLAY_LIMIT,
+      })) as { logs: string[]; totalLines: number } | null;
 
       if (result && Array.isArray(result.logs)) {
         // Парсим логи из файла
-        const parsedLogs = result.logs.map((logLine: string) => {
+        const parsedLogs: FileLog[] = result.logs.map((logLine: string) => {
           try {
             // Предполагаем формат: [timestamp] [TYPE] message
             const matches = logLine.match(/\[(.*?)\]\s*\[(.*?)\]\s*(.*)/);
@@ -47,7 +47,7 @@ const TaskLogs: React.FC<TaskLogsProps> = ({ logs, taskId }) => {
               return {
                 timestamp: matches[1],
                 type: matches[2],
-                content: matches[3]
+                content: matches[3],
               };
             }
             return { timestamp: '', type: 'INFO', content: logLine };
@@ -90,106 +90,97 @@ const TaskLogs: React.FC<TaskLogsProps> = ({ logs, taskId }) => {
     const limitedLogs = logs.slice(-LOG_DISPLAY_LIMIT);
 
     return (
-      <>
-        {limitedLogs.length === 0 ? (
-          <Typography variant="body2" sx={{ fontStyle: 'italic', p: 2 }}>
-            Логи пока отсутствуют
-          </Typography>
-        ) : (
-          limitedLogs.map((log, index) => (
-            <Box key={index} sx={{ p: 0.5, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-              {log}
-            </Box>
-          ))
-        )}
-        {logs.length > LOG_DISPLAY_LIMIT && (
-          <Typography variant="body2" sx={{ fontStyle: 'italic', p: 1, color: 'text.secondary' }}>
-            Отображаются только последние {LOG_DISPLAY_LIMIT} сообщений из {logs.length}
-          </Typography>
-        )}
-      </>
+        <>
+          {limitedLogs.length === 0 ? (
+              <Typography variant="body2" sx={{ fontStyle: 'italic', p: 2 }}>
+                Логи пока отсутствуют
+              </Typography>
+          ) : (
+              limitedLogs.map((log, index) => (
+                  <Box key={index} sx={{ p: 0.5, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                    {log}
+                  </Box>
+              ))
+          )}
+          {logs.length > LOG_DISPLAY_LIMIT && (
+              <Typography variant="body2" sx={{ fontStyle: 'italic', p: 1, color: 'text.secondary' }}>
+                Отображаются только последние {LOG_DISPLAY_LIMIT} сообщений из {logs.length}
+              </Typography>
+          )}
+        </>
     );
   };
 
   // Рендеринг логов из файла
   const renderFileLogs = () => {
     return (
-      <>
-        {fileLogs.length === 0 ? (
-          isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-              <CircularProgress size={24} />
-            </Box>
+        <>
+          {fileLogs.length === 0 ? (
+              isLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                    <CircularProgress size={24} />
+                  </Box>
+              ) : (
+                  <Typography variant="body2" sx={{ fontStyle: 'italic', p: 2 }}>
+                    В файле логов нет записей
+                  </Typography>
+              )
           ) : (
-            <Typography variant="body2" sx={{ fontStyle: 'italic', p: 2 }}>
-              В файле логов нет записей
-            </Typography>
-          )
-        ) : (
-          <>
-            {fileLogs.map((log, index) => (
-              <Box key={index} sx={{ p: 0.5, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.8rem', mr: 1 }}>{log.timestamp}</Typography>
-                <Typography component="span" sx={{ color: 'primary.main', fontSize: '0.8rem', mr: 1 }}>[{log.type}]</Typography>
-                <Typography component="span">{log.content}</Typography>
-              </Box>
-            ))}
-            {offset < totalLogs && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => loadLogsFromFile(false)}
-                  disabled={isLoading}
-                >
-                  {isLoading ? <CircularProgress size={16} /> : 'Загрузить еще'}
-                </Button>
-              </Box>
-            )}
-          </>
-        )}
-      </>
+              <>
+                {fileLogs.map((log, index) => (
+                    <Box key={index} sx={{ p: 0.5, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                      <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.8rem', mr: 1 }}>
+                        {log.timestamp}
+                      </Typography>
+                      <Typography component="span" sx={{ color: 'primary.main', fontSize: '0.8rem', mr: 1 }}>
+                        [{log.type}]
+                      </Typography>
+                      <Typography component="span">{log.content}</Typography>
+                    </Box>
+                ))}
+                {offset < totalLogs && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                      <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => loadLogsFromFile(false)}
+                          disabled={isLoading}
+                      >
+                        {isLoading ? <CircularProgress size={16} /> : 'Загрузить еще'}
+                      </Button>
+                    </Box>
+                )}
+              </>
+          )}
+        </>
     );
   };
 
   return (
-    <Paper elevation={1} sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1, borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-        <Typography variant="subtitle2">Логи</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            size="small"
-            variant="text"
-            onClick={() => setAutoScroll(!autoScroll)}
-          >
-            {autoScroll ? 'Отключить автопрокрутку' : 'Включить автопрокрутку'}
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={toggleDisplayMode}
-          >
-            {displayMode === 'memory' ? 'Из файла' : 'Из памяти'}
-          </Button>
-          {displayMode === 'file' && (
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => loadLogsFromFile(true)}
-              disabled={isLoading}
-            >
-              Обновить
+      <Paper elevation={1} sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1, borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+          <Typography variant="subtitle2">Логи</Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button size="small" variant="text" onClick={() => setAutoScroll(!autoScroll)}>
+              {autoScroll ? 'Отключить автопрокрутку' : 'Включить автопрокрутку'}
             </Button>
-          )}
+            <Button size="small" variant="outlined" onClick={toggleDisplayMode}>
+              {displayMode === 'memory' ? 'Из файла' : 'Из памяти'}
+            </Button>
+            {displayMode === 'file' && (
+                <Button size="small" variant="outlined" onClick={() => loadLogsFromFile(true)} disabled={isLoading}>
+                  Обновить
+                </Button>
+            )}
+          </Box>
         </Box>
-      </Box>
 
-      <Box sx={{ flexGrow: 1, overflow: 'auto', maxHeight: '500px', p: 1 }}>
-        {displayMode === 'memory' ? renderMemoryLogs() : renderFileLogs()}
-        <div ref={logsEndRef} />
-      </Box>
-    </Paper>
+        <Box sx={{ flexGrow: 1, overflow: 'auto', maxHeight: '500px', p: 1 }}>
+          {displayMode === 'memory' ? renderMemoryLogs() : renderFileLogs()}
+          <div ref={logsEndRef} />
+        </Box>
+      </Paper>
   );
 };
 
-export default TaskLogs; 
+export default TaskLogs;

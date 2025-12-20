@@ -8,14 +8,14 @@ export async function checkPairDex(pair: string ) {
 
 
     } catch (error) {
-        logger.info(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Error while check for DEX: ${error}`);
-        logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Подробная ошибка fetch 1: ${error.message}`);
+        logger.info(logger.LOG_MODULES.API, `Error while check for DEX: ${error}`);
+        logger.error(logger.LOG_MODULES.API, `Подробная ошибка fetch 1: ${error.message}`);
         if (error.cause) {
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, `Причина ошибки: ${error.cause}`);
+            logger.error(logger.LOG_MODULES.API, `Причина ошибки: ${error.cause}`);
         }
         // Можно добавить дополнительные проверки сетевых ошибок
         if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-            logger.error(logger.LOG_MODULES.MEV_LOAD_BALANCER, 'Сетевая ошибка: не удалось подключиться к серверу');
+            logger.error(logger.LOG_MODULES.API, 'Сетевая ошибка: не удалось подключиться к серверу');
         }
         return undefined;
     }

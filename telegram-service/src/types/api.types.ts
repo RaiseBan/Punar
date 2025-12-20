@@ -50,14 +50,3 @@ export interface Task {
   status?: string;
   logs?: string[];
 }
-
-export interface MevProcess {
-  id: string;
-  tokenAddress: string;
-  meteoraPool?: string;
-  pumpSwapPool?: string;
-  config?: Record<string, unknown>;
-  status?: string;
-  lastActivity?: string;
-}
-
