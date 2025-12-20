@@ -4,34 +4,39 @@ import { BotConfig, BotStatus, ApiResponse } from '../types/api.types';
 
 export const botRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: BotConfig; Reply: ApiResponse }>(
-    '/bot/config',
-    {
-      schema: {
-        body: {
-          type: 'object',
-          required: ['botToken', 'chatIds'],
-          properties: {
-            botToken: { type: 'string' },
-            chatIds: { type: 'array', items: { type: 'number' } },
+      '/bot/config',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            required: ['botToken', 'chatIds'],
+            properties: {
+              botToken: { type: 'string' },
+              chatIds: { type: 'array', items: { type: 'number' } },
+            },
           },
         },
       },
-    },
-    async (request, reply) => {
-      return { success: true };
-    }
+      async (request, reply) => {
+        try {
+          const { botToken, chatIds } = request.body;
+          botService.updateConfig(botToken, chatIds);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
   );
 
   fastify.get<{ Reply: ApiResponse<BotStatus> }>('/bot/status', async (request, reply) => {
+    const status = botService.getStatus();
     return {
       success: true,
-      data: {
-        isActive: true,
-        lastActivity: new Date().toISOString(),
-      },
+      data: status,
     };
   });
 
+  // Убираем schema для body - разрешаем пустой body
   fastify.post<{ Reply: ApiResponse }>('/bot/start', async (request, reply) => {
     try {
       await botService.startPolling();
@@ -41,9 +46,10 @@ export const botRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
+  // Убираем schema для body - разрешаем пустой body
   fastify.post<{ Reply: ApiResponse }>('/bot/stop', async (request, reply) => {
     try {
-      botService.stopPolling();
+      await botService.stopPolling();
       return { success: true };
     } catch (error) {
       return { success: false, error: (error as Error).message };

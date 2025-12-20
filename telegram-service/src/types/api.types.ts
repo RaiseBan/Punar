@@ -6,6 +6,7 @@ export interface BotConfig {
 export interface BotStatus {
   isActive: boolean;
   lastActivity: string;
+  chatCount: number;
 }
 
 export interface TaskNotificationRequest {

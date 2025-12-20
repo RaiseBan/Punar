@@ -18,11 +18,26 @@ export class BotService {
   private commands: Map<string, CommandHandler> = new Map();
   private messageQueue: Array<{ chatId: number; text: string; options?: SendMessageOptions }> = [];
   private processing: boolean = false;
+  private botToken: string = '';
+  private chatIds: number[] = [];
 
   constructor() {
+    this.botToken = config.botToken;
+    this.chatIds = config.chatIds;
+
     this.client = axios.create({
-      baseURL: `https://api.telegram.org/bot${config.botToken}`,
-      timeout: 30000,
+      baseURL: `https://api.telegram.org/bot${this.botToken}`,
+      timeout: 40000,
+    });
+  }
+
+  updateConfig(botToken: string, chatIds: number[]): void {
+    this.botToken = botToken;
+    this.chatIds = chatIds;
+
+    this.client = axios.create({
+      baseURL: `https://api.telegram.org/bot${this.botToken}`,
+      timeout: 40000,
     });
   }
 
@@ -32,18 +47,32 @@ export class BotService {
 
   async startPolling(): Promise<void> {
     if (this.isPolling) return;
-    
+
+    if (!this.botToken) {
+      throw new Error('Bot token not configured. Call updateConfig first.');
+    }
+
     this.isPolling = true;
     await this.deleteWebhook();
     this.poll();
   }
 
-  stopPolling(): void {
+  async stopPolling(): Promise<void> {
     this.isPolling = false;
     if (this.pollInterval) {
       clearTimeout(this.pollInterval);
       this.pollInterval = null;
     }
+    // Даем время на завершение текущего запроса
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  getStatus(): { isActive: boolean; lastActivity: string; chatCount: number } {
+    return {
+      isActive: this.isPolling,
+      lastActivity: new Date().toISOString(),
+      chatCount: this.chatIds.length,
+    };
   }
 
   private async deleteWebhook(): Promise<void> {
@@ -71,8 +100,15 @@ export class BotService {
           this.lastUpdateId = Math.max(this.lastUpdateId, update.update_id);
         }
       }
-    } catch (error) {
-      console.error('Polling error:', error);
+    } catch (error: any) {
+      // Если 409 - webhook conflict, пробуем удалить webhook
+      if (error?.response?.status === 409) {
+        console.log('Webhook conflict detected, removing webhook...');
+        await this.deleteWebhook();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } else {
+        console.error('Polling error:', error);
+      }
     } finally {
       if (this.isPolling) {
         this.pollInterval = setTimeout(() => this.poll(), 1000);
@@ -88,8 +124,8 @@ export class BotService {
 
   private async handleMessage(message: TelegramMessage): Promise<void> {
     const chatId = message.chat.id;
-    
-    if (!config.chatIds.includes(chatId)) {
+
+    if (!this.chatIds.includes(chatId)) {
       await this.sendMessage(chatId, '⛔ Доступ запрещен');
       return;
     }
@@ -143,9 +179,9 @@ export class BotService {
   }
 
   private async sendSingleMessage(
-    chatId: number,
-    text: string,
-    options: SendMessageOptions
+      chatId: number,
+      text: string,
+      options: SendMessageOptions
   ): Promise<void> {
     await this.client.post('/sendMessage', {
       chat_id: chatId,
@@ -156,12 +192,12 @@ export class BotService {
   }
 
   private async sendLongMessage(
-    chatId: number,
-    text: string,
-    options: SendMessageOptions
+      chatId: number,
+      text: string,
+      options: SendMessageOptions
   ): Promise<void> {
     const chunks = this.splitMessage(text);
-    
+
     for (let i = 0; i < chunks.length; i++) {
       await this.client.post('/sendMessage', {
         chat_id: chatId,
@@ -184,7 +220,7 @@ export class BotService {
           chunks.push(current);
           current = '';
         }
-        
+
         if (line.length > TELEGRAM_MESSAGE_LIMIT) {
           let remaining = line;
           while (remaining.length > 0) {
@@ -207,7 +243,7 @@ export class BotService {
   }
 
   async broadcastMessage(text: string, options?: SendMessageOptions): Promise<void> {
-    for (const chatId of config.chatIds) {
+    for (const chatId of this.chatIds) {
       await this.sendMessage(chatId, text, options);
     }
   }

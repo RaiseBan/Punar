@@ -25,7 +25,6 @@ class TelegramServiceClient {
       timeout: 5000,
       headers: {
         'x-api-key': TELEGRAM_API_KEY,
-        'Content-Type': 'application/json',
       },
     });
   }
@@ -35,7 +34,9 @@ class TelegramServiceClient {
    */
   async setBotConfig(config: { botToken: string; chatIds: number[] }): Promise<boolean> {
     try {
-      const response = await this.client.post('/api/bot/config', config);
+      const response = await this.client.post('/api/bot/config', config, {
+        headers: { 'Content-Type': 'application/json' }
+      });
       return response.data.success;
     } catch (error) {
       console.error('[TelegramHandler] Error setting bot config:', error);
@@ -69,7 +70,10 @@ class TelegramServiceClient {
    */
   async startBot(): Promise<boolean> {
     try {
-      const response = await this.client.post('/api/bot/start');
+      // Отправляем пустой объект вместо undefined
+      const response = await this.client.post('/api/bot/start', {}, {
+        headers: { 'Content-Type': 'application/json' }
+      });
       return response.data.success;
     } catch (error) {
       console.error('[TelegramHandler] Error starting bot:', error);
@@ -82,7 +86,10 @@ class TelegramServiceClient {
    */
   async stopBot(): Promise<boolean> {
     try {
-      const response = await this.client.post('/api/bot/stop');
+      // Отправляем пустой объект вместо undefined
+      const response = await this.client.post('/api/bot/stop', {}, {
+        headers: { 'Content-Type': 'application/json' }
+      });
       return response.data.success;
     } catch (error) {
       console.error('[TelegramHandler] Error stopping bot:', error);
@@ -187,16 +194,9 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
           });
 
           if (success) {
-            // Генерируем событие через EventBus
-            EventBus.emit(TELEGRAM_EVENTS.BOT_CONFIGURED, {
-              token: token.substring(0, 10) + '...',
-              chatCount: chatIds.length,
-              timestamp: Date.now(),
-            });
-
             return { success: true };
           } else {
-            return { success: false, error: 'Failed to configure telegram-service' };
+            return { success: false, error: 'Failed to configure bot in telegram-service' };
           }
         } catch (error) {
           console.error('[TelegramHandler] Error setting token:', error);
@@ -210,32 +210,9 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
    */
   ipcMain.handle(
       IPC_CHANNELS.TELEGRAM_GET_STATUS,
-      async (_event: IpcMainInvokeEvent): Promise<TelegramBotStatus> => {
+      async (_event: IpcMainInvokeEvent): Promise<TelegramBotStatus | null> => {
         console.log('[TelegramHandler] Getting Telegram bot status');
-
-        const config = await getTelegramConfig();
-        const isConfigured = config.token.length > 0;
-
-        if (!isConfigured) {
-          return {
-            isRunning: false,
-            isConfigured: false,
-            chatCount: 0,
-          };
-        }
-
-        // Проверяем статус в telegram-service
-        const status = await telegramServiceClient.getBotStatus();
-
-        if (status) {
-          return status;
-        } else {
-          return {
-            isRunning: false,
-            isConfigured: true,
-            chatCount: config.chatIds?.length || 0,
-          };
-        }
+        return await telegramServiceClient.getBotStatus();
       }
   );
 

@@ -5,20 +5,20 @@ import {
     Button,
     Typography,
     Box,
-    List,
-    ListItem,
-    ListItemText,
-    Divider,
     CircularProgress,
     Alert,
     Switch,
-    FormControlLabel
+    FormControlLabel,
+    InputAdornment,
+    IconButton
 } from "@mui/material";
+import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 
 export default function TelegramBotSettings() {
     const [botToken, setBotToken] = useState("");
     const [chatIds, setChatIds] = useState("");
+    const [showToken, setShowToken] = useState(false);
     const [botStatus, setBotStatus] = useState<{
         isRunning: boolean;
         isConfigured: boolean;
@@ -47,7 +47,13 @@ export default function TelegramBotSettings() {
 
             setBotToken(config.token || "");
             setChatIds(config.chatIds?.join(", ") || "");
-            setBotStatus(status);
+
+            // Берем chatCount из локального конфига вместо бекенда
+            setBotStatus({
+                isRunning: status?.isRunning || false,
+                isConfigured: !!config.token,
+                chatCount: config.chatIds?.length || 0,
+            });
         } catch (err) {
             console.error("Failed to load settings:", err);
             setError("Failed to load settings");
@@ -195,10 +201,23 @@ export default function TelegramBotSettings() {
                 <TextField
                     fullWidth
                     label="Bot Token"
+                    type={showToken ? "text" : "password"}
                     value={botToken}
                     onChange={(e) => setBotToken(e.target.value)}
                     margin="normal"
                     placeholder="123456:ABC-DEF..."
+                    InputProps={{
+                        endAdornment: (
+                            <InputAdornment position="end">
+                                <IconButton
+                                    onClick={() => setShowToken(!showToken)}
+                                    edge="end"
+                                >
+                                    {showToken ? <VisibilityOff /> : <Visibility />}
+                                </IconButton>
+                            </InputAdornment>
+                        ),
+                    }}
                 />
 
                 <TextField

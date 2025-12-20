@@ -11,16 +11,13 @@ interface Config {
 }
 
 function parseEnv(): Config {
-  const botToken = process.env.BOT_TOKEN;
-  if (!botToken) {
-    throw new Error('BOT_TOKEN is required');
-  }
+  const botToken = process.env.BOT_TOKEN || '';
 
   const chatIdsStr = process.env.CHAT_IDS || '';
   const chatIds = chatIdsStr
-    .split(',')
-    .map(id => parseInt(id.trim(), 10))
-    .filter(id => !isNaN(id));
+      .split(',')
+      .map(id => parseInt(id.trim(), 10))
+      .filter(id => !isNaN(id));
 
   const electronApiUrl = process.env.ELECTRON_API_URL || 'http://localhost:3002';
   const serviceApiKey = process.env.SERVICE_API_KEY || 'default-key';

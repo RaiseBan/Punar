@@ -31,13 +31,14 @@ async function start(): Promise<void> {
       return { status: 'ok', timestamp: new Date().toISOString() };
     });
 
+    // Регистрируем команды, но НЕ запускаем polling
+    // Polling запустится только когда пользователь нажмет Start в UI
     registerCommands();
-    
-    await botService.startPolling();
-    fastify.log.info('Telegram bot polling started');
+    fastify.log.info('Telegram commands registered');
 
     await fastify.listen({ port: config.port, host: '0.0.0.0' });
     fastify.log.info(`Server listening on port ${config.port}`);
+    fastify.log.info('Bot is stopped. Use POST /api/bot/start to start polling');
   } catch (error) {
     fastify.log.error(error);
     process.exit(1);
@@ -46,14 +47,14 @@ async function start(): Promise<void> {
 
 process.on('SIGINT', async () => {
   fastify.log.info('Received SIGINT, shutting down gracefully...');
-  botService.stopPolling();
+  await botService.stopPolling();
   await fastify.close();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   fastify.log.info('Received SIGTERM, shutting down gracefully...');
-  botService.stopPolling();
+  await botService.stopPolling();
   await fastify.close();
   process.exit(0);
 });
