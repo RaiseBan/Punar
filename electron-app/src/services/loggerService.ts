@@ -1,41 +1,59 @@
 /**
- * LoggerService - унифицированный сервис логирования для electron-приложения
- *
- * Поддерживает разные модули и уровни логирования.
- * Выводит информацию в консоль с временной меткой и цветовым форматированием.
+ * Сервис логирования с поддержкой цветов и модулей
  */
 
-import { EventBus, PROCESS_EVENTS, SYSTEM_EVENTS, SystemErrorEvent } from '../../../shared/eventBus';
+import { EventBus } from '../../../shared/eventBus';
+import { PROCESS_EVENTS } from '../../../shared/types';
 
-// Константы для уровней логирования
-const LOG_LEVELS = {
+// ============= ТИПЫ =============
+
+/**
+ * Уровни логирования
+ */
+export const LOG_LEVELS = {
     DEBUG: 'DEBUG',
     INFO: 'INFO',
     WARN: 'WARN',
     ERROR: 'ERROR',
-    FATAL: 'FATAL'
-};
+    FATAL: 'FATAL',
+} as const;
 
-// Константы для модулей
-const LOG_MODULES = {
+export type LogLevel = typeof LOG_LEVELS[keyof typeof LOG_LEVELS];
+
+/**
+ * Модули системы
+ */
+export const LOG_MODULES = {
     SYSTEM: 'SYSTEM',
+    EVENT_BUS: 'EVENT_BUS',
     MEV_LOAD_BALANCER: 'MEV_LOAD_BALANCER',
-    TELEGRAM_SERVICE: 'TELEGRAM_SERVICE',
-    SPAWN_PROCESS: 'SPAWN_PROCESS',
-    WEB_SERVER: 'WEB_SERVER',
-    ELECTRON: 'ELECTRON',
-    TOKEN_RELEASE: 'TOKEN_RELEASE',
-    API_SERVICE: 'API_SERVICE',
-    CONFIG_SERVICE: 'CONFIG_SERVICE',
-    JITO: "JITO",
-    CLEANING_POOLS: "CLEANING_POOLS",
-    EVENT_BUS: "EVENT_BUS" // Новый модуль для EventBus
-};
+    PROCESS: 'PROCESS',
+    IPC: 'IPC',
+    API: 'API',
+    TELEGRAM: 'TELEGRAM',
+    CONFIG: 'CONFIG',
+    WALLET: 'WALLET',
+    NETWORK: 'NETWORK',
+    DATABASE: 'DATABASE',
+    JITO: 'JITO',
+    CLEANING_POOLS: 'CLEANING_POOLS',
+    SPAWN_PROCESS: 'SPAWN_PROCESS'
+} as const;
 
-// Расширенная цветовая палитра для консоли
-const COLORS = {
-    // Базовые цвета
+export type LogModule = typeof LOG_MODULES[keyof typeof LOG_MODULES];
+
+/**
+ * Цвета для консоли
+ */
+export const COLORS = {
     RESET: '\x1b[0m',
+    BRIGHT: '\x1b[1m',
+    DIM: '\x1b[2m',
+    UNDERSCORE: '\x1b[4m',
+    BLINK: '\x1b[5m',
+    REVERSE: '\x1b[7m',
+    HIDDEN: '\x1b[8m',
+
     BLACK: '\x1b[30m',
     RED: '\x1b[31m',
     GREEN: '\x1b[32m',
@@ -45,17 +63,6 @@ const COLORS = {
     CYAN: '\x1b[36m',
     WHITE: '\x1b[37m',
 
-    // Яркие цвета
-    BRIGHT_BLACK: '\x1b[90m',
-    BRIGHT_RED: '\x1b[91m',
-    BRIGHT_GREEN: '\x1b[92m',
-    BRIGHT_YELLOW: '\x1b[93m',
-    BRIGHT_BLUE: '\x1b[94m',
-    BRIGHT_MAGENTA: '\x1b[95m',
-    BRIGHT_CYAN: '\x1b[96m',
-    BRIGHT_WHITE: '\x1b[97m',
-
-    // Фоновые цвета
     BG_BLACK: '\x1b[40m',
     BG_RED: '\x1b[41m',
     BG_GREEN: '\x1b[42m',
@@ -65,56 +72,60 @@ const COLORS = {
     BG_CYAN: '\x1b[46m',
     BG_WHITE: '\x1b[47m',
 
-    // Стили текста
-    BOLD: '\x1b[1m',
-    DIM: '\x1b[2m',
-    UNDERLINE: '\x1b[4m',
+    BRIGHT_BLACK: '\x1b[90m',
+    BRIGHT_RED: '\x1b[91m',
+    BRIGHT_GREEN: '\x1b[92m',
+    BRIGHT_YELLOW: '\x1b[93m',
+    BRIGHT_BLUE: '\x1b[94m',
+    BRIGHT_MAGENTA: '\x1b[95m',
+    BRIGHT_CYAN: '\x1b[96m',
+    BRIGHT_WHITE: '\x1b[97m',
 
-    // Цвета для разных уровней логирования
-    LEVEL: {
-        DEBUG: '\x1b[36m', // Cyan
-        INFO: '\x1b[32m',  // Green
-        WARN: '\x1b[33m',  // Yellow
-        ERROR: '\x1b[31m', // Red
-        FATAL: '\x1b[91m', // Bright Red
+    BOLD: '\x1b[1m',
+} as const;
+
+// ============= ШАБЛОНЫ =============
+
+const TEMPLATES = {
+    timestamp: (ts: string): string =>
+        `${COLORS.DIM}[${ts}]${COLORS.RESET}`,
+
+    level: (level: LogLevel): string => {
+        const colors: Record<LogLevel, string> = {
+            [LOG_LEVELS.DEBUG]: COLORS.BRIGHT_BLUE,
+            [LOG_LEVELS.INFO]: COLORS.BRIGHT_GREEN,
+            [LOG_LEVELS.WARN]: COLORS.BRIGHT_YELLOW,
+            [LOG_LEVELS.ERROR]: COLORS.BRIGHT_RED,
+            [LOG_LEVELS.FATAL]: COLORS.BRIGHT_MAGENTA,
+        };
+        return `${colors[level]}[${level.padEnd(5)}]${COLORS.RESET}`;
     },
 
-    // Цвета для разных модулей
-    MODULE: {
-        SYSTEM: '\x1b[35m',              // Magenta
-        MEV_LOAD_BALANCER: '\x1b[94m',   // Bright Blue
-        TELEGRAM_SERVICE: '\x1b[96m',    // Bright Cyan
-        SPAWN_PROCESS: '\x1b[93m',       // Bright Yellow
-        WEB_SERVER: '\x1b[92m',          // Bright Green
-        ELECTRON: '\x1b[95m',            // Bright Magenta
-        TOKEN_RELEASE: '\x1b[36m',       // Cyan
-        API_SERVICE: '\x1b[34m',         // Blue
-        CONFIG_SERVICE: '\x1b[33m',      // Yellow
-        JITO: '\x1b[91m',                // Bright Red
-        CLEANING_POOLS: '\x1b[32m',      // Green
-        EVENT_BUS: '\x1b[96m',           // Bright Cyan
-    }
+    module: (module: LogModule): string =>
+        `${COLORS.CYAN}[${module}]${COLORS.RESET}`,
+
+    success: (msg: string): string =>
+        `${COLORS.BRIGHT_GREEN}✓ ${msg}${COLORS.RESET}`,
+
+    failure: (msg: string): string =>
+        `${COLORS.BRIGHT_RED}✗ ${msg}${COLORS.RESET}`,
+
+    highlight: (msg: string): string =>
+        `${COLORS.BOLD}${msg}${COLORS.RESET}`,
+
+    value: (val: string | number): string =>
+        `${COLORS.BRIGHT_CYAN}${val}${COLORS.RESET}`,
 };
 
-// Минимальный уровень логирования (по умолчанию все логи выводятся)
-let minimumLogLevel = LOG_LEVELS.DEBUG;
+// ============= СЕРВИС ЛОГИРОВАНИЯ =============
 
-// Шаблоны для форматирования
-const TEMPLATES = {
-    timestamp: (timestamp: any) => `${COLORS.BRIGHT_BLACK}[${timestamp}]${COLORS.RESET}`,
-    level: (level: any) => `${COLORS.LEVEL[level]}[${level}]${COLORS.RESET}`,
-    module: (module: any) => `${COLORS.MODULE[module]}[${module}]${COLORS.RESET}`,
-    success: (msg: any) => `${COLORS.BRIGHT_GREEN}✓ ${msg}${COLORS.RESET}`,
-    failure: (msg: any) => `${COLORS.BRIGHT_RED}✗ ${msg}${COLORS.RESET}`,
-    highlight: (msg: any) => `${COLORS.BOLD}${msg}${COLORS.RESET}`,
-    value: (val: any) => `${COLORS.BRIGHT_CYAN}${val}${COLORS.RESET}`
-};
+let minimumLogLevel: LogLevel = LOG_LEVELS.DEBUG;
 
 class LoggerService {
-    LOG_LEVELS = LOG_LEVELS;
-    LOG_MODULES = LOG_MODULES;
-    TEMPLATES = TEMPLATES;
-    COLORS = COLORS;
+    public readonly LOG_LEVELS = LOG_LEVELS;
+    public readonly LOG_MODULES = LOG_MODULES;
+    public readonly TEMPLATES = TEMPLATES;
+    public readonly COLORS = COLORS;
 
     private eventBusInitialized = false;
 
@@ -122,7 +133,6 @@ class LoggerService {
 
     /**
      * Инициализация подписок на EventBus
-     * Вызывается один раз при старте приложения
      */
     initializeEventBusListeners(): void {
         if (this.eventBusInitialized) {
@@ -134,8 +144,7 @@ class LoggerService {
 
         // Подписываемся на события запуска процессов
         EventBus.on(PROCESS_EVENTS.STARTED, (data) => {
-            // Type assertion для доступа к специфичным свойствам ProcessStartedEvent
-            const eventData = data as any;
+            const eventData = data as { taskId: string | number; moduleName: string };
             this.info(
                 LOG_MODULES.EVENT_BUS,
                 `▶️ Процесс запущен: Task ${TEMPLATES.value(eventData.taskId)}, Модуль: ${TEMPLATES.highlight(eventData.moduleName)}`
@@ -144,42 +153,15 @@ class LoggerService {
 
         // Подписываемся на события остановки процессов
         EventBus.on(PROCESS_EVENTS.STOPPED, (data) => {
-            const eventData = data as any;
-            const exitCodeColor = eventData.exitCode === 0 ? COLORS.BRIGHT_GREEN : COLORS.BRIGHT_RED;
+            const eventData = data as { taskId: string | number; exitCode: number | null };
+            const exitCodeColor =
+                eventData.exitCode === 0
+                    ? COLORS.BRIGHT_GREEN
+                    : COLORS.BRIGHT_RED;
             this.info(
                 LOG_MODULES.EVENT_BUS,
-                `⏹️ Процесс остановлен: Task ${TEMPLATES.value(eventData.taskId)}, Код: ${exitCodeColor}${eventData.exitCode}${COLORS.RESET}`
-            );
-        });
-
-        // Подписываемся на события краша процессов
-        EventBus.on(PROCESS_EVENTS.CRASHED, (data) => {
-            const eventData = data as any;
-            this.error(
-                LOG_MODULES.EVENT_BUS,
-                `💥 Процесс упал: Task ${TEMPLATES.value(eventData.taskId)}`
-            );
-        });
-
-        // Подписываемся на системные ошибки
-        EventBus.on(SYSTEM_EVENTS.ERROR_OCCURRED, (data) => {
-            // Type assertion для SystemErrorEvent
-            const errorData = data as SystemErrorEvent;
-            this.error(
-                LOG_MODULES.EVENT_BUS,
-                `Системная ошибка [${errorData.code}]: ${errorData.message}`,
-                errorData.details
-            );
-        });
-
-        // Подписываемся на предупреждения
-        EventBus.on(SYSTEM_EVENTS.WARNING_OCCURRED, (data) => {
-            // Type assertion для SystemErrorEvent (WARNING использует ту же структуру)
-            const warningData = data as SystemErrorEvent;
-            this.warn(
-                LOG_MODULES.EVENT_BUS,
-                `Предупреждение [${warningData.code}]: ${warningData.message}`,
-                warningData.details
+                `⏹️ Процесс остановлен: Task ${TEMPLATES.value(eventData.taskId)}, ` +
+                `Exit code: ${exitCodeColor}${eventData.exitCode}${COLORS.RESET}`
             );
         });
 
@@ -189,12 +171,14 @@ class LoggerService {
 
     /**
      * Устанавливает минимальный уровень логирования
-     * @param {string} level - Уровень логирования из LOG_LEVELS
      */
-    setMinimumLogLevel(level: any): void {
-        if (LOG_LEVELS[level]) {
-            minimumLogLevel = LOG_LEVELS[level];
-            this.info(LOG_MODULES.SYSTEM, `Установлен минимальный уровень логирования: ${TEMPLATES.highlight(minimumLogLevel)}`);
+    setMinimumLogLevel(level: LogLevel): void {
+        if (Object.values(LOG_LEVELS).includes(level)) {
+            minimumLogLevel = level;
+            this.info(
+                LOG_MODULES.SYSTEM,
+                `Установлен минимальный уровень логирования: ${TEMPLATES.highlight(minimumLogLevel)}`
+            );
         } else {
             this.warn(LOG_MODULES.SYSTEM, `Некорректный уровень логирования: ${level}`);
         }
@@ -202,10 +186,8 @@ class LoggerService {
 
     /**
      * Проверяет, должно ли логироваться сообщение данного уровня
-     * @param {string} level - Проверяемый уровень
-     * @returns {boolean} - true, если сообщение должно быть залогировано
      */
-    private shouldLog(level: any): boolean {
+    private shouldLog(level: LogLevel): boolean {
         const levels = Object.values(LOG_LEVELS);
         const currentLevelIndex = levels.indexOf(level);
         const minLevelIndex = levels.indexOf(minimumLogLevel);
@@ -215,12 +197,13 @@ class LoggerService {
 
     /**
      * Основная функция логирования
-     * @param {string} level - Уровень из LOG_LEVELS
-     * @param {string} module - Модуль из LOG_MODULES
-     * @param {string} message - Сообщение для логирования
-     * @param {Object} [data] - Дополнительные данные для вывода
      */
-    private log(level: any, module: any, message: string, data: any = null): void {
+    private log(
+        level: LogLevel,
+        module: LogModule,
+        message: string,
+        data: unknown = null
+    ): void {
         if (!this.shouldLog(level)) {
             return;
         }
@@ -233,78 +216,57 @@ class LoggerService {
         const logMessage = `${formattedTimestamp} ${formattedLevel} ${formattedModule} ${message}`;
         console.log(logMessage);
 
-        if (data !== null) {
+        if (data !== null && data !== undefined) {
             console.log(`${COLORS.DIM}Data:${COLORS.RESET}`, data);
         }
     }
 
     /**
      * Вывод отладочной информации
-     * @param {string} module - Модуль из LOG_MODULES
-     * @param {string} message - Сообщение
-     * @param {Object} [data] - Дополнительные данные
      */
-    debug(module: any, message: string, data: any = null): void {
+    debug(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.DEBUG, module, message, data);
     }
 
     /**
      * Вывод информационного сообщения
-     * @param {string} module - Модуль из LOG_MODULES
-     * @param {string} message - Сообщение
-     * @param {Object} [data] - Дополнительные данные
      */
-    info(module: any, message: string, data: any = null): void {
+    info(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.INFO, module, message, data);
     }
 
     /**
      * Вывод предупреждения
-     * @param {string} module - Модуль из LOG_MODULES
-     * @param {string} message - Сообщение
-     * @param {Object} [data] - Дополнительные данные
      */
-    warn(module: any, message: string, data: any = null): void {
+    warn(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.WARN, module, message, data);
     }
 
     /**
      * Вывод сообщения об ошибке
-     * @param {string} module - Модуль из LOG_MODULES
-     * @param {string} message - Сообщение
-     * @param {Object} [data] - Дополнительные данные
      */
-    error(module: any, message: string, data: any = null): void {
+    error(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.ERROR, module, message, data);
     }
 
     /**
      * Вывод сообщения о критической ошибке
-     * @param {string} module - Модуль из LOG_MODULES
-     * @param {string} message - Сообщение
-     * @param {Object} [data] - Дополнительные данные
      */
-    fatal(module: any, message: string, data: any = null): void {
+    fatal(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.FATAL, module, message, data);
     }
 
     /**
      * Вывод сообщения о успешном выполнении операции
-     * @param {string} module - Модуль из LOG_MODULES
-     * @param {string} message - Сообщение
-     * @param {Object} [data] - Дополнительные данные
      */
-    success(module: any, message: string, data: any = null): void {
+    success(module: LogModule, message: string, data: unknown = null): void {
         this.info(module, TEMPLATES.success(message), data);
     }
 
     /**
      * Вывод сообщения о неудачном выполнении операции
-     * @param {string} module - Модуль из LOG_MODULES
-     * @param {string} message - Сообщение
-     * @param {Object} [data] - Дополнительные данные
      */
-    failure(module: any, message: string, data: any = null): void {
+    failure(module: LogModule, message: string, data: unknown = null): void {
         this.error(module, TEMPLATES.failure(message), data);
     }
 }

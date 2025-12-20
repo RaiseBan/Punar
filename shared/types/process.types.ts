@@ -22,7 +22,7 @@ export interface ProcessInfo {
   exitTime?: number;
   exitCode?: number | null;
   exitReason?: string;
-  moduleName?: string;
+  moduleName: string;  // Обязательное поле
   config?: TaskConfig;
   logs: string[];
   status?: ProcessStatus;

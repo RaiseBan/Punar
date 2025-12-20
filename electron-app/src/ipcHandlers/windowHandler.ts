@@ -1,8 +1,20 @@
 import { IpcMain, BrowserWindow } from 'electron';
 
-function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWindow): void {
-    ipcMain.handle("minimizeWindow", () => mainWindow.minimize());
-    ipcMain.handle("closeWindow", () => mainWindow.close());
-}
+/**
+ * Инициализирует IPC handlers для управления окном
+ */
+export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWindow): void {
+    /**
+     * Минимизация окна
+     */
+    ipcMain.handle('minimizeWindow', (): void => {
+        mainWindow.minimize();
+    });
 
-export { initializeWindowHandlers };
+    /**
+     * Закрытие окна
+     */
+    ipcMain.handle('closeWindow', (): void => {
+        mainWindow.close();
+    });
+}

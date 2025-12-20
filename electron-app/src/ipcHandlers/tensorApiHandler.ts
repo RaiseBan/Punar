@@ -1,7 +1,10 @@
-import TensorAPI from "../utils/TensorAPI.js";
-import { getCollIdBySlug } from "../utils/updateService.js";
-import { IpcMain } from "electron";
+import TensorAPI from '../utils/TensorAPI';
+import { getCollIdBySlug } from '../utils/updateService';
+import { IpcMain, IpcMainInvokeEvent } from 'electron';
 
+/**
+ * Параметры для получения истории транзакций
+ */
 interface TxHistoryParams {
     collId?: string;
     limit?: number;
@@ -13,64 +16,92 @@ interface TxHistoryParams {
     cursor?: string;
 }
 
-function initializeApiHandlers(ipcMain: IpcMain): void {
-    ipcMain.handle("get-collectionInfo", async (_, slug: string) => {
-        try {
-            console.log(`Fetching collection ID for slug: ${slug}`);
-            const tensorApi = TensorAPI.getInstance();
-            return await tensorApi.fetchCollections(slug).send();
-        } catch (error) {
-            console.error("Ошибка при получении collectionId:", error);
-            return null;
-        }
-    });
-
-    ipcMain.handle("get-collIdByUrl", async (_, url: string) => {
-        try {
-            const slug = url.split("/").pop() || "";
-            console.log(slug);
-            return await getCollIdBySlug(slug);
-        } catch (error) {
-            console.error("Ошибка при получении collectionId:", error);
-            return null;
-        }
-    });
-
+/**
+ * Инициализирует IPC handlers для работы с Tensor API
+ */
+export function initializeApiHandlers(ipcMain: IpcMain): void {
+    /**
+     * Получение информации о коллекции по slug
+     */
     ipcMain.handle(
-        "get-nftsForCollection",
-        async (_, collId: string, limit: number = 1, onlyListings: boolean = false) => {
+        'get-collectionInfo',
+        async (_event: IpcMainInvokeEvent, slug: string): Promise<unknown | null> => {
             try {
-                console.log(`Fetching NFTs for collection: ${collId}`);
+                console.log(`Fetching collection ID for slug: ${slug}`);
                 const tensorApi = TensorAPI.getInstance();
-                return await tensorApi.fetchCollectionNfts(collId, limit, onlyListings).send();
+                return await tensorApi.fetchCollections(slug).send();
             } catch (error) {
-                console.error("Ошибка при получении NFT:", error);
+                console.error('Ошибка при получении collectionId:', error);
                 return null;
             }
         }
     );
 
-    ipcMain.handle("get-txHistory", async (_, params: TxHistoryParams) => {
-        try {
-            console.log(`Fetching TX history for: ${params.collId}`);
-            const tensorApi = TensorAPI.getInstance();
-            return await tensorApi
-                .fetchTxHistory({
-                    collId: "a2e9e503-b8d5-4024-8837-538c5b879ec4", // params.collId,
-                    limit: params.limit,
-                    txTypes: params.txTypes,
-                    minPrice: params.minPrice,
-                    maxPrice: params.maxPrice,
-                    traits: params.traits,
-                    wallet: params.wallet,
-                    cursor: params.cursor
-                })
-                .send();
-        } catch (error) {
-            console.error("Ошибка при получении истории транзакций:", error);
-            return null;
+    /**
+     * Получение ID коллекции по URL
+     */
+    ipcMain.handle(
+        'get-collIdByUrl',
+        async (_event: IpcMainInvokeEvent, url: string): Promise<string | null> => {
+            try {
+                const slug = url.split('/').pop() || '';
+                console.log(`Fetching collection ID for URL slug: ${slug}`);
+                return await getCollIdBySlug(slug);
+            } catch (error) {
+                console.error('Ошибка при получении collectionId:', error);
+                return null;
+            }
         }
-    });
-}
+    );
 
-export { initializeApiHandlers };
+    /**
+     * Получение NFT для коллекции
+     */
+    ipcMain.handle(
+        'get-nftsForCollection',
+        async (
+            _event: IpcMainInvokeEvent,
+            collId: string,
+            limit: number = 1,
+            onlyListings: boolean = false
+        ): Promise<unknown | null> => {
+            try {
+                console.log(`Fetching NFTs for collection: ${collId}`);
+                const tensorApi = TensorAPI.getInstance();
+                return await tensorApi.fetchCollectionNfts(collId, limit, onlyListings).send();
+            } catch (error) {
+                console.error('Ошибка при получении NFT:', error);
+                return null;
+            }
+        }
+    );
+
+    /**
+     * Получение истории транзакций
+     */
+    ipcMain.handle(
+        'get-txHistory',
+        async (_event: IpcMainInvokeEvent, params: TxHistoryParams): Promise<unknown | null> => {
+            try {
+                console.log(`Fetching TX history for: ${params.collId}`);
+                const tensorApi = TensorAPI.getInstance();
+
+                return await tensorApi
+                    .fetchTxHistory({
+                        collId: params.collId || 'a2e9e503-b8d5-4024-8837-538c5b879ec4',
+                        limit: params.limit,
+                        txTypes: params.txTypes,
+                        minPrice: params.minPrice,
+                        maxPrice: params.maxPrice,
+                        traits: params.traits,
+                        wallet: params.wallet,
+                        cursor: params.cursor,
+                    })
+                    .send();
+            } catch (error) {
+                console.error('Ошибка при получении истории транзакций:', error);
+                return null;
+            }
+        }
+    );
+}

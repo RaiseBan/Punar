@@ -101,3 +101,31 @@ export function convertWindowsPathToWSL(windowsPath: string): string {
 
     return unixPath;
 }
+
+/**
+ * Сохранение пользовательских настроек
+ */
+export async function saveSettings(settings: Record<string, unknown>): Promise<void> {
+    try {
+        console.log("fsHelper.saveSettings: Сохранение настроек пользователя");
+
+        const settingsDir = getGlobalConfigDirectory();
+        const settingsFilePath = path.join(settingsDir, 'userSettings.json');
+
+        console.log(`fsHelper.saveSettings: Путь к файлу настроек: ${settingsFilePath}`);
+
+        // Создаем директорию если не существует
+        if (!fs.existsSync(settingsDir)) {
+            await fs_prom.mkdir(settingsDir, { recursive: true });
+        }
+
+        // Сохраняем настройки
+        await fs_prom.writeFile(settingsFilePath, JSON.stringify(settings, null, 2), 'utf8');
+
+        console.log(`fsHelper.saveSettings: Настройки успешно сохранены`);
+    } catch (error) {
+        const err = error as Error;
+        console.error(`fsHelper.saveSettings: Ошибка при сохранении настроек:`, err);
+        throw error;
+    }
+}
