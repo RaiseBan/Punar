@@ -25,7 +25,7 @@ import {
 } from "../../types/types";
 
 import {MASTER_NODE_PORT} from "../../config/config";
-import { telegramClient } from '@/api/telegram-client';
+import { telegramClient } from '../../api/telegram-client';
 
 
 export class MevLoadBalancer {

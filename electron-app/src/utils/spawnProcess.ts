@@ -6,7 +6,7 @@ import axios from "axios";
 import { updateConfigCollectionId } from "./updateService";
 import { generateMevConfig, generateSimpleMevConfig } from "./generateService";
 import { convertWindowsPathToWSL } from "./fsHelper";
-import { telegramClient } from "@/api/telegram-client";
+import { telegramClient } from "../api/telegram-client";
 
 // Типы и интерфейсы
 interface TaskConfig {

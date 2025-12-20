@@ -7,7 +7,6 @@ import fs from 'fs';
 import path from 'path';
 import { app, shell, IpcMain, BrowserWindow } from 'electron';
 import { EventBus, PROCESS_EVENTS } from '../../../shared/eventBus';
-
 import { telegramClient } from '../api/telegram-client';
 
 const processes: any = {};

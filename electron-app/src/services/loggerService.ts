@@ -1,11 +1,11 @@
 /**
  * LoggerService - унифицированный сервис логирования для electron-приложения
- * 
+ *
  * Поддерживает разные модули и уровни логирования.
  * Выводит информацию в консоль с временной меткой и цветовым форматированием.
  */
 
-import { EventBus, PROCESS_EVENTS, SYSTEM_EVENTS } from '../../../shared/eventBus';
+import { EventBus, PROCESS_EVENTS, SYSTEM_EVENTS, SystemErrorEvent } from '../../../shared/eventBus';
 
 // Константы для уровней логирования
 const LOG_LEVELS = {
@@ -68,43 +68,40 @@ const COLORS = {
     // Стили текста
     BOLD: '\x1b[1m',
     DIM: '\x1b[2m',
-    ITALIC: '\x1b[3m',
     UNDERLINE: '\x1b[4m',
-    BLINK: '\x1b[5m',
-    REVERSE: '\x1b[7m',
 
-    // Цвета уровней логирования
+    // Цвета для разных уровней логирования
     LEVEL: {
-        DEBUG: '\x1b[90m',            // Серый (приглушенный)
-        INFO: '\x1b[96m',             // Ярко-голубой
-        WARN: '\x1b[93m',             // Ярко-желтый
-        ERROR: '\x1b[91m',            // Ярко-красный
-        FATAL: '\x1b[95m\x1b[1m',     // Ярко-пурпурный + жирный
+        DEBUG: '\x1b[36m', // Cyan
+        INFO: '\x1b[32m',  // Green
+        WARN: '\x1b[33m',  // Yellow
+        ERROR: '\x1b[31m', // Red
+        FATAL: '\x1b[91m', // Bright Red
     },
 
-    // Цвета модулей
+    // Цвета для разных модулей
     MODULE: {
-        SYSTEM: '\x1b[37m\x1b[1m',                   // Белый жирный
-        MEV_LOAD_BALANCER: '\x1b[92m',               // Ярко-зеленый
-        TELEGRAM_SERVICE: '\x1b[94m',                // Ярко-синий
-        SPAWN_PROCESS: '\x1b[96m',                   // Ярко-голубой
-        WEB_SERVER: '\x1b[93m',                      // Ярко-желтый
-        ELECTRON: '\x1b[95m',                        // Ярко-пурпурный
-        TOKEN_RELEASE: '\x1b[32m',                   // Зеленый
-        API_SERVICE: '\x1b[36m',                     // Голубой
-        CONFIG_SERVICE: '\x1b[33m\x1b[1m',           // Желтый жирный
-        JITO: '\x1b[93m',
-        CLEANING_POOLS: "\x1b[46m",
-        EVENT_BUS: '\x1b[35m\x1b[1m'                 // Пурпурный жирный
+        SYSTEM: '\x1b[35m',              // Magenta
+        MEV_LOAD_BALANCER: '\x1b[94m',   // Bright Blue
+        TELEGRAM_SERVICE: '\x1b[96m',    // Bright Cyan
+        SPAWN_PROCESS: '\x1b[93m',       // Bright Yellow
+        WEB_SERVER: '\x1b[92m',          // Bright Green
+        ELECTRON: '\x1b[95m',            // Bright Magenta
+        TOKEN_RELEASE: '\x1b[36m',       // Cyan
+        API_SERVICE: '\x1b[34m',         // Blue
+        CONFIG_SERVICE: '\x1b[33m',      // Yellow
+        JITO: '\x1b[91m',                // Bright Red
+        CLEANING_POOLS: '\x1b[32m',      // Green
+        EVENT_BUS: '\x1b[96m',           // Bright Cyan
     }
 };
 
-// Минимальный уровень для логирования (все, что ниже этого уровня, будет игнорироваться)
+// Минимальный уровень логирования (по умолчанию все логи выводятся)
 let minimumLogLevel = LOG_LEVELS.DEBUG;
 
-// Создаем красивые шаблоны для часто используемых элементов
+// Шаблоны для форматирования
 const TEMPLATES = {
-    timestamp: (ts: any) => `${COLORS.DIM}[${ts}]${COLORS.RESET}`,
+    timestamp: (timestamp: any) => `${COLORS.BRIGHT_BLACK}[${timestamp}]${COLORS.RESET}`,
     level: (level: any) => `${COLORS.LEVEL[level]}[${level}]${COLORS.RESET}`,
     module: (module: any) => `${COLORS.MODULE[module]}[${module}]${COLORS.RESET}`,
     success: (msg: any) => `${COLORS.BRIGHT_GREEN}✓ ${msg}${COLORS.RESET}`,
@@ -118,7 +115,7 @@ class LoggerService {
     LOG_MODULES = LOG_MODULES;
     TEMPLATES = TEMPLATES;
     COLORS = COLORS;
-    
+
     private eventBusInitialized = false;
 
     constructor() {}
@@ -137,44 +134,52 @@ class LoggerService {
 
         // Подписываемся на события запуска процессов
         EventBus.on(PROCESS_EVENTS.STARTED, (data) => {
+            // Type assertion для доступа к специфичным свойствам ProcessStartedEvent
+            const eventData = data as any;
             this.info(
                 LOG_MODULES.EVENT_BUS,
-                `▶️ Процесс запущен: Task ${TEMPLATES.value(data.taskId)}, Модуль: ${TEMPLATES.highlight(data.moduleName)}`
+                `▶️ Процесс запущен: Task ${TEMPLATES.value(eventData.taskId)}, Модуль: ${TEMPLATES.highlight(eventData.moduleName)}`
             );
         });
 
         // Подписываемся на события остановки процессов
         EventBus.on(PROCESS_EVENTS.STOPPED, (data) => {
-            const exitCodeColor = data.exitCode === 0 ? COLORS.BRIGHT_GREEN : COLORS.BRIGHT_RED;
+            const eventData = data as any;
+            const exitCodeColor = eventData.exitCode === 0 ? COLORS.BRIGHT_GREEN : COLORS.BRIGHT_RED;
             this.info(
                 LOG_MODULES.EVENT_BUS,
-                `⏹️ Процесс остановлен: Task ${TEMPLATES.value(data.taskId)}, Код: ${exitCodeColor}${data.exitCode}${COLORS.RESET}`
+                `⏹️ Процесс остановлен: Task ${TEMPLATES.value(eventData.taskId)}, Код: ${exitCodeColor}${eventData.exitCode}${COLORS.RESET}`
             );
         });
 
         // Подписываемся на события краша процессов
         EventBus.on(PROCESS_EVENTS.CRASHED, (data) => {
+            const eventData = data as any;
             this.error(
                 LOG_MODULES.EVENT_BUS,
-                `💥 Процесс упал: Task ${TEMPLATES.value(data.taskId)}`
+                `💥 Процесс упал: Task ${TEMPLATES.value(eventData.taskId)}`
             );
         });
 
         // Подписываемся на системные ошибки
         EventBus.on(SYSTEM_EVENTS.ERROR_OCCURRED, (data) => {
+            // Type assertion для SystemErrorEvent
+            const errorData = data as SystemErrorEvent;
             this.error(
                 LOG_MODULES.EVENT_BUS,
-                `Системная ошибка [${data.code}]: ${data.message}`,
-                data.details
+                `Системная ошибка [${errorData.code}]: ${errorData.message}`,
+                errorData.details
             );
         });
 
         // Подписываемся на предупреждения
         EventBus.on(SYSTEM_EVENTS.WARNING_OCCURRED, (data) => {
+            // Type assertion для SystemErrorEvent (WARNING использует ту же структуру)
+            const warningData = data as SystemErrorEvent;
             this.warn(
                 LOG_MODULES.EVENT_BUS,
-                `Предупреждение [${data.code}]: ${data.message}`,
-                data.details
+                `Предупреждение [${warningData.code}]: ${warningData.message}`,
+                warningData.details
             );
         });
 
@@ -191,82 +196,50 @@ class LoggerService {
             minimumLogLevel = LOG_LEVELS[level];
             this.info(LOG_MODULES.SYSTEM, `Установлен минимальный уровень логирования: ${TEMPLATES.highlight(minimumLogLevel)}`);
         } else {
-            this.error(LOG_MODULES.SYSTEM, `Некорректный уровень логирования: ${level}`);
+            this.warn(LOG_MODULES.SYSTEM, `Некорректный уровень логирования: ${level}`);
         }
     }
 
     /**
-     * Проверяет, нужно ли логировать сообщение данного уровня
-     * @param {string} level - Уровень логирования
-     * @returns {boolean} - true, если сообщение нужно логировать
+     * Проверяет, должно ли логироваться сообщение данного уровня
+     * @param {string} level - Проверяемый уровень
+     * @returns {boolean} - true, если сообщение должно быть залогировано
      */
-    shouldLog(level: any): boolean {
+    private shouldLog(level: any): boolean {
         const levels = Object.values(LOG_LEVELS);
-        const minIndex = levels.indexOf(minimumLogLevel);
-        const currentIndex = levels.indexOf(level);
+        const currentLevelIndex = levels.indexOf(level);
+        const minLevelIndex = levels.indexOf(minimumLogLevel);
 
-        return currentIndex >= minIndex;
+        return currentLevelIndex >= minLevelIndex;
     }
 
     /**
-     * Создает форматированную временную метку
-     * @returns {string} Форматированная временная метка
-     */
-    getTimestamp(): string {
-        const now = new Date();
-        return now.toISOString().replace('T', ' ').substring(0, 19);
-    }
-
-    /**
-     * Вывод сообщения в консоль с форматированием
-     * @param {string} level - Уровень логирования из LOG_LEVELS
+     * Основная функция логирования
+     * @param {string} level - Уровень из LOG_LEVELS
      * @param {string} module - Модуль из LOG_MODULES
      * @param {string} message - Сообщение для логирования
-     * @param {Object} [data] - Дополнительные данные для логирования (опционально)
+     * @param {Object} [data] - Дополнительные данные для вывода
      */
-    log(level: any, module: any, message: string, data: any = null): void {
+    private log(level: any, module: any, message: string, data: any = null): void {
         if (!this.shouldLog(level)) {
             return;
         }
 
-        const timestamp = this.getTimestamp();
+        const timestamp = new Date().toISOString();
+        const formattedTimestamp = TEMPLATES.timestamp(timestamp);
+        const formattedLevel = TEMPLATES.level(level);
+        const formattedModule = TEMPLATES.module(module);
 
-        // Используем шаблоны для форматирования
-        const timestampStr = TEMPLATES.timestamp(timestamp);
-        const levelStr = TEMPLATES.level(level);
-        const moduleStr = TEMPLATES.module(module);
+        const logMessage = `${formattedTimestamp} ${formattedLevel} ${formattedModule} ${message}`;
+        console.log(logMessage);
 
-        // Строка базового формата: [ВРЕМЯ] [УРОВЕНЬ] [МОДУЛЬ] Сообщение
-        const logString = `${timestampStr} ${levelStr} ${moduleStr} ${message}`;
-
-        // Выбираем подходящий метод консоли в зависимости от уровня логирования
-        switch (level) {
-            case LOG_LEVELS.DEBUG:
-                console.debug(logString);
-                break;
-            case LOG_LEVELS.WARN:
-                console.warn(logString);
-                break;
-            case LOG_LEVELS.ERROR:
-            case LOG_LEVELS.FATAL:
-                console.error(logString);
-                break;
-            default:
-                console.log(logString);
-        }
-
-        // Если есть дополнительные данные, выводим их отдельно
-        if (data) {
-            if (typeof data === 'string') {
-                console.log(`  ${COLORS.DIM}▶ ${data}${COLORS.RESET}`);
-            } else {
-                console.log(`  ${COLORS.DIM}▶ Данные:${COLORS.RESET}`, data);
-            }
+        if (data !== null) {
+            console.log(`${COLORS.DIM}Data:${COLORS.RESET}`, data);
         }
     }
 
     /**
-     * Вывод отладочного сообщения
+     * Вывод отладочной информации
      * @param {string} module - Модуль из LOG_MODULES
      * @param {string} message - Сообщение
      * @param {Object} [data] - Дополнительные данные
