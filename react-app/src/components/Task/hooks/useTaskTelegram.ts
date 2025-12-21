@@ -24,7 +24,6 @@ export function useTaskTelegram(
       state.tasks.tasks.find((t) => t.id === id)?.processedTelegramRows || []
   );
 
-  // Telegram обработчики для управления задачами
   useEffect(() => {
     console.log(`Setting up Telegram handlers for task ${id}`);
 
@@ -50,7 +49,7 @@ export function useTaskTelegram(
         if (status !== 'Stopped') {
           window.electronAPI?.stopProcess(id);
         }
-        // Здесь можно добавить dispatch(removeTask(id)) если нужно
+
       }
     };
 

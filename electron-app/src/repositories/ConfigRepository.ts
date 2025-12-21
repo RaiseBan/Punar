@@ -4,9 +4,6 @@ import { app } from 'electron';
 import { AppSettings } from '../../../shared/types';
 import { ConfigError, FileSystemError, ValidationError } from './errors';
 
-/**
- * Репозиторий для работы с настройками приложения
- */
 export class ConfigRepository {
   private readonly settingsPath: string;
   private cachedSettings: AppSettings | null = null;
@@ -20,35 +17,28 @@ export class ConfigRepository {
     this.settingsPath = path.join(userDataPath, 'globalConfigs', 'settings.json');
   }
 
-  /**
-   * Получить все настройки
-   */
   async getSettings(): Promise<AppSettings> {
     try {
-      // Возвращаем кэш если есть
+
       if (this.cachedSettings) {
         return this.cachedSettings;
       }
 
-      // Проверяем существование директории
       const dirPath = path.dirname(this.settingsPath);
       await this.ensureDirectory(dirPath);
 
-      // Проверяем существование файла
       try {
         await fs.access(this.settingsPath);
       } catch {
-        // Файл не существует - создаем с дефолтными настройками
+
         const defaultSettings: AppSettings = {};
         await this.saveSettings(defaultSettings);
         return defaultSettings;
       }
 
-      // Читаем файл
       const data = await fs.readFile(this.settingsPath, 'utf-8');
       const settings = JSON.parse(data) as AppSettings;
 
-      // Кэшируем
       this.cachedSettings = settings;
       return settings;
     } catch (error) {
@@ -59,22 +49,16 @@ export class ConfigRepository {
     }
   }
 
-  /**
-   * Сохранить настройки
-   */
   async saveSettings(settings: AppSettings): Promise<void> {
     try {
-      // Валидируем настройки
+
       this.validateSettings(settings);
 
-      // Создаем директорию если не существует
       const dirPath = path.dirname(this.settingsPath);
       await this.ensureDirectory(dirPath);
 
-      // Сохраняем
       await fs.writeFile(this.settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
 
-      // Обновляем кэш
       this.cachedSettings = settings;
     } catch (error) {
       throw new ConfigError(
@@ -84,10 +68,6 @@ export class ConfigRepository {
     }
   }
 
-  /**
-   * Получить путь к директории со скриптами
-   * @throws {ConfigError} если путь не установлен
-   */
   async getScriptDirectory(): Promise<string> {
     const settings = await this.getSettings();
 
@@ -98,9 +78,6 @@ export class ConfigRepository {
     return settings.scriptDirectory;
   }
 
-  /**
-   * Установить путь к директории со скриптами
-   */
   async setScriptDirectory(directory: string): Promise<void> {
     if (!directory || directory.trim() === '') {
       throw new ValidationError('Путь к директории не может быть пустым', 'scriptDirectory');
@@ -111,25 +88,16 @@ export class ConfigRepository {
     await this.saveSettings(settings);
   }
 
-  /**
-   * Получить главный RPC endpoint
-   */
   async getMainRpc(): Promise<string | undefined> {
     const settings = await this.getSettings();
     return settings.mainRpc;
   }
 
-  /**
-   * Получить Tensor API токен
-   */
   async getTensorApiToken(): Promise<string | undefined> {
     const settings = await this.getSettings();
     return settings.tensor_api_token;
   }
 
-  /**
-   * Получить конфигурацию Telegram
-   */
   async getTelegramConfig(): Promise<{
     token?: string;
     enabled?: boolean;
@@ -143,9 +111,6 @@ export class ConfigRepository {
     };
   }
 
-  /**
-   * Установить конфигурацию Telegram
-   */
   async setTelegramConfig(config: {
     token?: string;
     enabled?: boolean;
@@ -167,22 +132,15 @@ export class ConfigRepository {
     await this.saveSettings(updatedSettings);
   }
 
-  /**
-   * Очистить кэш настроек
-   */
   clearCache(): void {
     this.cachedSettings = null;
   }
 
-  /**
-   * Валидация настроек
-   */
   private validateSettings(settings: AppSettings): void {
     if (typeof settings !== 'object' || settings === null) {
       throw new ValidationError('Настройки должны быть объектом');
     }
 
-    // Валидация scriptDirectory если присутствует
     if (settings.scriptDirectory !== undefined) {
       if (typeof settings.scriptDirectory !== 'string') {
         throw new ValidationError(
@@ -192,17 +150,12 @@ export class ConfigRepository {
       }
     }
 
-    // Валидация RPC endpoints
     if (settings.mainRpc !== undefined && typeof settings.mainRpc !== 'string') {
       throw new ValidationError('mainRpc должен быть строкой', 'mainRpc');
     }
 
-    // Добавь другие валидации по необходимости
   }
 
-  /**
-   * Создать директорию если не существует
-   */
   private async ensureDirectory(dirPath: string): Promise<void> {
     try {
       await fs.mkdir(dirPath, { recursive: true });
@@ -216,12 +169,8 @@ export class ConfigRepository {
   }
 }
 
-// Singleton instance
 let configRepositoryInstance: ConfigRepository | null = null;
 
-/**
- * Получить экземпляр ConfigRepository (singleton)
- */
 export function getConfigRepository(): ConfigRepository {
   if (!configRepositoryInstance) {
     configRepositoryInstance = new ConfigRepository();

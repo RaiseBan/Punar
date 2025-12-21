@@ -1,10 +1,3 @@
-/**
- * Общие типы для API между electron-app и telegram-service
- */
-
-/**
- * Базовый ответ API
- */
 export interface ApiResponse<T = void> {
   success: boolean;
   data?: T;
@@ -12,9 +5,6 @@ export interface ApiResponse<T = void> {
   message?: string;
 }
 
-/**
- * Ответ с ошибкой
- */
 export interface ErrorResponse {
   success: false;
   error: string;
@@ -22,18 +12,12 @@ export interface ErrorResponse {
   details?: unknown;
 }
 
-/**
- * Ответ с данными
- */
 export interface SuccessResponse<T> {
   success: true;
   data: T;
   message?: string;
 }
 
-/**
- * Информация о задаче для API
- */
 export interface TaskApiInfo {
   id: string | number;
   name?: string;
@@ -44,9 +28,6 @@ export interface TaskApiInfo {
   logs?: string[];
 }
 
-/**
- * Информация о MEV процессе для API
- */
 export interface MevProcessApiInfo {
   id: string;
   tokenAddress: string;
@@ -60,18 +41,12 @@ export interface MevProcessApiInfo {
   startTime?: number;
 }
 
-/**
- * Параметры пагинации
- */
 export interface PaginationParams {
   page?: number;
   limit?: number;
   offset?: number;
 }
 
-/**
- * Ответ с пагинацией
- */
 export interface PaginatedResponse<T> {
   success: true;
   data: T[];
@@ -83,9 +58,6 @@ export interface PaginatedResponse<T> {
   };
 }
 
-/**
- * Параметры фильтрации
- */
 export interface FilterParams {
   status?: string;
   moduleName?: string;
@@ -93,9 +65,6 @@ export interface FilterParams {
   dateTo?: string;
 }
 
-/**
- * Статус здоровья сервиса
- */
 export interface HealthStatus {
   status: 'ok' | 'error' | 'degraded';
   timestamp: string;
@@ -104,21 +73,12 @@ export interface HealthStatus {
   services?: Record<string, 'up' | 'down'>;
 }
 
-/**
- * HTTP методы
- */
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-/**
- * Заголовки HTTP
- */
 export interface HttpHeaders {
   [key: string]: string;
 }
 
-/**
- * Параметры запроса
- */
 export interface RequestParams {
   method?: HttpMethod;
   headers?: HttpHeaders;

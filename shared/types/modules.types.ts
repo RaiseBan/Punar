@@ -7,7 +7,6 @@ export interface ModuleItem {
   isDisabled?: boolean;
 }
 
-// Tensor sniper (SDK) и Tensor reprice
 export interface TensorSdkParams {
   collectionId: string;
   priceByName: boolean;
@@ -25,7 +24,6 @@ export interface TensorSdkParams {
   privateKey: string;
 }
 
-// Launch My NFT
 export interface LaunchMyNftParams {
   target_url: string;
   total_priority_fee: number;
@@ -43,7 +41,6 @@ export interface LaunchMyNftParams {
   chosenSetName: string;
 }
 
-// MEV
 export interface MevParams {
   volumeThreshold: number;
   checkInterval: number;
@@ -56,7 +53,6 @@ export interface MevParams {
   globalStrategy: string;
 }
 
-// Meteora
 export interface MeteoraParams {
   accounts: string[];
   useJito: boolean;

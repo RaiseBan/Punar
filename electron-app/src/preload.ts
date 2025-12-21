@@ -4,11 +4,8 @@ console.log('🔧 [PRELOAD] Script is loading...');
 console.log('🔧 [PRELOAD] contextBridge:', contextBridge);
 console.log('🔧 [PRELOAD] ipcRenderer:', ipcRenderer);
 
-// ============================================
-// ИНЛАЙНЕННЫЕ КОНСТАНТЫ (вместо импорта)
-// ============================================
 const IPC_CHANNELS = {
-  // Process Management
+
   START_PROCESS: 'start-process',
   STOP_PROCESS: 'stop-process',
   RESUME_PROCESS: 'resume-process',
@@ -17,33 +14,27 @@ const IPC_CHANNELS = {
   PROCESS_EXIT: 'process-exit',
   PROCESS_ERROR: 'process-error',
 
-  // Settings
   GET_SETTINGS: 'get-settings',
   SAVE_SETTINGS: 'save-settings',
 
-  // Wallets
   GET_WALLETS: 'get-wallets',
   ADD_WALLET: 'add-wallet',
   DELETE_WALLET: 'delete-wallet',
 
-  // Configs
   SAVE_CONFIG: 'save-config',
   GET_CONFIGS: 'get-configs',
   GET_CONFIG: 'get-config',
   DELETE_CONFIG: 'delete-config',
   GET_CONFIG_PATHS: 'get-config-paths',
 
-  // Window Controls
   MINIMIZE_WINDOW: 'minimize-window',
   CLOSE_WINDOW: 'close-window',
   ENABLE_DRAG: 'enable-drag',
 
-  // Tensor API
   TENSOR_GET_COLLECTION_INFO: 'tensor-get-collection-info',
   TENSOR_GET_COLL_ID_BY_URL: 'tensor-get-coll-id-by-url',
   TENSOR_GET_NFTS_FOR_COLLECTION: 'tensor-get-nfts-for-collection',
 
-  // Telegram Bot
   TELEGRAM_GET_CONFIG: 'telegram-bot:get-config',
   TELEGRAM_SET_TOKEN: 'telegram-bot:set-token',
   TELEGRAM_GET_STATUS: 'telegram-bot:get-status',
@@ -52,7 +43,6 @@ const IPC_CHANNELS = {
   TELEGRAM_TEST_CONNECTION: 'telegram-bot:test-connection',
 } as const;
 
-// Типы (копируй из shared/types если нужны)
 interface ProcessStartedEvent {
   taskId: number;
   config: TaskConfig;
@@ -101,12 +91,10 @@ interface TelegramBotStatus {
   lastActivity?: string;
 }
 
-// Типы для callback функций
 type EventCallback<T> = (event: IpcRendererEvent, data: T) => void;
 
-// Типизированный electronAPI
 const electronAPI = {
-  // ============= Process Management =============
+
   startProcess: (taskId: number, config: TaskConfig): void => {
     console.log(`start process config: ${JSON.stringify(config, null, 2)}`);
     ipcRenderer.send(IPC_CHANNELS.START_PROCESS, { taskId, config });
@@ -120,7 +108,6 @@ const electronAPI = {
     ipcRenderer.send(IPC_CHANNELS.RESUME_PROCESS, { taskId, config });
   },
 
-  // ============= Process Events =============
   onProcessStarted: (callback: EventCallback<ProcessStartedEvent>): void => {
     ipcRenderer.on(IPC_CHANNELS.PROCESS_STARTED, callback);
   },
@@ -147,7 +134,6 @@ const electronAPI = {
     ipcRenderer.removeAllListeners(IPC_CHANNELS.PROCESS_EXIT);
   },
 
-  // ============= Settings =============
   getSettings: (): Promise<AppSettings> => {
     return ipcRenderer.invoke(IPC_CHANNELS.GET_SETTINGS);
   },
@@ -156,7 +142,6 @@ const electronAPI = {
     return ipcRenderer.invoke(IPC_CHANNELS.SAVE_SETTINGS, settings);
   },
 
-  // ============= Wallets =============
   getWallets: (): Promise<Wallet[]> => {
     return ipcRenderer.invoke(IPC_CHANNELS.GET_WALLETS);
   },
@@ -169,7 +154,6 @@ const electronAPI = {
     return ipcRenderer.invoke(IPC_CHANNELS.DELETE_WALLET, publicKey);
   },
 
-  // ============= Configs =============
   saveConfig: (configType: ConfigType, fileName: string, content: unknown): Promise<boolean> => {
     return ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, configType, fileName, content);
   },
@@ -190,7 +174,6 @@ const electronAPI = {
     return ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG_PATHS, configType);
   },
 
-  // ============= Window Controls =============
   minimizeWindow: (): Promise<void> => {
     return ipcRenderer.invoke(IPC_CHANNELS.MINIMIZE_WINDOW);
   },
@@ -203,7 +186,6 @@ const electronAPI = {
     ipcRenderer.send(IPC_CHANNELS.ENABLE_DRAG);
   },
 
-  // ============= Tensor API =============
   tensorAPI: {
     getCollectionInfo: (slug: string): Promise<string | null> => {
       return ipcRenderer.invoke(IPC_CHANNELS.TENSOR_GET_COLLECTION_INFO, slug);
@@ -226,46 +208,28 @@ const electronAPI = {
     },
   },
 
-  // ============= Telegram Bot =============
   telegramBot: {
-    /**
-     * Получить конфигурацию бота
-     */
+
     getConfig: (): Promise<TelegramBotConfig> => {
       return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_GET_CONFIG);
     },
 
-    /**
-     * Установить токен бота
-     */
     setToken: (token: string): Promise<{ success: boolean; error?: string }> => {
       return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_SET_TOKEN, token);
     },
 
-    /**
-     * Получить статус бота
-     */
     getStatus: (): Promise<TelegramBotStatus> => {
       return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_GET_STATUS);
     },
 
-    /**
-     * Запустить бота
-     */
     start: (): Promise<{ success: boolean; error?: string }> => {
       return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_START_BOT);
     },
 
-    /**
-     * Остановить бота
-     */
     stop: (): Promise<{ success: boolean; error?: string }> => {
       return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_STOP_BOT);
     },
 
-    /**
-     * Проверить подключение к telegram-service
-     */
     testConnection: (): Promise<{ success: boolean; error?: string }> => {
       return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_TEST_CONNECTION);
     },

@@ -1,7 +1,3 @@
-/**
- * Центральный файл экспорта всех типов shared
- */
-
 export * from './wallet.types';
 export * from './task.types';
 export * from './modules.types';

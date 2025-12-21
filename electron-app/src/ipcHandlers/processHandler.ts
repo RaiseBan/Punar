@@ -14,8 +14,6 @@ import {
     TaskConfig,
 } from '../../../shared/types';
 
-// ============= Типы =============
-
 interface LogQueue {
     [taskId: string]: LogEntry[];
 }
@@ -40,8 +38,6 @@ interface OpenLogFileParams {
     taskId: string;
 }
 
-// ============= Глобальные переменные =============
-
 const processes: ProcessMap = {};
 const logQueues: LogQueue = {};
 const queueTimers: QueueTimers = {};
@@ -51,12 +47,6 @@ const LOG_FILE_DIR =
         ? path.join(app.getPath('userData'), 'logs')
         : path.join(__dirname, '..', '..', 'logs');
 
-
-// ============= Логирование =============
-
-/**
- * Запись лога в файл
- */
 function writeLogToFile(taskId: string, message: string, type: string): void {
     try {
         if (!fs.existsSync(LOG_FILE_DIR)) {
@@ -73,9 +63,6 @@ function writeLogToFile(taskId: string, message: string, type: string): void {
     }
 }
 
-/**
- * Добавление лога в очередь
- */
 function addLogToQueue(
     taskId: string,
     message: string,
@@ -103,9 +90,6 @@ function addLogToQueue(
     }, 100);
 }
 
-/**
- * Отправка логов из очереди
- */
 function flushLogQueue(taskId: string, mainWindow: BrowserWindow): void {
     const logs = logQueues[taskId];
 
@@ -128,9 +112,6 @@ function flushLogQueue(taskId: string, mainWindow: BrowserWindow): void {
     queueTimers[taskId] = null;
 }
 
-/**
- * Периодическая очистка старых очередей
- */
 setInterval(() => {
     const now = Date.now();
     Object.keys(logQueues).forEach((taskId) => {
@@ -148,14 +129,9 @@ setInterval(() => {
     });
 }, 60000);
 
-// ============= IPC Handlers =============
-
 export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserWindow): void {
     const configRepo = getConfigRepository();
 
-    /**
-     * Получение логов из файла
-     */
     ipcMain.handle(
         'get-task-logs',
         async (
@@ -187,9 +163,6 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
         }
     );
 
-    /**
-     * Открытие файла логов
-     */
     ipcMain.handle(
         'open-log-file',
         async (_event: IpcMainInvokeEvent, { taskId }: OpenLogFileParams): Promise<void> => {
@@ -203,9 +176,6 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
         }
     );
 
-    /**
-     * Запуск процесса
-     */
     ipcMain.on(
         'start-process',
         async (event, { taskId, config }: { taskId: number; config: TaskConfig }) => {
@@ -217,7 +187,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             }
 
             try {
-                // Используем ConfigRepository для получения пути к скриптам
+
                 const scriptPath = await configRepo.getScriptDirectory();
                 console.log(`ПРОЦЕСС: Путь к скриптам: ${scriptPath}`);
 
@@ -233,7 +203,6 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                     };
                 }
 
-                // spawnProcess теперь сам получает settings внутри
                 const child = await spawnProcess(config);
 
                 if (!child) {
@@ -335,7 +304,6 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             } catch (error) {
                 console.error(`ПРОЦЕСС: Ошибка при запуске процесса ${taskId}:`, error);
 
-                // Обработка ошибки конфигурации
                 if (error instanceof ConfigError) {
                     console.error('Ошибка конфигурации:', error.message);
                     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -356,9 +324,6 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
         }
     );
 
-    /**
-     * Остановка процесса
-     */
     ipcMain.on('stop-process', async (_event, taskId: number) => {
         console.log(`ПРОЦЕСС: Остановка процесса ${taskId}`);
 
@@ -406,9 +371,6 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
         }
     });
 
-    /**
-     * Возобновление процесса
-     */
     ipcMain.on(
         'resume-process',
         async (event, { taskId, config }: { taskId: number; config: TaskConfig }) => {
@@ -434,11 +396,10 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             }
 
             try {
-                // Используем ConfigRepository
+
                 const scriptPath = await configRepo.getScriptDirectory();
                 console.log(`ПРОЦЕСС: Запуск процесса для задачи ${taskId} с конфигурацией:`, config);
 
-                // spawnProcess теперь сам получает settings внутри
                 const childProcess = await spawnProcess(config);
 
                 if (!childProcess) {

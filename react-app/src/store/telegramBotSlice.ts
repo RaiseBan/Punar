@@ -19,6 +19,5 @@ export const telegramBotSlice = createSlice({
     }
 });
 
-
 export const { setBotConfig, setConnected } = telegramBotSlice.actions;
 export default telegramBotSlice.reducer;

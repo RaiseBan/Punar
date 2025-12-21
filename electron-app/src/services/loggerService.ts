@@ -1,15 +1,6 @@
-/**
- * Сервис логирования с поддержкой цветов и модулей
- */
-
 import { EventBus } from '../../../shared/eventBus';
 import { PROCESS_EVENTS } from '../../../shared/types';
 
-// ============= ТИПЫ =============
-
-/**
- * Уровни логирования
- */
 export const LOG_LEVELS = {
     DEBUG: 'DEBUG',
     INFO: 'INFO',
@@ -20,9 +11,6 @@ export const LOG_LEVELS = {
 
 export type LogLevel = typeof LOG_LEVELS[keyof typeof LOG_LEVELS];
 
-/**
- * Модули системы
- */
 export const LOG_MODULES = {
     SYSTEM: 'SYSTEM',
     EVENT_BUS: 'EVENT_BUS',
@@ -41,9 +29,6 @@ export const LOG_MODULES = {
 
 export type LogModule = typeof LOG_MODULES[keyof typeof LOG_MODULES];
 
-/**
- * Цвета для консоли
- */
 export const COLORS = {
     RESET: '\x1b[0m',
     BRIGHT: '\x1b[1m',
@@ -83,8 +68,6 @@ export const COLORS = {
     BOLD: '\x1b[1m',
 } as const;
 
-// ============= ШАБЛОНЫ =============
-
 const TEMPLATES = {
     timestamp: (ts: string): string =>
         `${COLORS.DIM}[${ts}]${COLORS.RESET}`,
@@ -116,8 +99,6 @@ const TEMPLATES = {
         `${COLORS.BRIGHT_CYAN}${val}${COLORS.RESET}`,
 };
 
-// ============= СЕРВИС ЛОГИРОВАНИЯ =============
-
 let minimumLogLevel: LogLevel = LOG_LEVELS.DEBUG;
 
 class LoggerService {
@@ -130,9 +111,6 @@ class LoggerService {
 
     constructor() {}
 
-    /**
-     * Инициализация подписок на EventBus
-     */
     initializeEventBusListeners(): void {
         if (this.eventBusInitialized) {
             this.warn(LOG_MODULES.EVENT_BUS, 'EventBus listeners уже инициализированы');
@@ -141,7 +119,6 @@ class LoggerService {
 
         this.info(LOG_MODULES.EVENT_BUS, 'Инициализация подписок на события EventBus...');
 
-        // Подписываемся на события запуска процессов
         EventBus.on(PROCESS_EVENTS.STARTED, (data) => {
             const eventData = data as { taskId: string | number; moduleName: string };
             this.info(
@@ -150,7 +127,6 @@ class LoggerService {
             );
         });
 
-        // Подписываемся на события остановки процессов
         EventBus.on(PROCESS_EVENTS.STOPPED, (data) => {
             const eventData = data as { taskId: string | number; exitCode: number | null };
             const exitCodeColor =
@@ -168,9 +144,6 @@ class LoggerService {
         this.success(LOG_MODULES.EVENT_BUS, 'Подписки на EventBus успешно инициализированы');
     }
 
-    /**
-     * Устанавливает минимальный уровень логирования
-     */
     setMinimumLogLevel(level: LogLevel): void {
         if (Object.values(LOG_LEVELS).includes(level)) {
             minimumLogLevel = level;
@@ -183,9 +156,6 @@ class LoggerService {
         }
     }
 
-    /**
-     * Проверяет, должно ли логироваться сообщение данного уровня
-     */
     private shouldLog(level: LogLevel): boolean {
         const levels = Object.values(LOG_LEVELS);
         const currentLevelIndex = levels.indexOf(level);
@@ -194,9 +164,6 @@ class LoggerService {
         return currentLevelIndex >= minLevelIndex;
     }
 
-    /**
-     * Основная функция логирования
-     */
     private log(
         level: LogLevel,
         module: LogModule,
@@ -220,56 +187,34 @@ class LoggerService {
         }
     }
 
-    /**
-     * Вывод отладочной информации
-     */
     debug(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.DEBUG, module, message, data);
     }
 
-    /**
-     * Вывод информационного сообщения
-     */
     info(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.INFO, module, message, data);
     }
 
-    /**
-     * Вывод предупреждения
-     */
     warn(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.WARN, module, message, data);
     }
 
-    /**
-     * Вывод сообщения об ошибке
-     */
     error(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.ERROR, module, message, data);
     }
 
-    /**
-     * Вывод сообщения о критической ошибке
-     */
     fatal(module: LogModule, message: string, data: unknown = null): void {
         this.log(LOG_LEVELS.FATAL, module, message, data);
     }
 
-    /**
-     * Вывод сообщения о успешном выполнении операции
-     */
     success(module: LogModule, message: string, data: unknown = null): void {
         this.info(module, TEMPLATES.success(message), data);
     }
 
-    /**
-     * Вывод сообщения о неудачном выполнении операции
-     */
     failure(module: LogModule, message: string, data: unknown = null): void {
         this.error(module, TEMPLATES.failure(message), data);
     }
 }
 
-// Создаем и экспортируем единый экземпляр сервиса
 const logger = new LoggerService();
 export default logger;

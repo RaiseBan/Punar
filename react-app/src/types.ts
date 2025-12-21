@@ -12,7 +12,6 @@ export interface Wallet {
     privateKey: string;
 }
 
-// Параметры для "Tensor sniper (SDK)" и "Tensor reprice"
 export interface TensorSdkParams {
     collectionId: string;
     priceByName: boolean;
@@ -26,38 +25,30 @@ export interface TensorSdkParams {
     bloxrouteTipLamports: number;
     delta: number;
     txToSend: number;
-    walletSource: 'existing' | 'manual'; // уже было
-    privateKey: string; // уже было
+    walletSource: 'existing' | 'manual'; 
+    privateKey: string; 
 }
 
-// ------------------------
-// ПАРАМЕТРЫ НОВОГО МОДУЛЯ LAUNCH_MY_NFT
 export interface LaunchMyNftParams {
     target_url: string;
     total_priority_fee: number;
     compute_unit_limit: number;
     useJito: boolean;
-    // jito_tip_account: string;
+
     jito_tip_amount: number;
     jito_region: string;
     delay_when_sending: number;
     delay_before_sending: number;
     nfts_to_buy_per_account: number;
 
-    // Логика выбора кошельков:
-    // 1) "single"  или  "set"
     walletApproach: 'single' | 'set';
 
-    // Если single → user может выбрать "existing" или "manual"
     singleWalletMethod: 'existing' | 'manual';
 
-    // Если single + existing → privateKey берём из списка, а сюда сохраняем publicKey
     selectedWalletPublicKey: string;
 
-    // Если single + manual → вводим вручную
     manualPrivateKey: string;
 
-    // Если set → пользователь выбирает имя сета
     chosenSetName: string;
 }
 export interface MeteoraParams {

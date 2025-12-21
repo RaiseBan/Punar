@@ -63,7 +63,7 @@ export class BotService {
       clearTimeout(this.pollInterval);
       this.pollInterval = null;
     }
-    // Даем время на завершение текущего запроса
+
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
@@ -101,7 +101,7 @@ export class BotService {
         }
       }
     } catch (error: any) {
-      // Если 409 - webhook conflict, пробуем удалить webhook
+
       if (error?.response?.status === 409) {
         console.log('Webhook conflict detected, removing webhook...');
         await this.deleteWebhook();

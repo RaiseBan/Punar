@@ -1,10 +1,3 @@
-/**
- * Базовые классы ошибок для репозиториев
- */
-
-/**
- * Базовая ошибка репозитория
- */
 export class RepositoryError extends Error {
   constructor(message: string, public readonly cause?: Error) {
     super(message);
@@ -13,9 +6,6 @@ export class RepositoryError extends Error {
   }
 }
 
-/**
- * Ошибка конфигурации
- */
 export class ConfigError extends RepositoryError {
   constructor(message: string, cause?: Error) {
     super(message, cause);
@@ -24,9 +14,6 @@ export class ConfigError extends RepositoryError {
   }
 }
 
-/**
- * Ошибка работы с кошельками
- */
 export class WalletError extends RepositoryError {
   constructor(message: string, cause?: Error) {
     super(message, cause);
@@ -35,9 +22,6 @@ export class WalletError extends RepositoryError {
   }
 }
 
-/**
- * Ошибка валидации
- */
 export class ValidationError extends RepositoryError {
   constructor(message: string, public readonly field?: string, cause?: Error) {
     super(message, cause);
@@ -46,9 +30,6 @@ export class ValidationError extends RepositoryError {
   }
 }
 
-/**
- * Ошибка файловой системы
- */
 export class FileSystemError extends RepositoryError {
   constructor(message: string, public readonly path?: string, cause?: Error) {
     super(message, cause);

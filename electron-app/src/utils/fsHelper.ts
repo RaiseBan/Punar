@@ -4,14 +4,10 @@ import * as fs from "fs";
 import * as fs_prom from "fs/promises";
 import { app } from "electron";
 
-/**
- * Получение пользовательских настроек
- */
 export function getSettings(): Record<string, any> {
     try {
         console.log("fsHelper.getSettings: Получение настроек пользователя");
 
-        // Получаем путь к глобальной конфигурационной директории
         const settingsDir = getGlobalConfigDirectory();
         const settingsFilePath = path.join(settingsDir, 'userSettings.json');
 
@@ -20,7 +16,6 @@ export function getSettings(): Record<string, any> {
         if (!fs.existsSync(settingsFilePath)) {
             console.error(`fsHelper.getSettings: Ошибка - конфигурационный файл не найден по пути ${settingsFilePath}`);
 
-            // Если не удалось найти файл, пробуем альтернативный путь
             const altConfigPath = path.join(app.getPath('userData'), 'settings.json');
             console.log(`fsHelper.getSettings: Пробуем альтернативный путь: ${altConfigPath}`);
 
@@ -45,17 +40,11 @@ export function getSettings(): Record<string, any> {
     }
 }
 
-/**
- * Получение пути к файлу lookup tables
- */
 export function getLookupTablesFilePath(): string {
     const settingsDir = getGlobalConfigDirectory();
     return path.join(settingsDir, 'lookup_tables.json');
 }
 
-/**
- * Сохранение данных lookup tables в файл
- */
 export async function saveLookupTables(data: any): Promise<boolean> {
     try {
         await fs_prom.writeFile(getLookupTablesFilePath(), JSON.stringify(data, null, 2));
@@ -66,9 +55,6 @@ export async function saveLookupTables(data: any): Promise<boolean> {
     }
 }
 
-/**
- * Получение массива из файла lookup tables
- */
 export async function getLookupTables(): Promise<any[] | null> {
     try {
         const fileContent = await fs_prom.readFile(getLookupTablesFilePath(), 'utf8');
@@ -76,7 +62,7 @@ export async function getLookupTables(): Promise<any[] | null> {
     } catch (error) {
         const err = error as NodeJS.ErrnoException;
         if (err.code === 'ENOENT') {
-            // Файл не существует, возвращаем пустой массив
+
             return [];
         }
         console.error('Error reading lookup tables:', error);
@@ -84,27 +70,19 @@ export async function getLookupTables(): Promise<any[] | null> {
     }
 }
 
-/**
- * Конвертация пути из Windows в формат WSL
- */
 export function convertWindowsPathToWSL(windowsPath: string): string {
-    // Заменяем обратные слэши на прямые
+
     let unixPath = windowsPath.replace(/\\/g, '/');
 
-    // Преобразуем букву диска (например, C:) в /mnt/c
     if (unixPath.startsWith('C:')) {
         unixPath = unixPath.replace(/^C:/, '/mnt/c');
     } else if (unixPath.startsWith('D:')) {
         unixPath = unixPath.replace(/^D:/, '/mnt/d');
     }
-    // Добавьте другие диски по аналогии, если нужно
 
     return unixPath;
 }
 
-/**
- * Сохранение пользовательских настроек
- */
 export async function saveSettings(settings: Record<string, unknown>): Promise<void> {
     try {
         console.log("fsHelper.saveSettings: Сохранение настроек пользователя");
@@ -114,12 +92,10 @@ export async function saveSettings(settings: Record<string, unknown>): Promise<v
 
         console.log(`fsHelper.saveSettings: Путь к файлу настроек: ${settingsFilePath}`);
 
-        // Создаем директорию если не существует
         if (!fs.existsSync(settingsDir)) {
             await fs_prom.mkdir(settingsDir, { recursive: true });
         }
 
-        // Сохраняем настройки
         await fs_prom.writeFile(settingsFilePath, JSON.stringify(settings, null, 2), 'utf8');
 
         console.log(`fsHelper.saveSettings: Настройки успешно сохранены`);

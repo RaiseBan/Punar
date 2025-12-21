@@ -16,12 +16,10 @@ export function useTaskActions(
   const [fullViewOpen, setFullViewOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
 
-  // Локальная копия config и данных для редактирования
   const [editConfig, setEditConfig] = useState<any>(config || {});
   const [editName, setEditName] = useState(name);
   const [editModuleName, setEditModuleName] = useState(config?.module_name || '');
 
-  // Функции управления диалогами
   const handleOpenSettings = () => {
     setEditName(name);
     setEditModuleName(config?.module_name || '');
@@ -43,7 +41,6 @@ export function useTaskActions(
 
   const handleCloseLogs = () => setLogsOpen(false);
 
-  // Функции управления задачей
   const handleSaveSettings = () => {
     dispatch(
         updateTask({

@@ -1,7 +1,3 @@
-// getConfigsTest.ts
-// Тесты для исходной функции getConfigs
-
-// Определение типов
 import {MevLoadBalancer} from "../src/services/mevLoadBalancer/mevLoadBalancer";
 
 export type SignalWithMeta = {
@@ -37,7 +33,7 @@ export type ProcessConfig = {
     meteoraPools: string[];
     pumpSwapPool?: string;
     raydiumPool?: string;
-    // Raydium pools:
+
     type: string;
 
     main_rpc: string;
@@ -53,7 +49,6 @@ export type ProcessesToManage = {
     processIdsToDelete: string[];
 };
 
-// Имитация вспомогательных функций и объектов
 const logger = {
     LOG_MODULES: {
         MEV_LOAD_BALANCER: 'MEV_LOAD_BALANCER'
@@ -63,7 +58,6 @@ const logger = {
     }
 };
 
-// Функция для структурирования конфига
 function structConfig<T extends MevLoadBalancer>(
                                                  tokenAddress: string,
                                                  meteoraPools: string[],
@@ -80,14 +74,13 @@ function structConfig<T extends MevLoadBalancer>(
         type: type,
         main_rpc: "https://api.mainnet-beta.solana.com",
         useJito: true,
-        jito_lower_bound:  111, // deprecated
-        jito_upper_bound: 111, // deprecated
+        jito_lower_bound:  111, 
+        jito_upper_bound: 111, 
         process_delay: null,
         task_name: `mev_task_${Date.now().toString().substring(8, 13)}`
     }
 }
 
-// Вспомогательные функции для вывода тестовых данных
 function formatPairs(pairs: Map<string, PairInfo>): string {
     return JSON.stringify(Object.fromEntries(pairs), null, 2);
 }
@@ -99,7 +92,6 @@ function formatUsage(usage: UsageMeteoraPools): string {
     }, null, 2);
 }
 
-// Тестовый класс с исходной функцией getConfigs
 class TestClass {
     meteoraPoolsUsage: Map<string, UsageMeteoraPools> = new Map<string, UsageMeteoraPools>();
     userSettings?: { jito_lower_bound: number } = { jito_lower_bound: 100 };
@@ -116,30 +108,23 @@ class TestClass {
         return `${token}_${pools.join('_')}_${jitoLowerBound}`;
     }
 
-    // ТОЧНАЯ КОПИЯ ИСХОДНОЙ ФУНКЦИИ
-    /**
-     * Группирует пулы по токенам и создает конфигурации для процессов
-     * @param validSignals - Валидные сигналы для обработки
-     * @returns Конфигурации для добавления и идентификаторы процессов для удаления
-     */
     getConfigs(validSignals: SignalWithMeta[]): ProcessesToManage | undefined {
         try {
-            // Группируем пулы по токенам
+
             const groupPoolsByToken = new Map<string, Pools>();
             const configsToAdd: ProcessConfig[] = [];
             const configsToDelete: string[] = [];
 
-            // Шаг 1: Группируем все пулы по токенам
             for (const signal of validSignals) {
                 if (groupPoolsByToken.has(signal.tokenAddress)) {
-                    // Если токен уже есть, добавляем новый пул Meteora
+
                     const pools = groupPoolsByToken.get(signal.tokenAddress)!;
-                    // Добавляем только уникальные пулы
+
                     if (!pools.meteora.includes(signal.meteoraPool)) {
                         pools.meteora.push(signal.meteoraPool);
                     }
                 } else {
-                    // Создаем новую запись для токена
+
                     groupPoolsByToken.set(signal.tokenAddress, {
                         meteora: [signal.meteoraPool],
                         pump: signal.pumpSwapPool,
@@ -149,14 +134,12 @@ class TestClass {
                 }
             }
 
-            // Шаг 2: Для каждого токена распределяем пулы по процессам
             for (const [token, pools] of groupPoolsByToken.entries()) {
                 logger.info(
                     logger.LOG_MODULES.MEV_LOAD_BALANCER,
                     `Распределение пулов для токена ${token}: ${pools.meteora.length} пулов Meteora`
                 );
 
-                // Получаем или создаем структуру для отслеживания пулов токена
                 let meteoraUsageForToken = this.getMeteoraUsagePoolsByToken(token);
                 if (!meteoraUsageForToken) {
                     this.setMeteoraUsagePoolsByToken(token, {
@@ -173,30 +156,24 @@ class TestClass {
                     }
                 }
 
-                // Копируем список пулов, чтобы не изменять оригинал
                 const poolsToDistribute = [...pools.meteora];
 
-                // Шаг 2.1: Сначала пытаемся добавить пулы к существующим процессам с одним пулом
                 for (const [processId, pairInfo] of meteoraUsageForToken.pairs.entries()) {
-                    // Пропускаем stub и процессы, которые уже имеют 2 пула
+
                     if (processId === "stub" || pairInfo.activePools.length >= 2) {
                         continue;
                     }
 
-                    // Если у процесса 1 пул и есть пулы для распределения
                     if (pairInfo.activePools.length === 1 && poolsToDistribute.length > 0) {
-                        // Берем первый пул из списка
+
                         const poolToAdd = poolsToDistribute.shift()!;
 
-                        // Добавляем пул к существующему процессу
                         pairInfo.activePools.push(poolToAdd);
 
-                        // Если процесс не новый, помечаем его для удаления и последующего пересоздания
                         if (!pairInfo.isNew) {
                             configsToDelete.push(processId);
                         }
 
-                        // Создаем новую конфигурацию с обновленным списком пулов
                         configsToAdd.push(structConfig(
                             token,
                             [...pairInfo.activePools],
@@ -205,7 +182,6 @@ class TestClass {
                             pools.type
                         ));
 
-                        // Обновляем запись в структуре с новым ID процесса
                         meteoraUsageForToken.pairs.delete(processId);
                         const newProcessId = this.generateProcessId(
                             token,
@@ -225,20 +201,16 @@ class TestClass {
                     }
                 }
 
-                // Шаг 2.2: Создаем новые процессы для оставшихся пулов
                 while (poolsToDistribute.length > 0) {
-                    // Определяем, сколько пулов добавить в процесс (1 или 2)
+
                     const poolsForProcess: string[] = [];
 
-                    // Добавляем первый пул
                     poolsForProcess.push(poolsToDistribute.shift()!);
 
-                    // Если есть еще пулы, добавляем второй
                     if (poolsToDistribute.length > 0) {
                         poolsForProcess.push(poolsToDistribute.shift()!);
                     }
 
-                    // Создаем новую конфигурацию
                     configsToAdd.push(structConfig(
                         token,
                         poolsForProcess,
@@ -247,7 +219,6 @@ class TestClass {
                         pools.type
                     ));
 
-                    // Добавляем запись в структуру
                     const processId = this.generateProcessId(
                         token,
                         poolsForProcess,
@@ -288,10 +259,8 @@ class TestClass {
 (async () => {
     console.log("=== НАЧАЛО ТЕСТИРОВАНИЯ ФУНКЦИИ getConfigs ===");
 
-    // Создаем экземпляр тестового класса
     const testInstance = new TestClass();
 
-    // Вспомогательная функция для логирования начального состояния
     function logInitialState(testName) {
         console.log(`\n\n${"=".repeat(80)}`);
         console.log(`ТЕСТ: ${testName}`);
@@ -309,12 +278,10 @@ class TestClass {
         }
     }
 
-    // Вспомогательная функция для логирования результатов теста
     function logTestResult(result, expectedResult) {
         console.log("\nПолученный результат:", JSON.stringify(result, null, 2));
         console.log("\nОжидаемый результат:", JSON.stringify(expectedResult, null, 2));
 
-        // Специальная проверка для учета динамических значений
         let isEqual = true;
 
         if (!result || !expectedResult) {
@@ -323,12 +290,11 @@ class TestClass {
             if (result.configsToAdd.length !== expectedResult.configsToAdd.length) {
                 isEqual = false;
             } else {
-                // Сравниваем каждый элемент configsToAdd
+
                 for (let i = 0; i < result.configsToAdd.length; i++) {
                     const resultConfig = result.configsToAdd[i];
                     const expectedConfig = expectedResult.configsToAdd[i];
 
-                    // Пропускаем проверку task_name, т.к. она содержит timestamp
                     for (const key in expectedConfig) {
                         if (key === "task_name") continue;
                         if (JSON.stringify(resultConfig[key]) !== JSON.stringify(expectedConfig[key])) {
@@ -339,7 +305,6 @@ class TestClass {
                 }
             }
 
-            // Сравниваем processIdsToDelete
             if (JSON.stringify(result.processIdsToDelete) !== JSON.stringify(expectedResult.processIdsToDelete)) {
                 isEqual = false;
             }
@@ -353,7 +318,6 @@ class TestClass {
             console.log("\n❌ ОШИБКА: Результат не соответствует ожидаемому");
         }
 
-        // Конечное состояние после теста
         console.log("\nКонечное состояние meteoraPoolsUsage:");
         const allTokens = Array.from(testInstance.meteoraPoolsUsage.keys());
         if (allTokens.length === 0) {
@@ -366,7 +330,6 @@ class TestClass {
         }
     }
 
-    // Вспомогательная функция для создания тестового сигнала
     function createSignal(tokenAddress, meteoraPool, pumpSwapPool = undefined, raydiumPool = undefined, type = "default") {
         return {
             tokenAddress,
@@ -380,14 +343,10 @@ class TestClass {
         };
     }
 
-    // Сбрасываем состояние перед каждым тестом
     function resetState() {
         testInstance.meteoraPoolsUsage = new Map();
     }
 
-    // ===== ТЕСТОВЫЕ СЛУЧАИ =====
-
-    // Тест 1: Пустой массив сигналов
     resetState();
     logInitialState("Пустой массив сигналов");
     console.log("\nВходные данные: Пустой массив сигналов []");
@@ -397,7 +356,6 @@ class TestClass {
         processIdsToDelete: []
     });
 
-    // Тест 2: Один сигнал для одного токена
     resetState();
     logInitialState("Один сигнал для одного токена");
     const signals2 = [
@@ -418,13 +376,12 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []
     });
 
-    // Тест 3: Два сигнала для одного токена (два пула в одном процессе)
     resetState();
     logInitialState("Два сигнала для одного токена (два пула в одном процессе)");
     const signals3 = [
@@ -446,13 +403,12 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []
     });
 
-    // Тест 4: Три сигнала для одного токена (два процесса: с двумя и с одним пулом)
     resetState();
     logInitialState("Три сигнала для одного токена (два процесса: с двумя и с одним пулом)");
     const signals4 = [
@@ -475,7 +431,7 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             },
             {
                 tokenAddress: "token1",
@@ -488,13 +444,12 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []
     });
 
-    // Тест 5: Четыре сигнала для одного токена (два процесса: оба с двумя пулами)
     resetState();
     logInitialState("Четыре сигнала для одного токена (два процесса: оба с двумя пулами)");
     const signals5 = [
@@ -518,7 +473,7 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             },
             {
                 tokenAddress: "token1",
@@ -531,13 +486,12 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []
     });
 
-    // Тест 6: Сигналы для разных токенов
     resetState();
     logInitialState("Сигналы для разных токенов");
     const signals6 = [
@@ -560,7 +514,7 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             },
             {
                 tokenAddress: "token2",
@@ -573,7 +527,7 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             },
             {
                 tokenAddress: "token3",
@@ -586,18 +540,17 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []
     });
 
-    // Тест 7: Дублирующиеся пулы одного токена (не должны дублироваться)
     resetState();
     logInitialState("Дублирующиеся пулы одного токена (не должны дублироваться)");
     const signals7 = [
         createSignal("token1", "meteora_pool1"),
-        createSignal("token1", "meteora_pool1"), // Дубликат
+        createSignal("token1", "meteora_pool1"), 
         createSignal("token1", "meteora_pool2")
     ];
     console.log("\nВходные данные:", JSON.stringify(signals7, null, 2));
@@ -616,13 +569,12 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []
     });
 
-    // Тест 8: Сигналы с разными дополнительными параметрами (raydiumPool и type)
     resetState();
     logInitialState("Сигналы с разными дополнительными параметрами (raydiumPool и type)");
     const signals8 = [
@@ -644,17 +596,15 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []
     });
 
-    // Тест 9: Добавление новых пулов к существующим процессам с одним пулом
     resetState();
     logInitialState("Добавление новых пулов к существующим процессам с одним пулом");
 
-    // Сначала добавляем один пул и выводим состояние
     console.log("\nШаг 1: Добавляем первый сигнал с пулом meteora_pool1");
     testInstance.getConfigs([createSignal("token1", "meteora_pool1")]);
     console.log("\nСостояние после первого добавления:");
@@ -664,7 +614,6 @@ class TestClass {
         console.log(`- Токен ${token}:`, formatUsage(usage));
     }
 
-    // Теперь добавляем еще один пул для того же токена
     console.log("\nШаг 2: Добавляем второй сигнал с пулом meteora_pool2");
     console.log("\nВходные данные:", JSON.stringify([createSignal("token1", "meteora_pool2")], null, 2));
     const expectedProcessId = testInstance.generateProcessId("token1", ["meteora_pool1"], 100);
@@ -682,13 +631,12 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: [expectedProcessId]
     });
 
-    // Тест 10: Большое количество пулов для одного токена
     resetState();
     logInitialState("Большое количество пулов для одного токена");
     const signals10 = [];
@@ -710,7 +658,7 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             },
             {
                 tokenAddress: "token1",
@@ -723,7 +671,7 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             },
             {
                 tokenAddress: "token1",
@@ -736,7 +684,7 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             },
             {
                 tokenAddress: "token1",
@@ -749,17 +697,15 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []
     });
 
-    // Тест 11: Добавление нового пула, когда все существующие процессы уже имеют по 2 пула
     resetState();
     logInitialState("Добавление нового пула, когда все существующие процессы уже имеют по 2 пула");
 
-    // Сначала добавляем два пула и выводим состояние
     console.log("\nШаг 1: Добавляем два сигнала с пулами meteora_pool1 и meteora_pool2");
     testInstance.getConfigs([
         createSignal("token1", "meteora_pool1"),
@@ -772,7 +718,6 @@ class TestClass {
         console.log(`- Токен ${token}:`, formatUsage(usage));
     }
 
-    // Теперь добавляем еще один пул
     console.log("\nШаг 2: Добавляем новый сигнал с пулом meteora_pool3");
     console.log("\nВходные данные:", JSON.stringify([createSignal("token1", "meteora_pool3")], null, 2));
     let result11 = testInstance.getConfigs([createSignal("token1", "meteora_pool3")]);
@@ -789,38 +734,33 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []
     });
 
-    // Тест 12: Многократное последовательное добавление пулов
     resetState();
     logInitialState("Многократное последовательное добавление пулов");
 
-    // Первое добавление
     console.log("\nШаг 1: Добавляем сигнал с пулом meteora_pool1");
     testInstance.getConfigs([createSignal("token1", "meteora_pool1")]);
     console.log("\nСостояние после первого добавления:");
     let usage12_1 = testInstance.getMeteoraUsagePoolsByToken("token1");
     console.log(`- Токен token1:`, formatUsage(usage12_1));
 
-    // Второе добавление
     console.log("\nШаг 2: Добавляем сигнал с пулом meteora_pool2");
     testInstance.getConfigs([createSignal("token1", "meteora_pool2")]);
     console.log("\nСостояние после второго добавления:");
     let usage12_2 = testInstance.getMeteoraUsagePoolsByToken("token1");
     console.log(`- Токен token1:`, formatUsage(usage12_2));
 
-    // Третье добавление
     console.log("\nШаг 3: Добавляем сигнал с пулом meteora_pool3");
     testInstance.getConfigs([createSignal("token1", "meteora_pool3")]);
     console.log("\nСостояние после третьего добавления:");
     let usage12_3 = testInstance.getMeteoraUsagePoolsByToken("token1");
     console.log(`- Токен token1:`, formatUsage(usage12_3));
 
-    // Четвертое добавление
     console.log("\nШаг 4: Добавляем сигнал с пулом meteora_pool4");
     console.log("\nВходные данные:", JSON.stringify([createSignal("token1", "meteora_pool4")], null, 2));
     let result13 = testInstance.getConfigs([createSignal("token1", "meteora_pool4")]);
@@ -837,7 +777,7 @@ class TestClass {
                 jito_lower_bound: 111,
                 jito_upper_bound: 111,
                 process_delay: null,
-                task_name: "dummy_value" // Будет пропущено при сравнении
+                task_name: "dummy_value" 
             }
         ],
         processIdsToDelete: []

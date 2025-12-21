@@ -2,7 +2,7 @@ import axios from "axios";
 
 export async function sendJitoTransaction(transaction: string) {
     await axios.post(
-        `http://localhost:8082/forward`,  // Используем эндпоинт /forward
+        `http://localhost:8082/forward`,  
         {
             url: "https://slc.mainnet.block-engine.jito.wtf/api/v1/transactions",
             method: "POST",
@@ -20,5 +20,3 @@ export async function sendJitoTransaction(transaction: string) {
     );
     console.log("Отправлено успешно");
 }
-
-

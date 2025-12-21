@@ -6,7 +6,7 @@ export async function checkPairDex(pair: string) {
     try {
         return (await axios.get(dexScreenerUrl)).data;
     } catch (error) {
-        // Типизация error для strict mode
+
         const err = error as Error & { cause?: unknown };
 
         logger.info(logger.LOG_MODULES.API, `Error while check for DEX: ${err}`);
@@ -16,7 +16,6 @@ export async function checkPairDex(pair: string) {
             logger.error(logger.LOG_MODULES.API, `Причина ошибки: ${err.cause}`);
         }
 
-        // Проверка сетевых ошибок
         if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
             logger.error(logger.LOG_MODULES.API, 'Сетевая ошибка: не удалось подключиться к серверу');
         }

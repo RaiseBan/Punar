@@ -31,8 +31,6 @@ async function start(): Promise<void> {
       return { status: 'ok', timestamp: new Date().toISOString() };
     });
 
-    // Регистрируем команды, но НЕ запускаем polling
-    // Polling запустится только когда пользователь нажмет Start в UI
     registerCommands();
     fastify.log.info('Telegram commands registered');
 

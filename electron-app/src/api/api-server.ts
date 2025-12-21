@@ -5,9 +5,6 @@ import { ApiResponse, TaskApiInfo } from '../../../shared/types';
 
 console.log('📦 [API-SERVER] Module loading...');
 
-/**
- * Создает Express API сервер
- */
 export function createApiServer(
     mainWindow: BrowserWindow | null
 ): Application {
@@ -20,11 +17,6 @@ export function createApiServer(
     app.use(express.json());
     console.log('✅ [API-SERVER] JSON middleware added');
 
-    // ============= Tasks Endpoints =============
-
-    /**
-     * GET /api/tasks - Получение списка задач
-     */
     app.get('/api/tasks', async (_req: Request, res: Response): Promise<void> => {
       try {
         const processes = getProcesses();
@@ -43,9 +35,6 @@ export function createApiServer(
       }
     });
 
-    /**
-     * GET /api/tasks/:taskId - Получение информации о задаче
-     */
     app.get('/api/tasks/:taskId', async (req: Request, res: Response): Promise<void> => {
       try {
         const { taskId } = req.params;
@@ -72,9 +61,6 @@ export function createApiServer(
       }
     });
 
-    /**
-     * POST /api/tasks/:taskId/start - Запуск задачи
-     */
     app.post('/api/tasks/:taskId/start', async (req: Request, res: Response): Promise<void> => {
       try {
         const { taskId } = req.params;
@@ -90,9 +76,6 @@ export function createApiServer(
       }
     });
 
-    /**
-     * POST /api/tasks/:taskId/stop - Остановка задачи
-     */
     app.post('/api/tasks/:taskId/stop', async (req: Request, res: Response): Promise<void> => {
       try {
         const { taskId } = req.params;
@@ -108,9 +91,6 @@ export function createApiServer(
       }
     });
 
-    /**
-     * DELETE /api/tasks/:taskId - Удаление задачи
-     */
     app.delete('/api/tasks/:taskId', async (req: Request, res: Response): Promise<void> => {
       try {
         const { taskId } = req.params;
@@ -126,9 +106,6 @@ export function createApiServer(
       }
     });
 
-    /**
-     * GET /api/tasks/:taskId/logs - Получение логов задачи
-     */
     app.get('/api/tasks/:taskId/logs', async (req: Request, res: Response): Promise<void> => {
       try {
         const { taskId } = req.params;
@@ -151,18 +128,12 @@ export function createApiServer(
     });
 
     console.log('✅ [API-SERVER] Tasks routes registered');
-    // ============= Health Endpoint =============
 
-    /**
-     * GET /health - Проверка состояния сервера
-     */
     app.get('/health', (_req: Request, res: Response): void => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
     console.log('✅ [API-SERVER] Health route registered');
-
-    // ============= Start Server =============
 
     const PORT = process.env.ELECTRON_API_PORT || 3002;
     console.log(`🔌 [API-SERVER] Attempting to start server on port ${PORT}...`);
@@ -173,7 +144,6 @@ export function createApiServer(
       console.log(`[API-SERVER] Health endpoint: http://localhost:${PORT}/health`);
     });
 
-    // Обработка ошибок запуска сервера
     server.on('error', (error: NodeJS.ErrnoException) => {
       console.error('❌❌❌ [API-SERVER] Server ERROR:', error);
       console.error(`[API-SERVER] Error code: ${error.code}`);

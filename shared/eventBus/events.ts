@@ -1,4 +1,3 @@
-// shared/eventBus/events.ts
 export const SYSTEM_EVENTS = {
   APP_READY: 'app:ready',
   APP_SHUTDOWN: 'app:shutdown',

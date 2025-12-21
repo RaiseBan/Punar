@@ -19,7 +19,7 @@ export function registerCommands(): void {
   botService.registerCommand('tasks', async (chatId) => {
     try {
       const tasks = await electronClient.getTasks();
-      
+
       if (tasks.length === 0) {
         await botService.sendMessage(chatId, '📝 Нет активных задач');
         return;
@@ -130,7 +130,7 @@ export function registerCommands(): void {
 
     try {
       const logs = await electronClient.getTaskLogs(taskId, lines);
-      
+
       if (logs.length === 0) {
         await botService.sendMessage(chatId, `📜 Логи задачи ${taskId} пусты`);
         return;

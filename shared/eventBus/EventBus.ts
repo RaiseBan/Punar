@@ -1,4 +1,3 @@
-// shared/eventBus/EventBus.ts
 import { EventType, EventData } from './events';
 
 type EventCallback = (data: EventData) => void | Promise<void>;
@@ -64,7 +63,7 @@ class EventBusClass {
     const listeners = this.listeners.get(event);
     if (listeners) {
       const promises: Promise<void>[] = [];
-      
+
       for (const callback of listeners) {
         try {
           const result = callback(data);
@@ -84,7 +83,7 @@ class EventBusClass {
     const onceListeners = this.onceListeners.get(event);
     if (onceListeners) {
       const promises: Promise<void>[] = [];
-      
+
       for (const callback of onceListeners) {
         try {
           const result = callback(data);

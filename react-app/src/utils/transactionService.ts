@@ -7,7 +7,6 @@ import {
     LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
 
-// Вспомогательная функция "сон"
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function waitForConfirmation(
@@ -26,10 +25,6 @@ async function waitForConfirmation(
     return false;
 }
 
-/**
- * Отправляет транзакцию с ретраями.
- * @returns Объект { success: boolean, signature?: string, error?: string }
- */
 export async function sendTransactionWithRetries(
     transaction: Transaction,
     signer: Keypair,
@@ -41,7 +36,6 @@ export async function sendTransactionWithRetries(
 ): Promise<{ success: boolean; signature?: string; error?: string }> {
     const connection = new Connection(rpcUrl);
 
-    // Добавляем ComputeBudget инструкции
     const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit });
     const priorityFee = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: fee });
     transaction.add(modifyComputeUnits, priorityFee);

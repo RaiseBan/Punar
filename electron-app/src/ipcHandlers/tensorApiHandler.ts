@@ -2,9 +2,6 @@ import TensorAPI from '../utils/TensorAPI';
 import { getCollIdBySlug } from '../utils/updateService';
 import { IpcMain, IpcMainInvokeEvent } from 'electron';
 
-/**
- * Параметры для получения истории транзакций
- */
 interface TxHistoryParams {
     collId?: string;
     limit?: number;
@@ -16,13 +13,8 @@ interface TxHistoryParams {
     cursor?: string;
 }
 
-/**
- * Инициализирует IPC handlers для работы с Tensor API
- */
 export function initializeApiHandlers(ipcMain: IpcMain): void {
-    /**
-     * Получение информации о коллекции по slug
-     */
+
     ipcMain.handle(
         'get-collectionInfo',
         async (_event: IpcMainInvokeEvent, slug: string): Promise<unknown | null> => {
@@ -37,9 +29,6 @@ export function initializeApiHandlers(ipcMain: IpcMain): void {
         }
     );
 
-    /**
-     * Получение ID коллекции по URL
-     */
     ipcMain.handle(
         'get-collIdByUrl',
         async (_event: IpcMainInvokeEvent, url: string): Promise<string | null> => {
@@ -47,7 +36,7 @@ export function initializeApiHandlers(ipcMain: IpcMain): void {
                 const slug = url.split('/').pop() || '';
                 console.log(`Fetching collection ID for URL slug: ${slug}`);
                 const result = await getCollIdBySlug(slug);
-                // Конвертируем undefined в null для соответствия типу возврата
+
                 return result ?? null;
             } catch (error) {
                 console.error('Ошибка при получении collectionId:', error);
@@ -56,9 +45,6 @@ export function initializeApiHandlers(ipcMain: IpcMain): void {
         }
     );
 
-    /**
-     * Получение NFT для коллекции
-     */
     ipcMain.handle(
         'get-nftsForCollection',
         async (
@@ -78,9 +64,6 @@ export function initializeApiHandlers(ipcMain: IpcMain): void {
         }
     );
 
-    /**
-     * Получение истории транзакций
-     */
     ipcMain.handle(
         'get-txHistory',
         async (_event: IpcMainInvokeEvent, params: TxHistoryParams): Promise<unknown | null> => {

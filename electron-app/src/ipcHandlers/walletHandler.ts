@@ -6,9 +6,6 @@ import { WalletError, ValidationError } from '../repositories/errors';
 export function initializeWalletHandlers(ipcMain: IpcMain): void {
     const walletRepo = getWalletRepository();
 
-    /**
-     * Получить все кошельки
-     */
     ipcMain.handle(
         IPC_CHANNELS.GET_WALLETS,
         async (_event: IpcMainInvokeEvent): Promise<Wallet[]> => {
@@ -17,16 +14,11 @@ export function initializeWalletHandlers(ipcMain: IpcMain): void {
             } catch (error) {
                 console.error('Ошибка при загрузке кошельков:', error);
 
-                // Возвращаем пустой массив в случае ошибки
-                // Можно также пробросить ошибку дальше
                 return [];
             }
         }
     );
 
-    /**
-     * Добавить кошелек
-     */
     ipcMain.handle(
         IPC_CHANNELS.ADD_WALLET,
         async (_event: IpcMainInvokeEvent, wallet: Wallet): Promise<void> => {
@@ -47,9 +39,6 @@ export function initializeWalletHandlers(ipcMain: IpcMain): void {
         }
     );
 
-    /**
-     * Удалить кошелек
-     */
     ipcMain.handle(
         IPC_CHANNELS.DELETE_WALLET,
         async (_event: IpcMainInvokeEvent, publicKey: string): Promise<void> => {
