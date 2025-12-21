@@ -1,10 +1,11 @@
-import { getSettings } from '../utils/fsHelper';
 import { spawnProcess, forceKillWindowsProcess } from '../utils/spawnProcess';
 import fs from 'fs';
 import path from 'path';
 import { app, shell, IpcMain, BrowserWindow, IpcMainInvokeEvent } from 'electron';
 import { EventBus } from '../../../shared/eventBus';
 import { telegramClient } from '../api/telegram-client';
+import { getConfigRepository } from '../repositories';
+import { ConfigError } from '../repositories/errors';
 import {
     ProcessInfo,
     LogEntry,
@@ -39,197 +40,119 @@ interface OpenLogFileParams {
     taskId: string;
 }
 
-// ============= Состояние =============
+// ============= Глобальные переменные =============
 
 const processes: ProcessMap = {};
-
-// Константы для конфигурации логирования
-const MAX_LOGS_IN_MEMORY = 1000;
-const LOG_BATCH_SIZE = 50;
-const LOG_UPDATE_INTERVAL = 500;
-const LOG_FILE_DIR = path.join(app.getPath('userData'), 'logs');
-
-// Создаем директорию для логов, если её нет
-if (!fs.existsSync(LOG_FILE_DIR)) {
-    fs.mkdirSync(LOG_FILE_DIR, { recursive: true });
-}
-
-// Константы для управления очередью логов
-const LOG_QUEUE_MAX_SIZE = 1000;
-const LOG_FLUSH_INTERVAL = 1000;
-
-// Очереди логов и флаги обработки
 const logQueues: LogQueue = {};
 const queueTimers: QueueTimers = {};
 
-// ============= Вспомогательные функции =============
+const LOG_FILE_DIR =
+    process.env.NODE_ENV === 'production'
+        ? path.join(app.getPath('userData'), 'logs')
+        : path.join(__dirname, '..', '..', 'logs');
+
+
+// ============= Логирование =============
 
 /**
- * Записывает лог в файл
+ * Запись лога в файл
  */
-function writeLogToFile(taskId: string, message: string, type: string = 'info'): void {
-    const logFile = path.join(LOG_FILE_DIR, `task_${taskId}.log`);
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] [${type.toUpperCase()}] ${message}\n`;
-
-    fs.appendFile(logFile, logEntry, (err) => {
-        if (err) {
-            console.error(`Ошибка при записи в лог файл для задачи ${taskId}:`, err);
+function writeLogToFile(taskId: string, message: string, type: string): void {
+    try {
+        if (!fs.existsSync(LOG_FILE_DIR)) {
+            fs.mkdirSync(LOG_FILE_DIR, { recursive: true });
         }
-    });
+
+        const logFile = path.join(LOG_FILE_DIR, `task_${taskId}.log`);
+        const timestamp = new Date().toISOString();
+        const logLine = `[${timestamp}] [${type}] ${message}\n`;
+
+        fs.appendFileSync(logFile, logLine, 'utf8');
+    } catch (error) {
+        console.error(`Ошибка записи в лог-файл для задачи ${taskId}:`, error);
+    }
 }
 
 /**
- * Добавляет лог в очередь для записи
+ * Добавление лога в очередь
  */
 function addLogToQueue(
     taskId: string,
-    logMessage: string,
+    message: string,
     mainWindow: BrowserWindow,
-    logType: 'stdout' | 'stderr' | 'system' = 'stdout',
-    isImportant: boolean = false
+    type: 'stdout' | 'stderr',
+    isError: boolean
 ): void {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-        return;
-    }
-
-    // Отправляем лог в UI только если это важный лог или данные таблицы
-    const shouldSendToUI =
-        isImportant ||
-        logMessage.includes('[TABLE_DATA]') ||
-        logType === 'stderr' ||
-        logMessage.includes('[ERROR]') ||
-        logMessage.includes('error');
-
-    if (shouldSendToUI) {
-        try {
-            mainWindow.webContents.send('process-output', {
-                taskId: taskId,
-                log: logMessage,
-            });
-        } catch (error) {
-            console.error(
-                `Ошибка при отправке лога в UI для задачи ${taskId}:`,
-                (error as Error).message
-            );
-        }
-    }
-
-    // Добавляем лог в очередь для записи в файл
     if (!logQueues[taskId]) {
         logQueues[taskId] = [];
     }
 
-    // Если очередь слишком большая, удаляем старые логи
-    if (logQueues[taskId].length >= LOG_QUEUE_MAX_SIZE) {
-        const overflow = Math.floor(LOG_QUEUE_MAX_SIZE * 0.2);
-        logQueues[taskId].splice(0, overflow);
-
-        const timestamp = Date.now();
-        logQueues[taskId].push({
-            timestamp,
-            type: 'system',
-            message: `[SYSTEM] Пропущено ${overflow} логов из-за переполнения очереди`,
-            taskId,
-        });
-    }
-
-    // Добавляем новый лог в очередь
-    const timestamp = Date.now();
     logQueues[taskId].push({
-        timestamp,
-        type: logType === 'stderr' ? 'error' : logType === 'system' ? 'system' : 'info',
-        message: logMessage,
+        timestamp: Date.now(),
+        message,
+        type: isError ? 'error' : 'info',
         taskId,
     });
 
-    // Запускаем обработку очереди, если еще не запущена
-    if (!queueTimers[taskId]) {
-        queueTimers[taskId] = setTimeout(() => processLogQueue(taskId), LOG_FLUSH_INTERVAL);
+    if (queueTimers[taskId]) {
+        clearTimeout(queueTimers[taskId]!);
     }
+
+    queueTimers[taskId] = setTimeout(() => {
+        flushLogQueue(taskId, mainWindow);
+    }, 100);
 }
 
 /**
- * Обрабатывает очередь логов
+ * Отправка логов из очереди
  */
-function processLogQueue(taskId: string): void {
-    queueTimers[taskId] = null;
+function flushLogQueue(taskId: string, mainWindow: BrowserWindow): void {
+    const logs = logQueues[taskId];
 
-    if (!logQueues[taskId] || logQueues[taskId].length === 0) {
+    if (!logs || logs.length === 0) {
         return;
     }
 
-    const batchSize = Math.min(LOG_BATCH_SIZE, logQueues[taskId].length);
-    const batch = logQueues[taskId].splice(0, batchSize);
+    const combinedLog = logs.map((l) => l.message).join('');
 
-    const logLines =
-        batch
-            .map((log: LogEntry) => {
-                const prefix =
-                    log.type === 'error'
-                        ? '[ERROR]'
-                        : log.type === 'system'
-                            ? '[SYSTEM]'
-                            : '[INFO]';
-                return `[${log.timestamp}] ${prefix} ${log.message}`;
-            })
-            .join('\n') + '\n';
+    writeLogToFile(taskId, combinedLog, 'process');
 
-    const userDataPath = app.getPath('userData');
-    const logsDir = path.join(userDataPath, 'logs');
-
-    if (!fs.existsSync(logsDir)) {
-        try {
-            fs.mkdirSync(logsDir, { recursive: true });
-        } catch (err) {
-            console.error(`Ошибка при создании директории логов: ${(err as Error).message}`);
-        }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('process-output', {
+            taskId: parseInt(taskId),
+            log: combinedLog,
+        });
     }
 
-    const logFilePath = path.join(logsDir, `task_${taskId}.log`);
-
-    fs.appendFile(logFilePath, logLines, (err) => {
-        if (err) {
-            console.error(`ПРОЦЕСС: Ошибка при записи логов в файл для задачи ${taskId}:`, err);
-        }
-
-        if (logQueues[taskId] && logQueues[taskId].length > 0) {
-            queueTimers[taskId] = setTimeout(() => processLogQueue(taskId), LOG_FLUSH_INTERVAL);
-        }
-    });
-
-    if (logQueues[taskId] && logQueues[taskId].length > 0 && !queueTimers[taskId]) {
-        queueTimers[taskId] = setTimeout(() => processLogQueue(taskId), LOG_FLUSH_INTERVAL);
-    }
+    logQueues[taskId] = [];
+    queueTimers[taskId] = null;
 }
 
 /**
- * Очищает ресурсы для неактивных задач
+ * Периодическая очистка старых очередей
  */
-function cleanupLogQueues(): void {
-    for (const taskId in logQueues) {
-        if (!processes[taskId] || !processes[taskId].isActive) {
-            if (logQueues[taskId] && logQueues[taskId].length > 0) {
-                processLogQueue(taskId);
+setInterval(() => {
+    const now = Date.now();
+    Object.keys(logQueues).forEach((taskId) => {
+        const queue = logQueues[taskId];
+        if (queue && queue.length > 0) {
+            const lastLog = queue[queue.length - 1];
+            if (now - lastLog.timestamp > 60000) {
+                delete logQueues[taskId];
+                if (queueTimers[taskId]) {
+                    clearTimeout(queueTimers[taskId]!);
+                    delete queueTimers[taskId];
+                }
             }
-
-            if (queueTimers[taskId]) {
-                clearTimeout(queueTimers[taskId]);
-                queueTimers[taskId] = null;
-            }
-
-            delete logQueues[taskId];
-            console.log(`ЛОГИ: Очищены ресурсы очереди логов для неактивной задачи ${taskId}`);
         }
-    }
-}
-
-// Запускаем периодическую очистку ресурсов
-setInterval(cleanupLogQueues, 60000);
+    });
+}, 60000);
 
 // ============= IPC Handlers =============
 
 export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserWindow): void {
+    const configRepo = getConfigRepository();
+
     /**
      * Получение логов из файла
      */
@@ -294,13 +217,8 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             }
 
             try {
-                const settings = await getSettings();
-                const scriptPath = settings?.scriptDirectory;
-
-                if (!scriptPath) {
-                    throw new Error('Путь к директории скриптов не установлен');
-                }
-
+                // Используем ConfigRepository для получения пути к скриптам
+                const scriptPath = await configRepo.getScriptDirectory();
                 console.log(`ПРОЦЕСС: Путь к скриптам: ${scriptPath}`);
 
                 if (!processes[taskId]) {
@@ -315,7 +233,8 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                     };
                 }
 
-                const child = await spawnProcess(config, scriptPath);
+                // spawnProcess теперь сам получает settings внутри
+                const child = await spawnProcess(config);
 
                 if (!child) {
                     throw new Error('Не удалось запустить процесс');
@@ -416,11 +335,22 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             } catch (error) {
                 console.error(`ПРОЦЕСС: Ошибка при запуске процесса ${taskId}:`, error);
 
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('process-error', {
-                        taskId,
-                        error: (error as Error).message,
-                    });
+                // Обработка ошибки конфигурации
+                if (error instanceof ConfigError) {
+                    console.error('Ошибка конфигурации:', error.message);
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('process-error', {
+                            taskId,
+                            error: 'Настройте путь к директории скриптов в Settings',
+                        });
+                    }
+                } else {
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('process-error', {
+                            taskId,
+                            error: (error as Error).message,
+                        });
+                    }
                 }
             }
         }
@@ -430,60 +360,31 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
      * Остановка процесса
      */
     ipcMain.on('stop-process', async (_event, taskId: number) => {
-        console.log(`ПРОЦЕСС: Получен запрос на остановку процесса ${taskId}`);
+        console.log(`ПРОЦЕСС: Остановка процесса ${taskId}`);
 
         const processInfo = processes[taskId];
 
         if (!processInfo) {
-            console.warn(`ПРОЦЕСС: Процесс ${taskId} не найден`);
+            console.warn(`ПРОЦЕСС: Процесс ${taskId} не найден в карте процессов`);
             return;
         }
 
-        if (processInfo.isActive && processInfo.process) {
-            const pid = processInfo.pid;
-            console.log(
-                `ПРОЦЕСС: Остановка процесса ${taskId} с PID ${pid}, возраст: ${Math.floor(
-                    (Date.now() - processInfo.startTime) / 1000
-                )}с`
-            );
-
+        if (processInfo.process && !processInfo.process.killed) {
             try {
-                processInfo.exitReason = 'ручная остановка пользователем';
-                processInfo.exitTime = Date.now();
-                const runTime = Math.floor((processInfo.exitTime - processInfo.startTime) / 1000);
-
-                EventBus.emit(PROCESS_EVENTS.STOPPED, {
-                    processId: taskId.toString(),
-                    taskId: taskId,
-                    exitCode: null,
-                });
-
-                setImmediate(async () => {
-                    try {
-                        const exitTime = new Date().toISOString();
-                        const moduleName = processInfo.moduleName || 'неизвестно';
-
-                        const message =
-                            `🛑 Процесс остановлен вручную\n\n` +
-                            `Задача ID: ${taskId}\n` +
-                            `Модуль: ${moduleName}\n` +
-                            `Причина: ручная остановка\n` +
-                            `Время работы: ${runTime}с\n` +
-                            `Время остановки: ${exitTime}`;
-
-                        await telegramClient.sendSystemNotification(message);
-                    } catch (error) {
-                        console.error(
-                            `ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`,
-                            error
-                        );
-                    }
-                });
-
-                console.log(`ПРОЦЕСС: Принудительное завершение процесса ${taskId} с PID ${pid}`);
+                const pid = processInfo.process.pid;
+                console.log(`ПРОЦЕСС: Попытка остановить процесс с PID ${pid}`);
 
                 try {
-                    await forceKillWindowsProcess(pid!);
+                    processInfo.process.kill('SIGTERM');
+                    console.log(`ПРОЦЕСС: Отправлен SIGTERM процессу ${taskId}`);
+
+                    setTimeout(() => {
+                        if (processInfo.process && !processInfo.process.killed) {
+                            console.warn(`ПРОЦЕСС: Процесс ${taskId} не остановился, используем SIGKILL`);
+                            processInfo.process.kill('SIGKILL');
+                        }
+                    }, 5000);
+
                     processInfo.isActive = false;
                 } catch (error) {
                     console.error(`ПРОЦЕСС: Ошибка при завершении процесса ${taskId}:`, error);
@@ -533,16 +434,12 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             }
 
             try {
-                const settings = await getSettings();
-                const scriptPath = settings?.scriptDirectory;
-
-                if (!scriptPath) {
-                    throw new Error('Путь к директории скриптов не установлен');
-                }
-
+                // Используем ConfigRepository
+                const scriptPath = await configRepo.getScriptDirectory();
                 console.log(`ПРОЦЕСС: Запуск процесса для задачи ${taskId} с конфигурацией:`, config);
 
-                const childProcess = await spawnProcess(config, scriptPath);
+                // spawnProcess теперь сам получает settings внутри
+                const childProcess = await spawnProcess(config);
 
                 if (!childProcess) {
                     throw new Error('Не удалось запустить процесс');
@@ -630,8 +527,10 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                                 const exitTime = new Date().toISOString();
 
                                 const icon = code === 0 ? '✅' : '❌';
+                                const status = code === 0 ? 'успешно' : 'с ошибкой';
+
                                 const message =
-                                    `${icon} Процесс завершен\n\n` +
+                                    `${icon} Процесс завершен ${status}\n\n` +
                                     `Задача ID: ${taskId}\n` +
                                     `Модуль: ${moduleName}\n` +
                                     `Код выхода: ${code}\n` +
@@ -640,10 +539,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
 
                                 await telegramClient.sendSystemNotification(message);
                             } catch (error) {
-                                console.error(
-                                    `ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`,
-                                    error
-                                );
+                                console.error(`ПРОЦЕСС: Ошибка при отправке уведомления в Telegram:`, error);
                             }
                         });
                     }
@@ -655,20 +551,27 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             } catch (error) {
                 console.error(`ПРОЦЕСС: Ошибка при возобновлении процесса ${taskId}:`, error);
 
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('process-error', {
-                        taskId,
-                        error: (error as Error).message,
-                    });
+                if (error instanceof ConfigError) {
+                    console.error('Ошибка конфигурации:', error.message);
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('process-error', {
+                            taskId,
+                            error: 'Настройте путь к директории скриптов в Settings',
+                        });
+                    }
+                } else {
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('process-error', {
+                            taskId,
+                            error: (error as Error).message,
+                        });
+                    }
                 }
             }
         }
     );
 }
 
-/**
- * Получение карты процессов
- */
 export function getProcesses(): ProcessMap {
     return processes;
 }

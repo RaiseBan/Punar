@@ -105,8 +105,7 @@ app.whenReady().then(async () => {
     const { initializeConfigHandlers } = await import('./ipcHandlers/configHandler');
     const { initializeApiHandlers } = await import('./ipcHandlers/tensorApiHandler');
     const { initializeTelegramHandlers } = await import('./ipcHandlers/telegramHandler');
-    const { getSettings, saveSettings } = await import('./utils/fsHelper');
-
+    const { initializeSettingsHandlers } = await import('./ipcHandlers/settingsHandler');
     if (mainWindow) {
       console.log('  - Initializing process handlers...');
       initializeProcessHandlers(ipcMain, mainWindow);
@@ -122,16 +121,8 @@ app.whenReady().then(async () => {
     initializeApiHandlers(ipcMain);
     console.log('  - Initializing telegram handlers...');
     initializeTelegramHandlers(ipcMain);
-
-    // Settings handlers с IPC_CHANNELS
     console.log('  - Initializing settings handlers...');
-    ipcMain.handle(IPC_CHANNELS.GET_SETTINGS, async () => {
-      return getSettings();
-    });
-
-    ipcMain.handle(IPC_CHANNELS.SAVE_SETTINGS, async (_event, settings) => {
-      await saveSettings(settings);
-    });
+    initializeSettingsHandlers(ipcMain);
 
     console.log('✅ [INDEX] All handlers initialized');
 

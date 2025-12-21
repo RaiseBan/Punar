@@ -9,12 +9,16 @@ export {};
 declare global {
   interface Window {
     electronAPI: {
-      // Process Management
+      // ============= General IPC =============
+      invoke: <T = any>(channel: string, ...args: any[]) => Promise<T>;
+      sendToMain: (channel: string, ...args: any[]) => void;
+
+      // ============= Process Management =============
       startProcess: (taskId: number, config: any) => void;
       stopProcess: (taskId: number) => void;
       resumeProcess: (taskId: number, config: any) => void;
 
-      // Process Events
+      // ============= Process Events =============
       onProcessStarted: (callback: (event: any, data: { taskId: number; config: any }) => void) => void;
       onProcessOutput: (callback: (event: any, data: { taskId: number; log: string }) => void) => void;
       onProcessExit: (callback: (event: any, data: { taskId: number; code: number }) => void) => void;
@@ -22,28 +26,35 @@ declare global {
       removeListener: (channel: string, callback: (...args: any[]) => void) => void;
       removeAllListeners: () => void;
 
-      // Settings
+      // ============= Task Logs =============
+      openLogFile: (taskId: number) => Promise<void>;
+
+      // ============= Tasks Communication =============
+      listenForTasks: (callback: () => void) => void;
+      removeTasksListener: () => void;
+
+      // ============= Settings =============
       getSettings: () => Promise<any>;
       saveSettings: (settings: any) => Promise<void>;
 
-      // Wallets
+      // ============= Wallets =============
       getWallets: () => Promise<{ publicKey: string; privateKey: string }[]>;
       addWallet: (wallet: { publicKey: string; privateKey: string }) => Promise<void>;
       deleteWallet: (publicKey: string) => Promise<void>;
 
-      // Configs
+      // ============= Configs =============
       saveConfig: (configType: string, fileName: string, content: any) => Promise<boolean>;
       getConfigs: (configType: string) => Promise<string[]>;
       getConfig: (configType: string, fileName: string) => Promise<any>;
       deleteConfig: (configType: string, fileName: string) => Promise<boolean>;
       getConfigPaths: (configType: string) => Promise<{ name: string; path: string }[]>;
 
-      // Window Controls
+      // ============= Window Controls =============
       minimizeWindow: () => Promise<void>;
       closeWindow: () => Promise<void>;
       enableDrag: () => void;
 
-      // Tensor API
+      // ============= Tensor API =============
       tensorAPI: {
         getCollectionInfo: (slug: string) => Promise<string | null>;
         getCollIdByUrl: (url: string) => Promise<string | null>;
@@ -51,7 +62,7 @@ declare global {
         getTxHistory: (params: any) => Promise<any>;
       };
 
-      // Telegram Bot
+      // ============= Telegram Bot =============
       telegramBot: {
         getConfig: () => Promise<{
           token: string;
@@ -81,6 +92,11 @@ declare global {
           error?: string;
         }>;
       };
+
+      // ============= Telegram Events =============
+      onTelegramStopTask: (callback: (event: any, taskId: number) => void) => void;
+      onTelegramRemoveTask: (callback: (event: any, taskId: number) => void) => void;
+      onTelegramResumeTask: (callback: (event: any, data: { taskId: number; config: any }) => void) => void;
     };
   }
 }

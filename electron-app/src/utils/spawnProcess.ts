@@ -1,7 +1,8 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { TaskConfig, AppSettings } from '../../../shared/types';
+import { TaskConfig } from '../../../shared/types';
+import { getConfigRepository } from '../repositories';
 
 /**
  * Результат операции с процессом
@@ -45,112 +46,29 @@ async function updateConfigCollectionId(config: TaskConfig): Promise<TaskConfig 
 }
 
 /**
- * Основная функция запуска процесса
- *
- * @param taskConfig - Конфигурация задачи
- * @param userSettings - Настройки пользователя
- * @returns ChildProcess или null в случае ошибки
+ * Информация о модуле
  */
-export async function spawnProcess(
-    taskConfig: TaskConfig,
-    userSettings: AppSettings
-): Promise<ChildProcess | null> {
-    console.log(`🚀 SPAWN: Запуск процесса для модуля: ${taskConfig.module_name}`);
-
-    // Валидация входных параметров
-    if (!taskConfig) {
-        console.error('❌ SPAWN: taskConfig не определен');
-        return null;
-    }
-
-    if (!userSettings) {
-        console.error('❌ SPAWN: userSettings не определен');
-        return null;
-    }
-
-    if (!userSettings.scriptDirectory) {
-        console.error('❌ SPAWN: scriptDirectory не определен в настройках');
-        return null;
-    }
-
-    if (!taskConfig.module_name || !taskConfig.task_name) {
-        console.error('❌ SPAWN: taskConfig должен содержать module_name и task_name');
-        return null;
-    }
-
-    try {
-        const taskId = taskConfig.taskId || Date.now();
-        taskConfig.taskId = taskId;
-
-        // Получаем директорию конфигов
-        const configDir = getConfigDirectory();
-        if (!fs.existsSync(configDir)) {
-            console.log(`📂 SPAWN: Создаем директорию конфигов: ${configDir}`);
-            fs.mkdirSync(configDir, { recursive: true });
-        }
-
-        // Формируем имя файла конфигурации
-        const moduleName = sanitizeFileName(taskConfig.module_name);
-        const taskName = sanitizeFileName(taskConfig.task_name);
-        const configFileName = `${moduleName}_${taskName}.json`;
-        const configPath = path.join(configDir, configFileName);
-
-        console.log(`📄 SPAWN: Путь к конфигу: ${configPath}`);
-
-        // Обновляем конфигурацию (для Tensor модулей)
-        const updatedTaskConfig = await updateConfigCollectionId(taskConfig);
-        if (!updatedTaskConfig) {
-            return null;
-        }
-
-        // Сохраняем конфигурацию в файл
-        fs.writeFileSync(configPath, JSON.stringify(updatedTaskConfig, null, 2), 'utf-8');
-        console.log(`✅ SPAWN: Конфигурация сохранена`);
-
-        // Определяем директорию модуля и файл для запуска
-        const { moduleDir, fileToExecute } = getModuleInfo(updatedTaskConfig.module_name);
-
-        if (!moduleDir) {
-            console.error(`❌ SPAWN: Неизвестный модуль: ${updatedTaskConfig.module_name}`);
-            return null;
-        }
-
-        // Запускаем процесс
-        const child = spawnModuleProcess(
-            userSettings.scriptDirectory,
-            moduleDir,
-            fileToExecute,
-            configPath
-        );
-
-        if (!child || !child.pid) {
-            console.error('❌ SPAWN: Не удалось запустить процесс');
-            return null;
-        }
-
-        console.log(`✅ SPAWN: Процесс запущен успешно, PID: ${child.pid}`);
-        return child;
-    } catch (error) {
-        console.error('❌ SPAWN: Критическая ошибка:', error);
-        return null;
-    }
+interface ModuleInfo {
+    dir: string;
+    file: string;
 }
 
 /**
- * Получает информацию о модуле (директория и файл запуска)
+ * Карта модулей
  */
-function getModuleInfo(moduleName: string): {
-    moduleDir: string | null;
-    fileToExecute: string;
-} {
-    const moduleMap: Record<string, { dir: string; file: string }> = {
-        'Tensor sniper (SDK)': { dir: 'tensor-nft-sdk', file: 'index.ts' },
-        'Tensor reprice': { dir: 'tensor_reprice', file: 'index.ts' },
-        'LaunchMyNft': { dir: 'mint', file: 'starter.ts' },
-        'Meteora DLMM': { dir: 'meteora', file: 'index.ts' },
-    };
+const MODULE_MAP: Record<string, ModuleInfo> = {
+    'Tensor sniper (SDK)': { dir: 'tensor-nft-sdk', file: 'index.ts' },
+    'Tensor reprice': { dir: 'tensor-reprice', file: 'index.ts' },
+    'MEV token release': { dir: 'mev', file: 'index.ts' },
+    'Meteora': { dir: 'meteora', file: 'index.ts' },
+    'LaunchMyNft': { dir: 'launchmynft', file: 'index.ts' },
+};
 
-    const info = moduleMap[moduleName];
+/**
+ * Получить информацию о модуле
+ */
+function getModuleInfo(moduleName: string): { moduleDir: string | null; fileToExecute: string } {
+    const info = MODULE_MAP[moduleName];
 
     return {
         moduleDir: info?.dir || null,
@@ -185,6 +103,91 @@ function spawnModuleProcess(
     });
 
     return child;
+}
+
+/**
+ * Основная функция запуска процесса
+ *
+ * Теперь получает настройки внутри через ConfigRepository
+ *
+ * @param taskConfig - Конфигурация задачи
+ * @returns ChildProcess или null в случае ошибки
+ */
+export async function spawnProcess(
+    taskConfig: TaskConfig
+): Promise<ChildProcess | null> {
+    console.log(`🚀 SPAWN: Запуск процесса для модуля: ${taskConfig.module_name}`);
+
+    // Валидация входных параметров
+    if (!taskConfig) {
+        console.error('❌ SPAWN: taskConfig не определен');
+        return null;
+    }
+
+    if (!taskConfig.module_name || !taskConfig.task_name) {
+        console.error('❌ SPAWN: taskConfig должен содержать module_name и task_name');
+        return null;
+    }
+
+    try {
+        // Используем ConfigRepository для получения настроек
+        const configRepo = getConfigRepository();
+        const userSettings = await configRepo.getSettings();
+
+        // getScriptDirectory выбросит ошибку если не настроен
+        const scriptDirectory = await configRepo.getScriptDirectory();
+
+        const taskId = taskConfig.taskId || Date.now();
+        taskConfig.taskId = taskId;
+
+        // Получаем директорию конфигов
+        const configDir = getConfigDirectory();
+        if (!fs.existsSync(configDir)) {
+            console.log(`📂 SPAWN: Создаем директорию конфигов: ${configDir}`);
+            fs.mkdirSync(configDir, { recursive: true });
+        }
+
+        // Формируем имя файла конфигурации
+        const moduleName = sanitizeFileName(taskConfig.module_name);
+        const taskName = sanitizeFileName(taskConfig.task_name);
+        const configFileName = `${moduleName}_${taskName}_${taskId}.json`;
+        const configFilePath = path.join(configDir, configFileName);
+
+        // Обновляем конфиг для Tensor модулей если нужно
+        const updatedConfig = await updateConfigCollectionId(taskConfig);
+
+        if (!updatedConfig) {
+            console.error('❌ SPAWN: Не удалось обновить конфигурацию');
+            return null;
+        }
+
+        // Сохраняем конфиг в файл
+        fs.writeFileSync(configFilePath, JSON.stringify(updatedConfig, null, 2), 'utf-8');
+        console.log(`💾 SPAWN: Конфиг сохранен: ${configFilePath}`);
+
+        // Получаем информацию о модуле
+        const { moduleDir, fileToExecute } = getModuleInfo(taskConfig.module_name);
+
+        if (!moduleDir) {
+            console.error(`❌ SPAWN: Неизвестный модуль: ${taskConfig.module_name}`);
+            return null;
+        }
+
+        // Запускаем процесс
+        const child = spawnModuleProcess(scriptDirectory, moduleDir, fileToExecute, configFilePath);
+
+        if (!child.pid) {
+            console.error('❌ SPAWN: Не удалось получить PID процесса');
+            return null;
+        }
+
+        console.log(`✅ SPAWN: Процесс запущен с PID: ${child.pid}`);
+        return child;
+
+    } catch (error) {
+        console.error('❌ SPAWN: Ошибка при запуске процесса:', error);
+        return null;
+    }
 }
 
 /**
@@ -232,62 +235,47 @@ export function forceKillWindowsProcess(pid: number): ProcessOperationResult {
 export function stopProcess(
     process: ChildProcess | null,
     taskId: string | number
-): Promise<ProcessOperationResult> {
-    return new Promise((resolve) => {
-        try {
-            if (!process) {
-                console.log(`⚠️ STOP: Процесс ${taskId} не найден`);
-                resolve({
-                    success: false,
-                    error: 'Процесс не найден',
-                });
-                return;
-            }
+): ProcessOperationResult {
+    if (!process) {
+        return {
+            success: false,
+            error: 'Процесс не найден',
+        };
+    }
 
-            const pid = process.pid;
+    try {
+        console.log(`🛑 STOP: Остановка процесса для задачи ${taskId}`);
 
-            if (!pid) {
-                console.log(`⚠️ STOP: У процесса ${taskId} нет PID`);
-                resolve({
-                    success: false,
-                    error: 'PID не найден',
-                });
-                return;
-            }
-
-            console.log(`🛑 STOP: Остановка процесса ${taskId} (PID: ${pid})`);
-
-            // Пытаемся graceful shutdown
-            const killed = process.kill('SIGTERM');
-
-            if (!killed) {
-                console.log(`⚠️ STOP: Не удалось отправить SIGTERM, пробуем принудительное завершение`);
-                const result = forceKillWindowsProcess(pid);
-                resolve(result);
-                return;
-            }
-
-            // Даем процессу 5 секунд на graceful shutdown
-            setTimeout(() => {
-                if (process.exitCode === null) {
-                    console.log(`⚠️ STOP: Процесс ${taskId} не завершился, принудительное завершение`);
-                    const result = forceKillWindowsProcess(pid);
-                    resolve(result);
-                } else {
-                    console.log(`✅ STOP: Процесс ${taskId} успешно остановлен`);
-                    resolve({
-                        success: true,
-                        message: `Процесс ${taskId} остановлен`,
-                    });
-                }
-            }, 5000);
-        } catch (error) {
-            const err = error as Error;
-            console.error(`❌ STOP: Ошибка при остановке процесса ${taskId}:`, err);
-            resolve({
-                success: false,
-                error: err.message,
-            });
+        if (process.killed) {
+            console.log(`⚠️ STOP: Процесс ${taskId} уже остановлен`);
+            return {
+                success: true,
+                message: `Процесс ${taskId} уже остановлен`,
+            };
         }
-    });
+
+        const killed = process.kill('SIGTERM');
+
+        if (killed) {
+            console.log(`✅ STOP: Процесс ${taskId} успешно остановлен`);
+            return {
+                success: true,
+                message: `Процесс ${taskId} остановлен`,
+            };
+        } else {
+            console.warn(`⚠️ STOP: Не удалось отправить SIGTERM процессу ${taskId}`);
+            return {
+                success: false,
+                error: 'Не удалось остановить процесс',
+            };
+        }
+    } catch (error) {
+        const err = error as Error;
+        console.error(`❌ STOP: Ошибка при остановке процесса ${taskId}:`, err.message);
+
+        return {
+            success: false,
+            error: err.message,
+        };
+    }
 }

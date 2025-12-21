@@ -1,6 +1,6 @@
 import { IpcMain, IpcMainInvokeEvent } from 'electron';
 import axios, { AxiosInstance } from 'axios';
-import { getSettings, saveSettings } from '../utils/fsHelper';
+import { getConfigRepository } from '../repositories';
 import { EventBus } from '../../../shared/eventBus';
 import { TELEGRAM_EVENTS } from '../../../shared/eventBus/events';
 import {
@@ -70,7 +70,6 @@ class TelegramServiceClient {
    */
   async startBot(): Promise<boolean> {
     try {
-      // Отправляем пустой объект вместо undefined
       const response = await this.client.post('/api/bot/start', {}, {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -86,7 +85,6 @@ class TelegramServiceClient {
    */
   async stopBot(): Promise<boolean> {
     try {
-      // Отправляем пустой объект вместо undefined
       const response = await this.client.post('/api/bot/stop', {}, {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -113,39 +111,6 @@ class TelegramServiceClient {
 
 const telegramServiceClient = new TelegramServiceClient();
 
-// ============= Вспомогательные функции =============
-
-/**
- * Получить конфигурацию Telegram из настроек
- */
-async function getTelegramConfig(): Promise<TelegramBotConfig> {
-  const settings = await getSettings();
-  return {
-    token: settings?.telegramToken || '',
-    enabled: settings?.telegramEnabled || false,
-    chatIds: settings?.telegramChatIds || [],
-  };
-}
-
-/**
- * Сохранить конфигурацию Telegram в настройки
- */
-async function saveTelegramConfig(config: Partial<TelegramBotConfig>): Promise<void> {
-  const settings = await getSettings();
-
-  if (config.token !== undefined) {
-    settings.telegramToken = config.token;
-  }
-  if (config.enabled !== undefined) {
-    settings.telegramEnabled = config.enabled;
-  }
-  if (config.chatIds !== undefined) {
-    settings.telegramChatIds = config.chatIds;
-  }
-
-  await saveSettings(settings);
-}
-
 // ============= IPC Handlers =============
 
 /**
@@ -154,6 +119,8 @@ async function saveTelegramConfig(config: Partial<TelegramBotConfig>): Promise<v
 export function initializeTelegramHandlers(ipcMain: IpcMain): void {
   console.log('[TelegramHandler] Initializing Telegram IPC handlers...');
 
+  const configRepo = getConfigRepository();
+
   /**
    * Получить конфигурацию бота
    */
@@ -161,7 +128,15 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
       IPC_CHANNELS.TELEGRAM_GET_CONFIG,
       async (_event: IpcMainInvokeEvent): Promise<TelegramBotConfig> => {
         console.log('[TelegramHandler] Getting Telegram config');
-        return await getTelegramConfig();
+
+        // Используем ConfigRepository вместо getSettings
+        const config = await configRepo.getTelegramConfig();
+
+        return {
+          token: config.token || '',
+          enabled: config.enabled || false,
+          chatIds: config.chatIds || [],
+        };
       }
   );
 
@@ -178,12 +153,12 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
         }
 
         try {
-          // Сохраняем токен локально
-          await saveTelegramConfig({ token, enabled: true });
+          // Используем ConfigRepository для сохранения токена
+          await configRepo.setTelegramConfig({ token, enabled: true });
 
-          // Получаем chatIds из настроек (они сохраняются отдельно через saveSettings)
-          const settings = await getSettings();
-          const chatIds = settings?.telegramChatIds || [];
+          // Получаем chatIds для отправки в сервис
+          const config = await configRepo.getTelegramConfig();
+          const chatIds = config.chatIds || [];
 
           console.log('[TelegramHandler] Configuring with chatIds:', chatIds);
 
@@ -225,15 +200,15 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
         console.log('[TelegramHandler] Starting Telegram bot');
 
         try {
-          const config = await getTelegramConfig();
+          // Используем ConfigRepository для получения конфига
+          const config = await configRepo.getTelegramConfig();
 
           if (!config.token) {
             return { success: false, error: 'Bot token not configured. Please set token first.' };
           }
 
-          // Проверяем что у нас есть chat IDs
-          const settings = await getSettings();
-          const chatIds = settings?.telegramChatIds || [];
+          // Получаем chatIds
+          const chatIds = config.chatIds || [];
 
           // Отправляем конфиг в telegram-service
           await telegramServiceClient.setBotConfig({
@@ -245,7 +220,8 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
           const success = await telegramServiceClient.startBot();
 
           if (success) {
-            await saveTelegramConfig({ enabled: true });
+            // Используем ConfigRepository для сохранения enabled
+            await configRepo.setTelegramConfig({ enabled: true });
 
             EventBus.emit(TELEGRAM_EVENTS.BOT_STARTED, {
               timestamp: Date.now(),
@@ -274,7 +250,8 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
           const success = await telegramServiceClient.stopBot();
 
           if (success) {
-            await saveTelegramConfig({ enabled: false });
+            // Используем ConfigRepository для сохранения enabled
+            await configRepo.setTelegramConfig({ enabled: false });
 
             EventBus.emit(TELEGRAM_EVENTS.BOT_STOPPED, {
               timestamp: Date.now(),

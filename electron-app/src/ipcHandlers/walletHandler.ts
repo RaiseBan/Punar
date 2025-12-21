@@ -1,80 +1,64 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import path from 'path';
-import { getGlobalConfigDirectory } from '../utils/wallet';
 import { IpcMain, IpcMainInvokeEvent } from 'electron';
 import { Wallet, IPC_CHANNELS } from '../../../shared/types';
-
-interface WalletOperationResult {
-    message?: string;
-}
+import { getWalletRepository } from '../repositories';
+import { WalletError, ValidationError } from '../repositories/errors';
 
 export function initializeWalletHandlers(ipcMain: IpcMain): void {
+    const walletRepo = getWalletRepository();
+
+    /**
+     * Получить все кошельки
+     */
     ipcMain.handle(
         IPC_CHANNELS.GET_WALLETS,
-        async (): Promise<Wallet[] | WalletOperationResult> => {
+        async (_event: IpcMainInvokeEvent): Promise<Wallet[]> => {
             try {
-                const configDir = getGlobalConfigDirectory();
-
-                if (!existsSync(configDir)) {
-                    mkdirSync(configDir, { recursive: true });
-                }
-
-                const walletsFilePath = path.join(configDir, 'wallets.json');
-
-                if (!existsSync(walletsFilePath)) {
-                    writeFileSync(walletsFilePath, JSON.stringify([]));
-                    return [];
-                }
-
-                const walletsData = readFileSync(walletsFilePath, 'utf-8');
-                return JSON.parse(walletsData) as Wallet[];
+                return await walletRepo.getAll();
             } catch (error) {
                 console.error('Ошибка при загрузке кошельков:', error);
-                return { message: 'Error loading wallets.' };
+
+                // Возвращаем пустой массив в случае ошибки
+                // Можно также пробросить ошибку дальше
+                return [];
             }
         }
     );
 
+    /**
+     * Добавить кошелек
+     */
     ipcMain.handle(
         IPC_CHANNELS.ADD_WALLET,
         async (_event: IpcMainInvokeEvent, wallet: Wallet): Promise<void> => {
             try {
-                const configDir = getGlobalConfigDirectory();
-                const walletsFilePath = path.join(configDir, 'wallets.json');
-
-                let wallets: Wallet[] = [];
-
-                if (existsSync(walletsFilePath)) {
-                    const walletsData = readFileSync(walletsFilePath, 'utf-8');
-                    wallets = JSON.parse(walletsData) as Wallet[];
-                }
-
-                wallets.push(wallet);
-                writeFileSync(walletsFilePath, JSON.stringify(wallets, null, 2));
+                await walletRepo.add(wallet);
             } catch (error) {
-                console.error('Ошибка при сохранении кошелька:', error);
+                if (error instanceof ValidationError) {
+                    console.error('Ошибка валидации кошелька:', error.message);
+                    throw new Error(`Ошибка валидации: ${error.message}`);
+                }
+                if (error instanceof WalletError) {
+                    console.error('Ошибка при добавлении кошелька:', error.message);
+                    throw new Error(`Не удалось добавить кошелек: ${error.message}`);
+                }
+                console.error('Неизвестная ошибка при добавлении кошелька:', error);
                 throw error;
             }
         }
     );
 
+    /**
+     * Удалить кошелек
+     */
     ipcMain.handle(
         IPC_CHANNELS.DELETE_WALLET,
         async (_event: IpcMainInvokeEvent, publicKey: string): Promise<void> => {
             try {
-                const configDir = getGlobalConfigDirectory();
-                const walletsFilePath = path.join(configDir, 'wallets.json');
+                const deleted = await walletRepo.delete(publicKey);
 
-                if (!existsSync(walletsFilePath)) {
-                    return;
+                if (!deleted) {
+                    console.warn(`Кошелек с publicKey ${publicKey} не найден`);
                 }
-
-                const walletsData = readFileSync(walletsFilePath, 'utf-8');
-                let wallets: Wallet[] = JSON.parse(walletsData) as Wallet[];
-
-                wallets = wallets.filter((wallet) => wallet.publicKey !== publicKey);
-
-                writeFileSync(walletsFilePath, JSON.stringify(wallets, null, 2));
             } catch (error) {
                 console.error('Ошибка при удалении кошелька:', error);
                 throw error;
