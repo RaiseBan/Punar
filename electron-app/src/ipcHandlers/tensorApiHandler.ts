@@ -46,7 +46,9 @@ export function initializeApiHandlers(ipcMain: IpcMain): void {
             try {
                 const slug = url.split('/').pop() || '';
                 console.log(`Fetching collection ID for URL slug: ${slug}`);
-                return await getCollIdBySlug(slug);
+                const result = await getCollIdBySlug(slug);
+                // Конвертируем undefined в null для соответствия типу возврата
+                return result ?? null;
             } catch (error) {
                 console.error('Ошибка при получении collectionId:', error);
                 return null;
