@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { store } from "./store/store";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Делаем store доступным глобально для IPC взаимодействия
 declare global {
@@ -16,7 +17,7 @@ window.getReduxState = () => {
 };
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-    <>
+    <ErrorBoundary>
         <App />
-    </>
+    </ErrorBoundary>
 );
