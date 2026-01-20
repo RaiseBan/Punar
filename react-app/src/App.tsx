@@ -2,7 +2,7 @@ import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-d
 import { CssBaseline, ThemeProvider, createTheme, Box } from "@mui/material";
 import Sidebar from "./components/Sidebar";
 import TasksPage from "./components/TasksPage";
-import Wallets from "./components/Wallets";
+import Wallets from "./components/Wallets/Wallets";
 import Settings from "./components/Settings";
 import { Provider, useSelector } from "react-redux";
 import { store, RootState } from "./store/store";
