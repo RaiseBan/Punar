@@ -12,7 +12,6 @@ export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWi
 
         const processes = getProcesses();
 
-        // Останавливаем все активные процессы
         const activeProcessIds = Object.keys(processes).filter(
             id => processes[parseInt(id)]?.isActive
         );
@@ -29,7 +28,6 @@ export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWi
                         console.log(`  - Stopping process ${taskId}...`);
                         processInfo.process.kill('SIGTERM');
 
-                        // Даем процессу 2 секунды на корректное завершение
                         await new Promise((resolve) => {
                             const timeout = setTimeout(() => {
                                 if (processInfo.process && !processInfo.process.killed) {
@@ -59,7 +57,6 @@ export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWi
             console.log('ℹ️ [WINDOW] No active processes to stop');
         }
 
-        // Закрываем окно и выходим из приложения
         mainWindow.close();
         app.quit();
     });

@@ -23,7 +23,6 @@ export async function getCollectionAddress(mint: string): Promise<string | undef
     return collectionAddress;
 }
 
-
 export function convertBigIntToString(obj: unknown): unknown {
     if (typeof obj !== 'object' || obj === null) return obj;
 
@@ -43,7 +42,6 @@ export function convertBigIntToString(obj: unknown): unknown {
     }
     return result;
 }
-
 
 export function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));

@@ -1,52 +1,187 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import { Wallet } from '../../../shared/types';
 import { WalletError, FileSystemError, ValidationError } from './errors';
 
+interface LegacyWallet {
+  publicKey: string;
+  privateKey: string; 
+}
+
+interface StoredWallet {
+  publicKey: string;
+  encryptedPrivateKey: string; 
+}
+
+function isLegacyWallet(wallet: any): wallet is LegacyWallet {
+  return wallet &&
+      typeof wallet.publicKey === 'string' &&
+      typeof wallet.privateKey === 'string' &&
+      !('encryptedPrivateKey' in wallet);
+}
+
+function isStoredWallet(wallet: any): wallet is StoredWallet {
+  return wallet &&
+      typeof wallet.publicKey === 'string' &&
+      typeof wallet.encryptedPrivateKey === 'string';
+}
+
 export class WalletRepository {
   private readonly walletsPath: string;
-  private cachedWallets: Wallet[] | null = null;
-
   constructor() {
     const userDataPath =
-      process.env.NODE_ENV === 'production'
-        ? app.getPath('userData')
-        : path.join(__dirname, '..', '..');
+        process.env.NODE_ENV === 'production'
+            ? app.getPath('userData')
+            : path.join(__dirname, '..', '..');
 
     this.walletsPath = path.join(userDataPath, 'globalConfigs', 'wallets.json');
+    console.log(`[WalletRepository] Initialized with path: ${this.walletsPath}`);
+  }
+
+  private encryptPrivateKey(privateKey: string): string {
+    if (!safeStorage.isEncryptionAvailable()) {
+      console.warn('[WalletRepository] Encryption not available, saving as plain text (NOT RECOMMENDED)');
+
+      return Buffer.from(privateKey).toString('base64');
+    }
+
+    const buffer = safeStorage.encryptString(privateKey);
+    return buffer.toString('base64');
+  }
+
+  private decryptPrivateKey(encryptedPrivateKey: string): string {
+    if (!safeStorage.isEncryptionAvailable()) {
+      console.warn('[WalletRepository] Encryption not available, reading as plain text');
+
+      return Buffer.from(encryptedPrivateKey, 'base64').toString('utf-8');
+    }
+
+    try {
+      const buffer = Buffer.from(encryptedPrivateKey, 'base64');
+      return safeStorage.decryptString(buffer);
+    } catch (error) {
+      console.error('[WalletRepository] Decryption failed:', error);
+
+      try {
+        return Buffer.from(encryptedPrivateKey, 'base64').toString('utf-8');
+      } catch {
+        throw new WalletError('Не удалось расшифровать приватный ключ');
+      }
+    }
+  }
+
+  private storedToWallet(stored: StoredWallet): Wallet {
+    return {
+      publicKey: stored.publicKey,
+      privateKey: this.decryptPrivateKey(stored.encryptedPrivateKey),
+    };
+  }
+
+  private walletToStored(wallet: Wallet): StoredWallet {
+    return {
+      publicKey: wallet.publicKey,
+      encryptedPrivateKey: this.encryptPrivateKey(wallet.privateKey),
+    };
+  }
+
+  private async migrateIfNeeded(): Promise<void> {
+    try {
+      const data = await fs.readFile(this.walletsPath, 'utf-8');
+      const wallets = JSON.parse(data);
+
+      if (!Array.isArray(wallets) || wallets.length === 0) {
+        return;
+      }
+
+      const firstWallet = wallets[0];
+
+      if (isLegacyWallet(firstWallet)) {
+        console.log('[WalletRepository] 🔄 Detected legacy format, migrating to encrypted format...');
+
+        const migratedWallets = wallets.map((legacyWallet: LegacyWallet) => {
+          const wallet: Wallet = {
+            publicKey: legacyWallet.publicKey,
+            privateKey: legacyWallet.privateKey,
+          };
+          return this.walletToStored(wallet);
+        });
+
+        await fs.writeFile(
+            this.walletsPath,
+            JSON.stringify(migratedWallets, null, 2),
+            'utf-8'
+        );
+
+        console.log(`[WalletRepository] ✅ Successfully migrated ${migratedWallets.length} wallets to encrypted format`);
+      } else if (isStoredWallet(firstWallet)) {
+        console.log('[WalletRepository] ✅ Wallets are already in encrypted format');
+      } else {
+        console.warn('[WalletRepository] ⚠️ Unknown wallet format detected');
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+
+        return;
+      }
+      console.error('[WalletRepository] Migration error:', error);
+      throw error;
+    }
   }
 
   async getAll(): Promise<Wallet[]> {
     try {
-
-      if (this.cachedWallets) {
-        return this.cachedWallets;
-      }
+      console.log('[WalletRepository] Getting all wallets...');
 
       const dirPath = path.dirname(this.walletsPath);
       await this.ensureDirectory(dirPath);
 
       try {
         await fs.access(this.walletsPath);
+        console.log('[WalletRepository] Wallets file exists, reading...');
       } catch {
-
+        console.log('[WalletRepository] Wallets file does not exist, creating empty...');
         await fs.writeFile(this.walletsPath, JSON.stringify([], null, 2), 'utf-8');
-        this.cachedWallets = [];
         return [];
       }
 
+      await this.migrateIfNeeded();
+
       const data = await fs.readFile(this.walletsPath, 'utf-8');
-      const wallets = JSON.parse(data) as Wallet[];
+      const storedWallets = JSON.parse(data);
+
+      console.log(`[WalletRepository] Read ${storedWallets.length} wallets from file`);
+
+      if (!Array.isArray(storedWallets)) {
+        throw new WalletError('Некорректный формат файла кошельков');
+      }
+
+      const wallets = storedWallets.map((stored, index) => {
+        if (isLegacyWallet(stored)) {
+
+          console.log(`[WalletRepository] Wallet ${index} is in legacy format, converting...`);
+          return {
+            publicKey: stored.publicKey,
+            privateKey: stored.privateKey,
+          };
+        } else if (isStoredWallet(stored)) {
+
+          console.log(`[WalletRepository] Wallet ${index} is encrypted, decrypting...`);
+          return this.storedToWallet(stored);
+        } else {
+          throw new WalletError(`Неизвестный формат кошелька на позиции ${index}`);
+        }
+      });
 
       this.validateWalletArray(wallets);
 
-      this.cachedWallets = wallets;
+      console.log(`[WalletRepository] ✅ Successfully loaded ${wallets.length} wallets`);
       return wallets;
     } catch (error) {
+      console.error('[WalletRepository] Error loading wallets:', error);
       throw new WalletError(
-        'Не удалось загрузить кошельки',
-        error instanceof Error ? error : undefined
+          'Не удалось загрузить кошельки',
+          error instanceof Error ? error : undefined
       );
     }
   }
@@ -58,7 +193,7 @@ export class WalletRepository {
 
   async add(wallet: Wallet): Promise<void> {
     try {
-
+      console.log(`[WalletRepository] Adding wallet: ${wallet.publicKey}`);
       this.validateWallet(wallet);
 
       const wallets = await this.getAll();
@@ -66,52 +201,60 @@ export class WalletRepository {
       const exists = wallets.some((w) => w.publicKey === wallet.publicKey);
       if (exists) {
         throw new ValidationError(
-          `Кошелек с публичным ключом ${wallet.publicKey} уже существует`,
-          'publicKey'
+            `Кошелек с публичным ключом ${wallet.publicKey} уже существует`,
+            'publicKey'
         );
       }
 
       wallets.push(wallet);
 
       await this.saveAll(wallets);
+      console.log(`[WalletRepository] ✅ Wallet added successfully`);
     } catch (error) {
+      console.error('[WalletRepository] Error adding wallet:', error);
       if (error instanceof WalletError || error instanceof ValidationError) {
         throw error;
       }
       throw new WalletError(
-        'Не удалось добавить кошелек',
-        error instanceof Error ? error : undefined
+          'Не удалось добавить кошелек',
+          error instanceof Error ? error : undefined
       );
     }
   }
 
   async delete(publicKey: string): Promise<boolean> {
     try {
+      console.log(`[WalletRepository] Deleting wallet: ${publicKey}`);
       const wallets = await this.getAll();
       const initialLength = wallets.length;
 
       const filtered = wallets.filter((w) => w.publicKey !== publicKey);
 
       if (filtered.length === initialLength) {
+        console.log(`[WalletRepository] Wallet not found`);
         return false;
       }
 
       await this.saveAll(filtered);
+      console.log(`[WalletRepository] ✅ Wallet deleted successfully`);
       return true;
     } catch (error) {
+      console.error('[WalletRepository] Error deleting wallet:', error);
       throw new WalletError(
-        'Не удалось удалить кошелек',
-        error instanceof Error ? error : undefined
+          'Не удалось удалить кошелек',
+          error instanceof Error ? error : undefined
       );
     }
   }
 
   async update(publicKey: string, updates: Partial<Wallet>): Promise<boolean> {
     try {
+      console.log(`[WalletRepository] Updating wallet: ${publicKey}`);
       const wallets = await this.getAll();
       const index = wallets.findIndex((w) => w.publicKey === publicKey);
 
       if (index === -1) {
+        console.log(`[WalletRepository] Wallet not found`);
         return false;
       }
 
@@ -120,11 +263,13 @@ export class WalletRepository {
       this.validateWallet(wallets[index]);
 
       await this.saveAll(wallets);
+      console.log(`[WalletRepository] ✅ Wallet updated successfully`);
       return true;
     } catch (error) {
+      console.error('[WalletRepository] Error updating wallet:', error);
       throw new WalletError(
-        'Не удалось обновить кошелек',
-        error instanceof Error ? error : undefined
+          'Не удалось обновить кошелек',
+          error instanceof Error ? error : undefined
       );
     }
   }
@@ -139,29 +284,31 @@ export class WalletRepository {
     return wallets.length;
   }
 
-  async clear(): Promise<void> {
-    await this.saveAll([]);
-  }
-
-  clearCache(): void {
-    this.cachedWallets = null;
-  }
-
   private async saveAll(wallets: Wallet[]): Promise<void> {
     try {
-
+      console.log(`[WalletRepository] Saving ${wallets.length} wallets...`);
       this.validateWalletArray(wallets);
 
       const dirPath = path.dirname(this.walletsPath);
       await this.ensureDirectory(dirPath);
 
-      await fs.writeFile(this.walletsPath, JSON.stringify(wallets, null, 2), 'utf-8');
+      const storedWallets = wallets.map((wallet, index) => {
+        console.log(`[WalletRepository] Encrypting wallet ${index}: ${wallet.publicKey}`);
+        return this.walletToStored(wallet);
+      });
 
-      this.cachedWallets = wallets;
+      await fs.writeFile(this.walletsPath, JSON.stringify(storedWallets, null, 2), 'utf-8');
+
+      console.log(`[WalletRepository] ✅ Successfully saved ${wallets.length} wallets`);
+
+      const verification = await fs.readFile(this.walletsPath, 'utf-8');
+      const saved = JSON.parse(verification);
+      console.log(`[WalletRepository] Verification: file contains ${saved.length} wallets`);
     } catch (error) {
+      console.error('[WalletRepository] Error saving wallets:', error);
       throw new WalletError(
-        'Не удалось сохранить кошельки',
-        error instanceof Error ? error : undefined
+          'Не удалось сохранить кошельки',
+          error instanceof Error ? error : undefined
       );
     }
   }
@@ -181,8 +328,8 @@ export class WalletRepository {
 
     if (!wallet.privateKey || typeof wallet.privateKey !== 'string') {
       throw new ValidationError(
-        'privateKey обязателен и должен быть строкой',
-        'privateKey'
+          'privateKey обязателен и должен быть строкой',
+          'privateKey'
       );
     }
 
@@ -201,9 +348,9 @@ export class WalletRepository {
         this.validateWallet(wallet);
       } catch (error) {
         throw new ValidationError(
-          `Ошибка валидации кошелька на позиции ${index}: ${
-            error instanceof Error ? error.message : 'неизвестная ошибка'
-          }`
+            `Ошибка валидации кошелька на позиции ${index}: ${
+                error instanceof Error ? error.message : 'неизвестная ошибка'
+            }`
         );
       }
     });
@@ -214,9 +361,9 @@ export class WalletRepository {
       await fs.mkdir(dirPath, { recursive: true });
     } catch (error) {
       throw new FileSystemError(
-        `Не удалось создать директорию: ${dirPath}`,
-        dirPath,
-        error instanceof Error ? error : undefined
+          `Не удалось создать директорию: ${dirPath}`,
+          dirPath,
+          error instanceof Error ? error : undefined
       );
     }
   }
