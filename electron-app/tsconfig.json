@@ -27,7 +27,8 @@
   },
   "include": [
     "src/**/*",
-    "../shared/**/*"
+    "../shared/**/*",
+    "../node_modules/@types/jest/index.d.ts"
   ],
   "exclude": [
     "node_modules",

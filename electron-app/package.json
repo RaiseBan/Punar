@@ -23,12 +23,14 @@
     "react-build": "cd ../react-app && npm run build",
     "electron-build": "npm run clean && tsc && electron-builder",
     "clear-cache": "rimraf %LOCALAPPDATA%\\electron-builder\\Cache dist electron-cache electron-data",
-    "test": "jest",
     "watch-ts": "tsc --watch",
     "lint": "eslint 'src/**/*.{ts,js}'",
     "lint:fix": "eslint 'src/**/*.{ts,js}' --fix",
     "format": "prettier --write 'src/**/*.{ts,js,json}'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "build": {
     "appId": "com.example.electronapp",
@@ -49,6 +51,9 @@
     }
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
     "@types/electron": "^1.6.12",
     "@types/node": "^22.15.3",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
