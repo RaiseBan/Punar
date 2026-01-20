@@ -28,7 +28,7 @@ const STEPS = ["Choose module", "Configure module", "Review & Create"];
 interface CreateTaskWizardProps {
     open: boolean;
     onClose: () => void;
-    onCreateTask: (config: ) => void;
+    onCreateTask: (config: any) => void;
 }
 
 export default function CreateTaskWizard({
@@ -114,7 +114,7 @@ export default function CreateTaskWizard({
                 setWallets(arr);
             });
             // Список сетов
-            window.electronAPI?.getSettings().then((settings: ) => {
+            window.electronAPI?.getSettings().then((settings: any) => {
                 if (settings?.walletsSet) {
                     setWalletSets(Object.keys(settings.walletsSet));
                 } else {

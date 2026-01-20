@@ -20,7 +20,7 @@ interface SettingsDialogProps {
   onClose: () => void;
   editName: string;
   editModuleName: string;
-  editConfig: ;
+  editConfig: any;
   canEditConfig: boolean;
   onNameChange: (value: string) => void;
   onModuleNameChange: (value: string) => void;
