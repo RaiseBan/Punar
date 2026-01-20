@@ -1,4 +1,3 @@
-// src/components/TelegramBotSettings.tsx
 import React, { useState, useEffect } from "react";
 import {
     TextField,
@@ -13,7 +12,7 @@ import {
     IconButton
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
+import { validateTelegramBotToken, validateChatIds } from "../utils/validators";
 
 export default function TelegramBotSettings() {
     const [botToken, setBotToken] = useState("");
@@ -27,7 +26,11 @@ export default function TelegramBotSettings() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
-    const navigate = useNavigate();
+
+    // Валидация
+    const [tokenError, setTokenError] = useState<string | null>(null);
+    const [chatIdsError, setChatIdsError] = useState<string | null>(null);
+    const [touched, setTouched] = useState({ token: false, chatIds: false });
 
     useEffect(() => {
         loadSettings();
@@ -48,7 +51,6 @@ export default function TelegramBotSettings() {
             setBotToken(config.token || "");
             setChatIds(config.chatIds?.join(", ") || "");
 
-            // Берем chatCount из локального конфига вместо бекенда
             setBotStatus({
                 isRunning: status?.isRunning || false,
                 isConfigured: !!config.token,
@@ -62,9 +64,45 @@ export default function TelegramBotSettings() {
         }
     };
 
+    const handleTokenChange = (value: string) => {
+        setBotToken(value);
+        if (touched.token) {
+            const result = validateTelegramBotToken(value);
+            setTokenError(result.isValid ? null : result.error || 'Invalid token');
+        }
+    };
+
+    const handleChatIdsChange = (value: string) => {
+        setChatIds(value);
+        if (touched.chatIds) {
+            const result = validateChatIds(value);
+            setChatIdsError(result.isValid ? null : result.error || 'Invalid chat IDs');
+        }
+    };
+
+    const handleTokenBlur = () => {
+        setTouched(prev => ({ ...prev, token: true }));
+        const result = validateTelegramBotToken(botToken);
+        setTokenError(result.isValid ? null : result.error || 'Invalid token');
+    };
+
+    const handleChatIdsBlur = () => {
+        setTouched(prev => ({ ...prev, chatIds: true }));
+        const result = validateChatIds(chatIds);
+        setChatIdsError(result.isValid ? null : result.error || 'Invalid chat IDs');
+    };
+
     const handleSaveToken = async () => {
-        if (!botToken.trim()) {
-            setError("Token is required");
+        // Валидация перед сохранением
+        const tokenResult = validateTelegramBotToken(botToken);
+        const chatIdsResult = validateChatIds(chatIds);
+
+        setTouched({ token: true, chatIds: true });
+        setTokenError(tokenResult.isValid ? null : tokenResult.error || 'Invalid token');
+        setChatIdsError(chatIdsResult.isValid ? null : chatIdsResult.error || 'Invalid chat IDs');
+
+        if (!tokenResult.isValid || !chatIdsResult.isValid) {
+            setError("Please fix validation errors");
             return;
         }
 
@@ -94,99 +132,89 @@ export default function TelegramBotSettings() {
 
                 setSuccess("Token saved successfully!");
                 await loadSettings();
-
-                setTimeout(() => setSuccess(""), 2000);
             } else {
                 setError(result.error || "Failed to save token");
             }
         } catch (err) {
             console.error("Error saving token:", err);
-            setError((err as Error).message);
-        }
-    };
-
-    const handleStart = async () => {
-        if (!window.electronAPI?.telegramBot) {
-            setError("Telegram API not available");
-            return;
-        }
-
-        if (!botToken.trim()) {
-            setError("Please set bot token first");
-            return;
-        }
-
-        setError("");
-        try {
-            const result = await window.electronAPI.telegramBot.start();
-            if (result.success) {
-                setSuccess("Bot started successfully!");
-                await loadSettings();
-                setTimeout(() => setSuccess(""), 2000);
-            } else {
-                setError(result.error || "Failed to start bot");
-            }
-        } catch (err) {
-            console.error("Error starting bot:", err);
-            setError((err as Error).message);
-        }
-    };
-
-    const handleStop = async () => {
-        if (!window.electronAPI?.telegramBot) {
-            setError("Telegram API not available");
-            return;
-        }
-
-        setError("");
-        try {
-            const result = await window.electronAPI.telegramBot.stop();
-            if (result.success) {
-                setSuccess("Bot stopped successfully!");
-                await loadSettings();
-                setTimeout(() => setSuccess(""), 2000);
-            } else {
-                setError(result.error || "Failed to stop bot");
-            }
-        } catch (err) {
-            console.error("Error stopping bot:", err);
-            setError((err as Error).message);
+            setError("Failed to save configuration");
         }
     };
 
     const handleToggle = async () => {
-        if (botStatus?.isRunning) {
-            await handleStop();
-        } else {
-            await handleStart();
+        if (!window.electronAPI?.telegramBot) return;
+
+        try {
+            if (botStatus?.isRunning) {
+                await window.electronAPI.telegramBot.stop();
+            } else {
+                await window.electronAPI.telegramBot.start();
+            }
+            await loadSettings();
+        } catch (err) {
+            console.error("Error toggling bot:", err);
+            setError("Failed to toggle bot");
+        }
+    };
+
+    const handleTestConnection = async () => {
+        if (!window.electronAPI?.telegramBot) {
+            setError("Telegram API not available");
+            return;
+        }
+
+        setError("");
+        setSuccess("");
+
+        try {
+            const result = await window.electronAPI.telegramBot.testConnection();
+            if (result.success) {
+                setSuccess(`Connection successful!`);
+            } else {
+                setError(result.error || "Connection test failed");
+            }
+        } catch (err) {
+            console.error("Test connection error:", err);
+            setError("Failed to test connection");
         }
     };
 
     if (loading) {
         return (
-            <Box display="flex" justifyContent="center" mt={4}>
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
                 <CircularProgress />
             </Box>
         );
     }
 
     return (
-        <Box sx={{ p: 3, maxWidth: 800, margin: "0 auto" }}>
+        <Box sx={{ p: 3, maxWidth: 800 }}>
             <Typography variant="h4" gutterBottom>
-                Telegram Bot Configuration
+                Telegram Bot Settings
             </Typography>
 
-            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-            {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+            {error && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
+                    {error}
+                </Alert>
+            )}
 
-            {/* Bot Status */}
+            {success && (
+                <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess("")}>
+                    {success}
+                </Alert>
+            )}
+
             {botStatus && (
-                <Box sx={{ mb: 3, p: 2, bgcolor: "background.paper", borderRadius: 2 }}>
-                    <Typography variant="h6" gutterBottom>Bot Status</Typography>
+                <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
+                    <Typography variant="h6" gutterBottom>
+                        Bot Status
+                    </Typography>
                     <Typography>
-                        Status: <strong style={{ color: botStatus.isRunning ? '#4caf50' : '#f44336' }}>
-                        {botStatus.isRunning ? '🟢 Running' : '🔴 Stopped'}
-                    </strong>
+                        Status:{' '}
+                        <strong style={{ color: botStatus.isRunning ? '#4caf50' : '#f44336' }}>
+                            {botStatus.isRunning ? '🟢 Running' : '🔴 Stopped'}
+                        </strong>
                     </Typography>
                     <Typography>
                         Configured: <strong>{botStatus.isConfigured ? '✅ Yes' : '❌ No'}</strong>
@@ -203,9 +231,17 @@ export default function TelegramBotSettings() {
                     label="Bot Token"
                     type={showToken ? "text" : "password"}
                     value={botToken}
-                    onChange={(e) => setBotToken(e.target.value)}
+                    onChange={(e) => handleTokenChange(e.target.value)}
+                    onBlur={handleTokenBlur}
+                    error={touched.token && !!tokenError}
+                    helperText={
+                        touched.token && tokenError 
+                            ? tokenError 
+                            : "Get from @BotFather on Telegram"
+                    }
                     margin="normal"
                     placeholder="123456:ABC-DEF..."
+                    required
                     InputProps={{
                         endAdornment: (
                             <InputAdornment position="end">
@@ -224,19 +260,34 @@ export default function TelegramBotSettings() {
                     fullWidth
                     label="Chat IDs (comma-separated)"
                     value={chatIds}
-                    onChange={(e) => setChatIds(e.target.value)}
+                    onChange={(e) => handleChatIdsChange(e.target.value)}
+                    onBlur={handleChatIdsBlur}
+                    error={touched.chatIds && !!chatIdsError}
+                    helperText={
+                        touched.chatIds && chatIdsError
+                            ? chatIdsError
+                            : "Get your chat ID: send /start to @userinfobot"
+                    }
                     margin="normal"
                     placeholder="123456789, 987654321"
-                    helperText="Get your chat ID: send /start to @userinfobot"
                 />
 
-                <Box sx={{ mt: 2, display: "flex", gap: 2, alignItems: "center" }}>
+                <Box sx={{ mt: 2, display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
                     <Button
                         variant="contained"
                         color="primary"
                         onClick={handleSaveToken}
+                        disabled={!!tokenError || !!chatIdsError}
                     >
                         Save Configuration
+                    </Button>
+
+                    <Button
+                        variant="outlined"
+                        onClick={handleTestConnection}
+                        disabled={!botToken || !!tokenError}
+                    >
+                        Test Connection
                     </Button>
 
                     <FormControlLabel
@@ -248,25 +299,9 @@ export default function TelegramBotSettings() {
                                 disabled={!botStatus?.isConfigured}
                             />
                         }
-                        label={botStatus?.isRunning ? "Bot Active" : "Bot Inactive"}
+                        label={botStatus?.isRunning ? "Stop Bot" : "Start Bot"}
                     />
                 </Box>
-            </Box>
-
-            <Box sx={{ mt: 4 }}>
-                <Button
-                    variant="outlined"
-                    onClick={() => navigate(-1)}
-                    sx={{ mr: 2 }}
-                >
-                    Back
-                </Button>
-                <Button
-                    variant="outlined"
-                    onClick={loadSettings}
-                >
-                    Refresh Status
-                </Button>
             </Box>
         </Box>
     );

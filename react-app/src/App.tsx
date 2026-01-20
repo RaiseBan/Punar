@@ -3,7 +3,7 @@ import { CssBaseline, ThemeProvider, createTheme, Box } from "@mui/material";
 import Sidebar from "./components/Sidebar";
 import TasksPage from "./components/TasksPage";
 import Wallets from "./components/Wallets/Wallets";
-import Settings from "./components/Settings";
+import Settings from "./components/Settings/Settings";
 import { Provider, useSelector } from "react-redux";
 import { store, RootState } from "./store/store";
 import './styles/global.css'
