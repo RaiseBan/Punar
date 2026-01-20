@@ -1,7 +1,6 @@
 import { WalletSet } from './wallet.types';
 
 export interface AppSettings {
-
   walletsSet?: WalletSet;
   scriptDirectory?: string;
   mevBotDirectory?: string;
@@ -30,6 +29,11 @@ export interface AppSettings {
   delay_between_nodes?: string;
   min_process_age_for_cleanup?: string;
   processes_check_interval?: string;
+
+  // Telegram settings
+  telegramToken?: string;
+  telegramEnabled?: boolean;
+  telegramChatIds?: number[];
 }
 
 export type ConfigType = 'reprice_config' | 'snipe_config';
