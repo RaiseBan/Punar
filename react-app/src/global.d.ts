@@ -10,20 +10,20 @@ declare global {
   interface Window {
     electronAPI: {
       // ============= General IPC =============
-      invoke: <T = any>(channel: string, ...args: any[]) => Promise<T>;
-      sendToMain: (channel: string, ...args: any[]) => void;
+      invoke: <T = >(channel: string, ...args: []) => Promise<T>;
+      sendToMain: (channel: string, ...args: []) => void;
 
       // ============= Process Management =============
-      startProcess: (taskId: number, config: any) => void;
+      startProcess: (taskId: number, config: ) => void;
       stopProcess: (taskId: number) => void;
-      resumeProcess: (taskId: number, config: any) => void;
+      resumeProcess: (taskId: number, config: ) => void;
 
       // ============= Process Events =============
-      onProcessStarted: (callback: (event: any, data: { taskId: number; config: any }) => void) => void;
-      onProcessOutput: (callback: (event: any, data: { taskId: number; log: string }) => void) => void;
-      onProcessExit: (callback: (event: any, data: { taskId: number; code: number }) => void) => void;
-      onProcessError: (callback: (event: any, data: { taskId: number; error: string }) => void) => void;
-      removeListener: (channel: string, callback: (...args: any[]) => void) => void;
+      onProcessStarted: (callback: (event: , data: { taskId: number; config:  }) => void) => void;
+      onProcessOutput: (callback: (event: , data: { taskId: number; log: string }) => void) => void;
+      onProcessExit: (callback: (event: , data: { taskId: number; code: number }) => void) => void;
+      onProcessError: (callback: (event: , data: { taskId: number; error: string }) => void) => void;
+      removeListener: (channel: string, callback: (...args: []) => void) => void;
       removeAllListeners: () => void;
 
       // ============= Task Logs =============
@@ -34,8 +34,8 @@ declare global {
       removeTasksListener: () => void;
 
       // ============= Settings =============
-      getSettings: () => Promise<any>;
-      saveSettings: (settings: any) => Promise<void>;
+      getSettings: () => Promise<>;
+      saveSettings: (settings: ) => Promise<void>;
 
       // ============= Wallets =============
       getWallets: () => Promise<{ publicKey: string; privateKey: string }[]>;
@@ -43,9 +43,9 @@ declare global {
       deleteWallet: (publicKey: string) => Promise<void>;
 
       // ============= Configs =============
-      saveConfig: (configType: string, fileName: string, content: any) => Promise<boolean>;
+      saveConfig: (configType: string, fileName: string, content: ) => Promise<boolean>;
       getConfigs: (configType: string) => Promise<string[]>;
-      getConfig: (configType: string, fileName: string) => Promise<any>;
+      getConfig: (configType: string, fileName: string) => Promise<>;
       deleteConfig: (configType: string, fileName: string) => Promise<boolean>;
       getConfigPaths: (configType: string) => Promise<{ name: string; path: string }[]>;
 
@@ -58,8 +58,8 @@ declare global {
       tensorAPI: {
         getCollectionInfo: (slug: string) => Promise<string | null>;
         getCollIdByUrl: (url: string) => Promise<string | null>;
-        getNftsForCollection: (collId: string, limit?: number, onlyListings?: boolean) => Promise<any>;
-        getTxHistory: (params: any) => Promise<any>;
+        getNftsForCollection: (collId: string, limit?: number, onlyListings?: boolean) => Promise<>;
+        getTxHistory: (params: ) => Promise<>;
       };
 
       // ============= Telegram Bot =============
@@ -94,9 +94,9 @@ declare global {
       };
 
       // ============= Telegram Events =============
-      onTelegramStopTask: (callback: (event: any, taskId: number) => void) => void;
-      onTelegramRemoveTask: (callback: (event: any, taskId: number) => void) => void;
-      onTelegramResumeTask: (callback: (event: any, data: { taskId: number; config: any }) => void) => void;
+      onTelegramStopTask: (callback: (event: , taskId: number) => void) => void;
+      onTelegramRemoveTask: (callback: (event: , taskId: number) => void) => void;
+      onTelegramResumeTask: (callback: (event: , data: { taskId: number; config:  }) => void) => void;
     };
   }
 }

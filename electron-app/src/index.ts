@@ -1,8 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import fs from "fs";
-import { IPC_CHANNELS } from '../../shared/types';
-
 console.log('📝 [INDEX] Module start loading...');
 
 const config = {

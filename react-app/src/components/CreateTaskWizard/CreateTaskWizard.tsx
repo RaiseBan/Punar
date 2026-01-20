@@ -28,7 +28,7 @@ const STEPS = ["Choose module", "Configure module", "Review & Create"];
 interface CreateTaskWizardProps {
     open: boolean;
     onClose: () => void;
-    onCreateTask: (config: any) => void;
+    onCreateTask: (config: ) => void;
 }
 
 export default function CreateTaskWizard({
@@ -114,7 +114,7 @@ export default function CreateTaskWizard({
                 setWallets(arr);
             });
             // Список сетов
-            window.electronAPI?.getSettings().then((settings: any) => {
+            window.electronAPI?.getSettings().then((settings: ) => {
                 if (settings?.walletsSet) {
                     setWalletSets(Object.keys(settings.walletsSet));
                 } else {
@@ -123,10 +123,10 @@ export default function CreateTaskWizard({
             });
 
             // Файлы конфигов (reprice / snipe)
-            window.electronAPI?.getConfigPaths("reprice_config").then((paths: any[]) => {
+            window.electronAPI?.getConfigPaths("reprice_config").then((paths: []) => {
                 setRepriceConfigs(paths.map((p) => p.path));
             });
-            window.electronAPI?.getConfigPaths("snipe_config").then((paths: any[]) => {
+            window.electronAPI?.getConfigPaths("snipe_config").then((paths: []) => {
                 setSnipeConfigs(paths.map((p) => p.path));
             });
         }

@@ -1,4 +1,4 @@
-import { IpcMain, IpcMainInvokeEvent } from 'electron';
+import { IpcMain } from 'electron';
 import axios, { AxiosInstance } from 'axios';
 import { getConfigRepository } from '../repositories';
 import { EventBus } from '../../../shared/eventBus';
@@ -93,15 +93,11 @@ class TelegramServiceClient {
 const telegramServiceClient = new TelegramServiceClient();
 
 export function initializeTelegramHandlers(ipcMain: IpcMain): void {
-  console.log('[TelegramHandler] Initializing Telegram IPC handlers...');
-
   const configRepo = getConfigRepository();
 
   ipcMain.handle(
       IPC_CHANNELS.TELEGRAM_GET_CONFIG,
-      async (_event: IpcMainInvokeEvent): Promise<TelegramBotConfig> => {
-        console.log('[TelegramHandler] Getting Telegram config');
-
+      async (): Promise<TelegramBotConfig> => {
         const config = await configRepo.getTelegramConfig();
 
         return {
@@ -114,21 +110,16 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle(
       IPC_CHANNELS.TELEGRAM_SET_TOKEN,
-      async (_event: IpcMainInvokeEvent, token: string): Promise<{ success: boolean; error?: string }> => {
-        console.log('[TelegramHandler] Setting Telegram token');
-
+      async (_event, token: string): Promise<{ success: boolean; error?: string }> => {
         if (!token || token.trim().length === 0) {
           return { success: false, error: 'Token cannot be empty' };
         }
 
         try {
-
           await configRepo.setTelegramConfig({ token, enabled: true });
 
           const config = await configRepo.getTelegramConfig();
           const chatIds = config.chatIds || [];
-
-          console.log('[TelegramHandler] Configuring with chatIds:', chatIds);
 
           const success = await telegramServiceClient.setBotConfig({
             botToken: token,
@@ -149,19 +140,15 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle(
       IPC_CHANNELS.TELEGRAM_GET_STATUS,
-      async (_event: IpcMainInvokeEvent): Promise<TelegramBotStatus | null> => {
-        console.log('[TelegramHandler] Getting Telegram bot status');
+      async (): Promise<TelegramBotStatus | null> => {
         return await telegramServiceClient.getBotStatus();
       }
   );
 
   ipcMain.handle(
       IPC_CHANNELS.TELEGRAM_START_BOT,
-      async (_event: IpcMainInvokeEvent): Promise<{ success: boolean; error?: string }> => {
-        console.log('[TelegramHandler] Starting Telegram bot');
-
+      async (): Promise<{ success: boolean; error?: string }> => {
         try {
-
           const config = await configRepo.getTelegramConfig();
 
           if (!config.token) {
@@ -178,7 +165,6 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
           const success = await telegramServiceClient.startBot();
 
           if (success) {
-
             await configRepo.setTelegramConfig({ enabled: true });
 
             EventBus.emit(TELEGRAM_EVENTS.BOT_STARTED, {
@@ -198,14 +184,11 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle(
       IPC_CHANNELS.TELEGRAM_STOP_BOT,
-      async (_event: IpcMainInvokeEvent): Promise<{ success: boolean; error?: string }> => {
-        console.log('[TelegramHandler] Stopping Telegram bot');
-
+      async (): Promise<{ success: boolean; error?: string }> => {
         try {
           const success = await telegramServiceClient.stopBot();
 
           if (success) {
-
             await configRepo.setTelegramConfig({ enabled: false });
 
             EventBus.emit(TELEGRAM_EVENTS.BOT_STOPPED, {
@@ -225,9 +208,7 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle(
       IPC_CHANNELS.TELEGRAM_TEST_CONNECTION,
-      async (_event: IpcMainInvokeEvent): Promise<{ success: boolean; error?: string }> => {
-        console.log('[TelegramHandler] Testing connection to telegram-service');
-
+      async (): Promise<{ success: boolean; error?: string }> => {
         const isConnected = await telegramServiceClient.testConnection();
 
         if (isConnected) {
@@ -240,6 +221,4 @@ export function initializeTelegramHandlers(ipcMain: IpcMain): void {
         }
       }
   );
-
-  console.log('[TelegramHandler] Telegram IPC handlers initialized');
 }

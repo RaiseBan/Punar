@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -20,7 +21,6 @@ function getConfigDirectory(): string {
 }
 
 async function updateConfigCollectionId(config: TaskConfig): Promise<TaskConfig | null> {
-
     if (
         config.module_name !== 'Tensor sniper (SDK)' &&
         config.module_name !== 'Tensor reprice'
@@ -95,9 +95,7 @@ export async function spawnProcess(
     }
 
     try {
-
         const configRepo = getConfigRepository();
-        const userSettings = await configRepo.getSettings();
 
         const scriptDirectory = await configRepo.getScriptDirectory();
 
@@ -160,10 +158,8 @@ export function forceKillWindowsProcess(pid: number): ProcessOperationResult {
         console.log(`🔪 FORCE KILL: Попытка завершить процесс с PID ${pid}`);
 
         if (process.platform === 'win32') {
-            const { execSync } = require('child_process');
             execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
         } else {
-
             process.kill(pid, 'SIGKILL');
         }
 

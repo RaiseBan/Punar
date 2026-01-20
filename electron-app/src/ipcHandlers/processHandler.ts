@@ -1,13 +1,11 @@
-import { spawnProcess, forceKillWindowsProcess } from '../utils/spawnProcess';
+import { spawnProcess } from '../utils/spawnProcess';
 import fs from 'fs';
 import path from 'path';
 import { app, shell, IpcMain, BrowserWindow, IpcMainInvokeEvent } from 'electron';
 import { EventBus } from '../../../shared/eventBus';
 import { telegramClient } from '../api/telegram-client';
-import { getConfigRepository } from '../repositories';
 import { ConfigError } from '../repositories/errors';
 import {
-    ProcessInfo,
     LogEntry,
     ProcessMap,
     PROCESS_EVENTS,
@@ -130,8 +128,6 @@ setInterval(() => {
 }, 60000);
 
 export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserWindow): void {
-    const configRepo = getConfigRepository();
-
     ipcMain.handle(
         'get-task-logs',
         async (
@@ -187,10 +183,6 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
             }
 
             try {
-
-                const scriptPath = await configRepo.getScriptDirectory();
-                console.log(`ПРОЦЕСС: Путь к скриптам: ${scriptPath}`);
-
                 if (!processes[taskId]) {
                     processes[taskId] = {
                         taskId: taskId,
@@ -397,7 +389,6 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
 
             try {
 
-                const scriptPath = await configRepo.getScriptDirectory();
                 console.log(`ПРОЦЕСС: Запуск процесса для задачи ${taskId} с конфигурацией:`, config);
 
                 const childProcess = await spawnProcess(config);

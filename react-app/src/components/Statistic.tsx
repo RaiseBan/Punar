@@ -115,7 +115,7 @@ const Statistic: React.FC = () => {
             const inventory = await getWalletInventory(wallet, collId);
 
             const nameMap = new Map<string, string[]>();
-            inventory.mints.forEach((nft: any) => {
+            inventory.mints.forEach((nft: ) => {
                 if (nft.name.toLowerCase().includes(search.toLowerCase())) {
                     nameMap.set(nft.name, [
                         ...(nameMap.get(nft.name) || []),

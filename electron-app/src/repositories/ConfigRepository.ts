@@ -10,9 +10,9 @@ export class ConfigRepository {
 
   constructor() {
     const userDataPath =
-      process.env.NODE_ENV === 'production'
-        ? app.getPath('userData')
-        : path.join(__dirname, '..', '..');
+        process.env.NODE_ENV === 'production'
+            ? app.getPath('userData')
+            : path.join(__dirname, '..', '..');
 
     this.settingsPath = path.join(userDataPath, 'globalConfigs', 'settings.json');
   }
@@ -43,8 +43,8 @@ export class ConfigRepository {
       return settings;
     } catch (error) {
       throw new ConfigError(
-        'Не удалось загрузить настройки',
-        error instanceof Error ? error : undefined
+          'Не удалось загрузить настройки',
+          error instanceof Error ? error : undefined
       );
     }
   }
@@ -62,8 +62,8 @@ export class ConfigRepository {
       this.cachedSettings = settings;
     } catch (error) {
       throw new ConfigError(
-        'Не удалось сохранить настройки',
-        error instanceof Error ? error : undefined
+          'Не удалось сохранить настройки',
+          error instanceof Error ? error : undefined
       );
     }
   }
@@ -105,9 +105,9 @@ export class ConfigRepository {
   }> {
     const settings = await this.getSettings();
     return {
-      token: (settings as any).telegramToken,
-      enabled: (settings as any).telegramEnabled,
-      chatIds: (settings as any).telegramChatIds,
+      token: (settings as AppSettings).telegramToken,
+      enabled: (settings as AppSettings).telegramEnabled,
+      chatIds: (settings as AppSettings).telegramChatIds,
     };
   }
 
@@ -117,7 +117,7 @@ export class ConfigRepository {
     chatIds?: number[];
   }): Promise<void> {
     const settings = await this.getSettings();
-    const updatedSettings = { ...settings } as any;
+    const updatedSettings = { ...settings } as AppSettings;
 
     if (config.token !== undefined) {
       updatedSettings.telegramToken = config.token;
@@ -144,8 +144,8 @@ export class ConfigRepository {
     if (settings.scriptDirectory !== undefined) {
       if (typeof settings.scriptDirectory !== 'string') {
         throw new ValidationError(
-          'scriptDirectory должен быть строкой',
-          'scriptDirectory'
+            'scriptDirectory должен быть строкой',
+            'scriptDirectory'
         );
       }
     }
@@ -161,9 +161,9 @@ export class ConfigRepository {
       await fs.mkdir(dirPath, { recursive: true });
     } catch (error) {
       throw new FileSystemError(
-        `Не удалось создать директорию: ${dirPath}`,
-        dirPath,
-        error instanceof Error ? error : undefined
+          `Не удалось создать директорию: ${dirPath}`,
+          dirPath,
+          error instanceof Error ? error : undefined
       );
     }
   }

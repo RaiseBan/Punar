@@ -8,12 +8,11 @@ export function initializeWalletHandlers(ipcMain: IpcMain): void {
 
     ipcMain.handle(
         IPC_CHANNELS.GET_WALLETS,
-        async (_event: IpcMainInvokeEvent): Promise<Wallet[]> => {
+        async (): Promise<Wallet[]> => {
             try {
                 return await walletRepo.getAll();
             } catch (error) {
                 console.error('Ошибка при загрузке кошельков:', error);
-
                 return [];
             }
         }
@@ -44,7 +43,6 @@ export function initializeWalletHandlers(ipcMain: IpcMain): void {
         async (_event: IpcMainInvokeEvent, publicKey: string): Promise<void> => {
             try {
                 const deleted = await walletRepo.delete(publicKey);
-
                 if (!deleted) {
                     console.warn(`Кошелек с publicKey ${publicKey} не найден`);
                 }

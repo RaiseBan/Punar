@@ -1,11 +1,6 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 
-console.log('🔧 [PRELOAD] Script is loading...');
-console.log('🔧 [PRELOAD] contextBridge:', contextBridge);
-console.log('🔧 [PRELOAD] ipcRenderer:', ipcRenderer);
-
 const IPC_CHANNELS = {
-
   START_PROCESS: 'start-process',
   STOP_PROCESS: 'stop-process',
   RESUME_PROCESS: 'resume-process',
@@ -13,28 +8,22 @@ const IPC_CHANNELS = {
   PROCESS_OUTPUT: 'process-output',
   PROCESS_EXIT: 'process-exit',
   PROCESS_ERROR: 'process-error',
-
   GET_SETTINGS: 'get-settings',
   SAVE_SETTINGS: 'save-settings',
-
   GET_WALLETS: 'get-wallets',
   ADD_WALLET: 'add-wallet',
   DELETE_WALLET: 'delete-wallet',
-
   SAVE_CONFIG: 'save-config',
   GET_CONFIGS: 'get-configs',
   GET_CONFIG: 'get-config',
   DELETE_CONFIG: 'delete-config',
   GET_CONFIG_PATHS: 'get-config-paths',
-
   MINIMIZE_WINDOW: 'minimize-window',
   CLOSE_WINDOW: 'close-window',
   ENABLE_DRAG: 'enable-drag',
-
   TENSOR_GET_COLLECTION_INFO: 'tensor-get-collection-info',
   TENSOR_GET_COLL_ID_BY_URL: 'tensor-get-coll-id-by-url',
   TENSOR_GET_NFTS_FOR_COLLECTION: 'tensor-get-nfts-for-collection',
-
   TELEGRAM_GET_CONFIG: 'telegram-bot:get-config',
   TELEGRAM_SET_TOKEN: 'telegram-bot:set-token',
   TELEGRAM_GET_STATUS: 'telegram-bot:get-status',
@@ -64,7 +53,7 @@ interface ProcessErrorEvent {
 }
 
 interface AppSettings {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface Wallet {
@@ -75,7 +64,7 @@ interface Wallet {
 type ConfigType = 'reprice_config' | 'snipe_config';
 
 interface TaskConfig {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface TelegramBotConfig {
@@ -94,9 +83,7 @@ interface TelegramBotStatus {
 type EventCallback<T> = (event: IpcRendererEvent, data: T) => void;
 
 const electronAPI = {
-
   startProcess: (taskId: number, config: TaskConfig): void => {
-    console.log(`start process config: ${JSON.stringify(config, null, 2)}`);
     ipcRenderer.send(IPC_CHANNELS.START_PROCESS, { taskId, config });
   },
 
@@ -209,7 +196,6 @@ const electronAPI = {
   },
 
   telegramBot: {
-
     getConfig: (): Promise<TelegramBotConfig> => {
       return ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_GET_CONFIG);
     },
@@ -236,13 +222,4 @@ const electronAPI = {
   },
 };
 
-console.log('✅ [PRELOAD] Exposing electronAPI to window...');
-
-try {
-  contextBridge.exposeInMainWorld('electronAPI', electronAPI);
-  console.log('✅ [PRELOAD] electronAPI exposed successfully');
-} catch (error) {
-  console.error('❌ [PRELOAD] Error exposing electronAPI:', error);
-}
-
-console.log('✅ [PRELOAD] Preload script completed');
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);

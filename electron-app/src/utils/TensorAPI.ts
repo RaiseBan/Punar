@@ -128,7 +128,7 @@ class TensorAPI {
                 }
             } catch (error) {
                 console.error((error as Error).message);
-                if ((error as Error).message.includes("429 Too Many Requests")){
+                if ((error as Error).message.includes("429 Too M Requests")){
                     console.log(`sleep...`);
                     await sleep(1000);
                 } else {

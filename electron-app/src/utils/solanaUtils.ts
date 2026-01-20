@@ -6,23 +6,12 @@ import {
 import { retrieveDASAssetFields } from "./heliusDasApi";
 import {
     Connection, Keypair, PublicKey, Transaction, ComputeBudgetProgram,
-    SendTransactionError, SystemProgram, AddressLookupTableProgram, clusterApiUrl
+    SendTransactionError, SystemProgram, AddressLookupTableProgram
 } from "@solana/web3.js";
 import * as bs58 from "bs58";
 import { saveLookupTables, getLookupTables } from "./fsHelper";
 import { sendJitoTransaction } from "../services/jito_api";
 import logger from "../services/loggerService";
-
-interface DASAssetGroup {
-    group_value: string;
-    [key: string]: any;
-}
-
-interface DASAssetResult {
-    id: string;
-    grouping?: DASAssetGroup[];
-    [key: string]: any;
-}
 
 interface TokenAccount {
     address: string;
@@ -69,7 +58,7 @@ interface SortConfig {
 
 interface SimulationResult {
     simulation: boolean;
-    result: any;
+    result: unknown;
 }
 
 export async function getCollectionAddress(mint: string): Promise<string | undefined> {
@@ -144,9 +133,9 @@ export async function appendLookupTable(
     const connection = new Connection(rpcUrl);
     const USER = Keypair.fromSecretKey(new Uint8Array(bs58.default.decode(privateKey)));
 
-    async function getLookupTableWithRetries(): Promise<any> {
+    async function getLookupTableWithRetries(): Promise<unknown> {
         const MAX_RETRIES = 5;
-        const RETRY_DELAY = 5000; 
+        const RETRY_DELAY = 5000;
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
@@ -172,7 +161,7 @@ export async function appendLookupTable(
         throw new Error(`Failed to get lookup table after ${MAX_RETRIES} attempts`);
     }
 
-    let lookupTableAccount: any;
+    let lookupTableAccount: unknown;
     try {
         lookupTableAccount = await getLookupTableWithRetries();
     } catch (error) {
@@ -180,12 +169,12 @@ export async function appendLookupTable(
         return undefined;
     }
 
-    if (lookupTableAccount.state.authority.toBase58() !== USER.publicKey.toBase58()) {
+    if ((lookupTableAccount as Record<string, unknown>).state.authority.toBase58() !== USER.publicKey.toBase58()) {
         console.error("Lookup table authority does not match");
         return undefined;
     }
 
-    const currentAddressCount = lookupTableAccount.state.addresses.length;
+    const currentAddressCount = (lookupTableAccount as Record<string, unknown>).state.addresses.length;
     console.log(`currentAddressCount: ${currentAddressCount}`);
 
     if (currentAddressCount + accounts.length > MAX_ACCOUNTS_PER_TABLE) {
@@ -235,14 +224,14 @@ export async function appendLookupTable(
     return lookupTableAddress;
 }
 
-export function convertBigIntToString(obj: any): any {
+export function convertBigIntToString(obj: unknown): unknown {
     if (typeof obj !== 'object' || obj === null) return obj;
 
     if (Array.isArray(obj)) {
         return obj.map(item => convertBigIntToString(item));
     }
 
-    const result: Record<string, any> = {};
+    const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
         if (typeof value === 'bigint') {
             result[key] = value.toString();
@@ -295,9 +284,9 @@ export async function updateIfNotExistsAndGet(
         return [result];
     } else {
         console.log(`Checking if accounts already exist...`);
-        let accountsToAppend = [...accounts]; 
-        let existingTableAddresses = new Map<string, string>(); 
-        let checkedTables = [...tables]; 
+        let accountsToAppend = [...accounts];
+        let existingTableAddresses = new Map<string, string>();
+        let checkedTables = [...tables];
 
         for (const table of tables) {
             const tableAddresses = await getAllAddressesFromLookupTable(rpcUrl, table);
@@ -398,7 +387,7 @@ export async function updateIfNotExistsAndGet(
 
 export async function sendTx(
     connection: Connection,
-    ixs: any[],
+    ixs: unknown[],
     signer: Keypair,
     simulate: boolean = false
 ): Promise<string | SimulationResult | undefined> {
@@ -435,14 +424,14 @@ export async function sendTx(
                         logger.info(logger.LOG_MODULES.JITO, `attempt: ${i}`);
                         await sendJitoTransaction(bs64Tx);
                         return "success";
-                    } catch(err: any) {
+                    } catch(err: unknown) {
                         logger.error(logger.LOG_MODULES.JITO, err);
                         return undefined;
                     }
                 }
 
             }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(`Attempt_${i}: error while ${simulate ? 'simulating' : 'sending'} transaction: ${e}}`);
             if (e instanceof SendTransactionError) {
                 console.log(`logs: ${await e.getLogs(connection)}`);
@@ -583,13 +572,13 @@ export async function getDetailedTokenAccounts(
     const fetchWithRetry = async <T>(fn: () => Promise<T>, retriesLeft: number = maxRetries): Promise<T> => {
         try {
             return await fn();
-        } catch (error: any) {
-            if (error.message.includes('429') && retriesLeft > 0) {
+        } catch (error: unknown) {
+            if ((error as Record<string, unknown>).message.includes('429') && retriesLeft > 0) {
                 console.log(`Rate limited (429). Retrying in 2 seconds... (${retriesLeft} retries left)`);
-                await sleep(2000); 
+                await sleep(2000);
                 return fetchWithRetry(fn, retriesLeft - 1);
             }
-            throw error; 
+            throw error;
         }
     };
 
@@ -674,8 +663,8 @@ export async function createTokenAccount(
             console.log(`JITO Attempt: ${i}`);
             await sendJitoTransaction(bs64Tx);
             await sleep(500);
-        } catch(err: any) {
-            console.log(`CAUSED ERROR: ${err.message}`);
+        } catch(err: unknown) {
+            console.log(`CAUSED ERROR: ${(err as Error).message}`);
             if (tokens.has(mint)) {
                 console.log(`token exist ! RETURN`);
                 return undefined;
@@ -686,7 +675,7 @@ export async function createTokenAccount(
     return ata.toBase58();
 }
 
-export function getTipIx(tipAmount: number, tipAccount: string, sender: Keypair): any {
+export function getTipIx(tipAmount: number, tipAccount: string, sender: Keypair): unknown {
     return SystemProgram.transfer({
         fromPubkey: sender.publicKey,
         toPubkey: new PublicKey(tipAccount),
@@ -708,7 +697,7 @@ async function findLookupTables(rpcUrl: string, privateKey: string): Promise<str
             filters: [
                 {
                     memcmp: {
-                        offset: 22, 
+                        offset: 22,
                         bytes: USER.publicKey.toBase58(),
                     },
                 },
@@ -716,7 +705,7 @@ async function findLookupTables(rpcUrl: string, privateKey: string): Promise<str
         });
 
         return accounts.map(account => account.pubkey.toBase58());
-    } catch (error) {
+    } catch {
 
         return [];
     }

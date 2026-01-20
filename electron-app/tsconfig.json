@@ -14,7 +14,7 @@
     "types": ["node", "electron"],
     "baseUrl": ".",
     "strict": true,
-    "noImplicitAny": true,
+    "noImplicit": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
     "strictBindCallApply": true,

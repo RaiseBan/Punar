@@ -1,9 +1,8 @@
 import axios, { AxiosError } from "axios";
-import { getSettings } from "./fsHelper";
 
 interface DASAssetResult {
     id: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 interface HeliusResponse {
@@ -25,7 +24,7 @@ export async function retrieveDASAssetFields(mint: string): Promise<DASAssetResu
                 params: { id: mint }
             });
 
-            return assetRes.data.result; 
+            return assetRes.data.result;
         } catch (error) {
             const axiosError = error as AxiosError;
 

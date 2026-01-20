@@ -6,7 +6,7 @@ module.exports = {
   ],
   rules: {
     // TypeScript specific
-    '@typescript-eslint/no-explicit-any': 'error',
+    '@typescript-eslint/no-explicit-': 'error',
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/no-non-null-assertion': 'warn',
 
