@@ -22,8 +22,8 @@ export function useWallets() {
       setIsLoading(true);
       const response = await window.electronAPI?.getWallets();
       
-      if (response?.message) {
-        console.log(response.message);
+      if (response) {
+        console.log("Success");
       } else {
         setWallets(response || []);
       }

@@ -8,7 +8,7 @@ import { Provider, useSelector } from "react-redux";
 import { store, RootState } from "./store/store";
 import './styles/global.css'
 import Header from "./components/Header";
-import Tools from "./components/Tools";
+import Tools from "./components/Tools/Tools";
 import ConfigManager from "./components/ConfigManager";
 import Statistic from "./components/Statistic";
 import TxHistorySearch from "./components/TransactionHistory";
