@@ -91,12 +91,12 @@ app.whenReady().then(async () => {
     const logger = loggerModule.default;
     console.log('✅ [INDEX] Logger loaded');
 
-    console.log('📝 [INDEX] Step 3: Initializing EventBus listeners...');
+    logger.info(logger.LOG_MODULES.SYSTEM, '📝 [INDEX] Step 3: Initializing EventBus listeners...');
     logger.initializeEventBusListeners();
     logger.success(logger.LOG_MODULES.SYSTEM, 'EventBus интеграция инициализирована');
-    console.log('✅ [INDEX] EventBus initialized');
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅ [INDEX] EventBus initialized');
 
-    console.log('📝 [INDEX] Step 4: Loading handlers...');
+    logger.info(logger.LOG_MODULES.SYSTEM, '📝 [INDEX] Step 4: Loading handlers...');
     const { initializeProcessHandlers } = await import('./ipcHandlers/processHandler');
     const { initializeWindowHandlers } = await import('./ipcHandlers/windowHandler');
     const { initializeWalletHandlers } = await import('./ipcHandlers/walletHandler');
@@ -105,37 +105,37 @@ app.whenReady().then(async () => {
     const { initializeTelegramHandlers } = await import('./ipcHandlers/telegramHandler');
     const { initializeSettingsHandlers } = await import('./ipcHandlers/settingsHandler');
     if (mainWindow) {
-      console.log('  - Initializing process handlers...');
+      logger.info(logger.LOG_MODULES.SYSTEM, '  - Initializing process handlers...');
       initializeProcessHandlers(ipcMain, mainWindow);
-      console.log('  - Initializing window handlers...');
+      logger.info(logger.LOG_MODULES.SYSTEM, '  - Initializing window handlers...');
       initializeWindowHandlers(ipcMain, mainWindow);
     }
 
-    console.log('  - Initializing wallet handlers...');
+    logger.info(logger.LOG_MODULES.SYSTEM, '  - Initializing wallet handlers...');
     initializeWalletHandlers(ipcMain);
-    console.log('  - Initializing config handlers...');
+    logger.info(logger.LOG_MODULES.SYSTEM, '  - Initializing config handlers...');
     initializeConfigHandlers(ipcMain);
-    console.log('  - Initializing API handlers...');
+    logger.info(logger.LOG_MODULES.SYSTEM, '  - Initializing API handlers...');
     initializeApiHandlers(ipcMain);
-    console.log('  - Initializing telegram handlers...');
+    logger.info(logger.LOG_MODULES.SYSTEM, '  - Initializing telegram handlers...');
     initializeTelegramHandlers(ipcMain);
-    console.log('  - Initializing settings handlers...');
+    logger.info(logger.LOG_MODULES.SYSTEM, '  - Initializing settings handlers...');
     initializeSettingsHandlers(ipcMain);
 
-    console.log('✅ [INDEX] All handlers initialized');
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅ [INDEX] All handlers initialized');
 
-    console.log('📝 [INDEX] Step 6: Creating Express API server...');
+    logger.info(logger.LOG_MODULES.SYSTEM, '📝 [INDEX] Step 6: Creating Express API server...');
     const { createApiServer } = await import('./api/api-server');
-    console.log('  - createApiServer function loaded');
-    console.log('  - Starting server with mainWindow:', !!mainWindow);
+    logger.info(logger.LOG_MODULES.SYSTEM, '  - createApiServer function loaded');
+    logger.info(logger.LOG_MODULES.SYSTEM, '  - Starting server with mainWindow:', !!mainWindow);
 
     const server = createApiServer(mainWindow);
-    console.log('✅ [INDEX] Express API server created:', !!server);
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅ [INDEX] Express API server created:', !!server);
 
-    console.log('📝 [INDEX] Step 7: Loading Telegram client...');
-    console.log('✅ [INDEX] Telegram client loaded');
+    logger.info(logger.LOG_MODULES.SYSTEM, '📝 [INDEX] Step 7: Loading Telegram client...');
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅ [INDEX] Telegram client loaded');
 
-    console.log('✅✅✅ [INDEX] ALL INITIALIZATION COMPLETED SUCCESSFULLY ✅✅✅');
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅✅✅ [INDEX] ALL INITIALIZATION COMPLETED SUCCESSFULLY ✅✅✅');
   } catch (error) {
     console.error('❌❌❌ [INDEX] CRITICAL ERROR during initialization:', error);
     console.error('Stack:', (error as Error).stack);

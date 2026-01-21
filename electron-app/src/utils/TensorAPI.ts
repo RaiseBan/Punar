@@ -1,6 +1,7 @@
 import { getSettings } from "./fsHelper";
 import { TENSOR_ENDPOINTS } from "./constants";
 import { sleep } from "./solanaUtils";
+import logger from "../services/loggerService";
 
 interface TxHistoryParams {
     collId: string;
@@ -84,7 +85,7 @@ class TensorAPI {
             ...(wallet && {wallet}),
             ...(cursor && {cursor})
         };
-        console.log(JSON.stringify(this.params, null, 2));
+        logger.info(logger.LOG_MODULES.API, JSON.stringify(this.params, null, 2));
 
         return this;
     }
@@ -129,7 +130,7 @@ class TensorAPI {
             } catch (error) {
                 console.error((error as Error).message);
                 if ((error as Error).message.includes("429 Too M Requests")){
-                    console.log(`sleep...`);
+                    logger.info(logger.LOG_MODULES.SYSTEM, `sleep...`);
                     await sleep(1000);
                 } else {
                     this.reset();

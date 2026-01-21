@@ -1,5 +1,6 @@
 import { getCollectionAddress } from "./solanaUtils";
 import TensorAPI from "./TensorAPI";
+import logger from "../services/loggerService";
 
 interface CollectionConfig {
     collection_id: string;
@@ -28,7 +29,7 @@ export async function updateConfigCollectionId(config: CollectionConfig): Promis
     const tensorApi = TensorAPI.getInstance();
 
     const collId = await getCollIdBySlug(slug);
-    console.log(`collId: ${collId}`);
+    logger.info(logger.LOG_MODULES.SYSTEM, `collId: ${collId}`);
 
     if (!collId) {
         console.error("Collection ID not found!");
@@ -36,7 +37,7 @@ export async function updateConfigCollectionId(config: CollectionConfig): Promis
     }
 
     const nftData = await tensorApi.fetchCollectionNfts(collId).send() as NftData;
-    console.log(`nftData: ${nftData}`);
+    logger.info(logger.LOG_MODULES.SYSTEM, `nftData: ${nftData}`);
     if (!nftData) {
         console.error("Error fetching NFT data.");
         return config;
@@ -45,14 +46,13 @@ export async function updateConfigCollectionId(config: CollectionConfig): Promis
     const mint = nftData.mints[0].mint;
     const collectionAddress = await getCollectionAddress(mint);
 
-    console.log(`collectionAddress: ${collectionAddress}`);
+    logger.info(logger.LOG_MODULES.SYSTEM, `collectionAddress: ${collectionAddress}`);
 
     return { ...config, collection_id: collectionAddress! };
 }
 
 export async function getCollIdBySlug(slug: string): Promise<string | undefined> {
     const tensorApi = TensorAPI.getInstance();
-    console.log(tensorApi);
     const result = await tensorApi.fetchCollections(slug).send() as CollectionData;
     const collection = result.collections.find(col => col.slugDisplay === slug);
     return collection?.collId;

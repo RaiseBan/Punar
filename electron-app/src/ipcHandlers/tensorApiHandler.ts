@@ -1,6 +1,7 @@
 import TensorAPI from '../utils/TensorAPI';
 import { getCollIdBySlug } from '../utils/updateService';
 import { IpcMain, IpcMainInvokeEvent } from 'electron';
+import logger from "../services/loggerService";
 
 interface TxHistoryParams {
     collId?: string;
@@ -19,7 +20,7 @@ export function initializeApiHandlers(ipcMain: IpcMain): void {
         'get-collectionInfo',
         async (_event: IpcMainInvokeEvent, slug: string): Promise<unknown | null> => {
             try {
-                console.log(`Fetching collection ID for slug: ${slug}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `Fetching collection ID for slug: ${slug}`);
                 const tensorApi = TensorAPI.getInstance();
                 return await tensorApi.fetchCollections(slug).send();
             } catch (error) {
@@ -34,7 +35,7 @@ export function initializeApiHandlers(ipcMain: IpcMain): void {
         async (_event: IpcMainInvokeEvent, url: string): Promise<string | null> => {
             try {
                 const slug = url.split('/').pop() || '';
-                console.log(`Fetching collection ID for URL slug: ${slug}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `Fetching collection ID for URL slug: ${slug}`);
                 const result = await getCollIdBySlug(slug);
 
                 return result ?? null;
@@ -54,7 +55,7 @@ export function initializeApiHandlers(ipcMain: IpcMain): void {
             onlyListings: boolean = false
         ): Promise<unknown | null> => {
             try {
-                console.log(`Fetching NFTs for collection: ${collId}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `Fetching NFTs for collection: ${collId}`);
                 const tensorApi = TensorAPI.getInstance();
                 return await tensorApi.fetchCollectionNfts(collId, limit, onlyListings).send();
             } catch (error) {
@@ -68,7 +69,7 @@ export function initializeApiHandlers(ipcMain: IpcMain): void {
         'get-txHistory',
         async (_event: IpcMainInvokeEvent, params: TxHistoryParams): Promise<unknown | null> => {
             try {
-                console.log(`Fetching TX history for: ${params.collId}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `Fetching TX history for: ${params.collId}`);
                 const tensorApi = TensorAPI.getInstance();
 
                 return await tensorApi

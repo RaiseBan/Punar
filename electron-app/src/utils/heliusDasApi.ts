@@ -1,4 +1,5 @@
 import axios, { AxiosError } from "axios";
+import logger from "../services/loggerService";
 
 interface DASAssetResult {
     id: string;
@@ -35,7 +36,7 @@ export async function retrieveDASAssetFields(mint: string): Promise<DASAssetResu
                 console.error(`[retrieveDASAssetFields] Error on attempt ${attempts + 1}:`, error);
             }
 
-            console.log(` [retrieveDASAssetFields] Switching RPC to next...`);
+            logger.info(logger.LOG_MODULES.API, ` [retrieveDASAssetFields] Switching RPC to next...`);
 
             if (!(axios.isAxiosError(error) && axiosError.response?.status === 429)) {
                 if (attempts === 0 || attempts === 1){

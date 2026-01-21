@@ -1,4 +1,5 @@
 import axios from "axios";
+import logger from "../services/loggerService";
 
 export async function sendJitoTransaction(transaction: string) {
     await axios.post(
@@ -18,5 +19,5 @@ export async function sendJitoTransaction(transaction: string) {
             })
         }
     );
-    console.log("Отправлено успешно");
+    logger.info(logger.LOG_MODULES.JITO, "Отправлено успешно");
 }

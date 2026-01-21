@@ -2,20 +2,21 @@ import express, { Request, Response, Application } from 'express';
 import { BrowserWindow } from 'electron';
 import { getProcesses } from '../ipcHandlers/processHandler';
 import { ApiResponse, TaskApiInfo } from '../../../shared/types';
+import logger from "../services/loggerService";
 
-console.log('📦 [API-SERVER] Module loading...');
+logger.info(logger.LOG_MODULES.SYSTEM, '📦 [API-SERVER] Module loading...');
 
 export function createApiServer(
     mainWindow: BrowserWindow | null
 ): Application {
-  console.log('🌐 [API-SERVER] createApiServer called');
-  console.log(`  - mainWindow: ${!!mainWindow}`);
+  logger.info(logger.LOG_MODULES.SYSTEM, '🌐 [API-SERVER] createApiServer called');
+  logger.info(logger.LOG_MODULES.SYSTEM, `  - mainWindow: ${!!mainWindow}`);
   try {
     const app = express();
-    console.log('✅ [API-SERVER] Express app created');
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅ [API-SERVER] Express app created');
 
     app.use(express.json());
-    console.log('✅ [API-SERVER] JSON middleware added');
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅ [API-SERVER] JSON middleware added');
 
     app.get('/api/tasks', async (_req: Request, res: Response): Promise<void> => {
       try {
@@ -127,21 +128,21 @@ export function createApiServer(
       }
     });
 
-    console.log('✅ [API-SERVER] Tasks routes registered');
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅ [API-SERVER] Tasks routes registered');
 
     app.get('/health', (_req: Request, res: Response): void => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
-    console.log('✅ [API-SERVER] Health route registered');
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅ [API-SERVER] Health route registered');
 
     const PORT = process.env.ELECTRON_API_PORT || 3002;
-    console.log(`🔌 [API-SERVER] Attempting to start server on port ${PORT}...`);
+    logger.info(logger.LOG_MODULES.SYSTEM, `🔌 [API-SERVER] Attempting to start server on port ${PORT}...`);
 
     const server = app.listen(PORT, () => {
-      console.log(`✅✅✅ [API-SERVER] Server SUCCESSFULLY STARTED on port ${PORT} ✅✅✅`);
-      console.log(`[API-SERVER] Time: ${new Date().toISOString()}`);
-      console.log(`[API-SERVER] Health endpoint: http://localhost:${PORT}/health`);
+      logger.info(logger.LOG_MODULES.SYSTEM, `✅✅✅ [API-SERVER] Server SUCCESSFULLY STARTED on port ${PORT} ✅✅✅`);
+      logger.info(logger.LOG_MODULES.SYSTEM, `[API-SERVER] Time: ${new Date().toISOString()}`);
+      logger.info(logger.LOG_MODULES.SYSTEM, `[API-SERVER] Health endpoint: http://localhost:${PORT}/health`);
     });
 
     server.on('error', (error: NodeJS.ErrnoException) => {
@@ -162,14 +163,14 @@ export function createApiServer(
 
     server.on('listening', () => {
       const addr = server.address();
-      console.log(`🎧 [API-SERVER] Server is LISTENING on`, addr);
+      logger.info(logger.LOG_MODULES.SYSTEM, `🎧 [API-SERVER] Server is LISTENING on`, addr);
     });
 
     server.on('close', () => {
-      console.log('🛑 [API-SERVER] Server closed');
+      logger.info(logger.LOG_MODULES.SYSTEM, '🛑 [API-SERVER] Server closed');
     });
 
-    console.log('✅ [API-SERVER] Server setup completed, returning app instance');
+    logger.info(logger.LOG_MODULES.SYSTEM, '✅ [API-SERVER] Server setup completed, returning app instance');
     return app;
   } catch (error) {
     console.error('❌❌❌ [API-SERVER] CRITICAL ERROR in createApiServer:', error);
@@ -178,4 +179,4 @@ export function createApiServer(
   }
 }
 
-console.log('✅ [API-SERVER] Module loaded successfully');
+logger.info(logger.LOG_MODULES.SYSTEM, '✅ [API-SERVER] Module loaded successfully');

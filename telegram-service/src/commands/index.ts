@@ -36,7 +36,7 @@ export function registerCommands(): void {
       await botService.sendMessage(chatId, message);
     } catch (error) {
       await botService.sendMessage(chatId, `❌ Ошибка: ${(error as Error).message}`);
-      console.log(error);
+      logger.info(logger.LOG_MODULES.SYSTEM, error);
     }
   });
 

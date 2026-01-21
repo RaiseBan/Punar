@@ -2,7 +2,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { app, safeStorage } from 'electron';
 import { Wallet } from '../../../shared/types';
-import { WalletError, FileSystemError, ValidationError } from './errors';
+import {WalletError, ValidationError, FileSystemError} from './errors';
+import logger from "../services/loggerService";
 
 interface LegacyWallet {
   publicKey: string;
@@ -14,7 +15,7 @@ interface StoredWallet {
   encryptedPrivateKey: string; 
 }
 
-function isLegacyWallet(wallet: any): wallet is LegacyWallet {
+function isLegacyWallet(wallet: Wallet): wallet is LegacyWallet {
   return wallet &&
       typeof wallet.publicKey === 'string' &&
       typeof wallet.privateKey === 'string' &&
@@ -36,7 +37,7 @@ export class WalletRepository {
             : path.join(__dirname, '..', '..');
 
     this.walletsPath = path.join(userDataPath, 'globalConfigs', 'wallets.json');
-    console.log(`[WalletRepository] Initialized with path: ${this.walletsPath}`);
+    logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Initialized with path: ${this.walletsPath}`);
   }
 
   private encryptPrivateKey(privateKey: string): string {
@@ -97,7 +98,7 @@ export class WalletRepository {
       const firstWallet = wallets[0];
 
       if (isLegacyWallet(firstWallet)) {
-        console.log('[WalletRepository] 🔄 Detected legacy format, migrating to encrypted format...');
+        logger.info(logger.LOG_MODULES.WALLET, '[WalletRepository] 🔄 Detected legacy format, migrating to encrypted format...');
 
         const migratedWallets = wallets.map((legacyWallet: LegacyWallet) => {
           const wallet: Wallet = {
@@ -113,9 +114,9 @@ export class WalletRepository {
             'utf-8'
         );
 
-        console.log(`[WalletRepository] ✅ Successfully migrated ${migratedWallets.length} wallets to encrypted format`);
+        logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] ✅ Successfully migrated ${migratedWallets.length} wallets to encrypted format`);
       } else if (isStoredWallet(firstWallet)) {
-        console.log('[WalletRepository] ✅ Wallets are already in encrypted format');
+        logger.info(logger.LOG_MODULES.WALLET, '[WalletRepository] ✅ Wallets are already in encrypted format');
       } else {
         console.warn('[WalletRepository] ⚠️ Unknown wallet format detected');
       }
@@ -131,16 +132,16 @@ export class WalletRepository {
 
   async getAll(): Promise<Wallet[]> {
     try {
-      console.log('[WalletRepository] Getting all wallets...');
+      logger.info(logger.LOG_MODULES.WALLET, '[WalletRepository] Getting all wallets...');
 
       const dirPath = path.dirname(this.walletsPath);
       await this.ensureDirectory(dirPath);
 
       try {
         await fs.access(this.walletsPath);
-        console.log('[WalletRepository] Wallets file exists, reading...');
+        logger.info(logger.LOG_MODULES.WALLET, '[WalletRepository] Wallets file exists, reading...');
       } catch {
-        console.log('[WalletRepository] Wallets file does not exist, creating empty...');
+        logger.info(logger.LOG_MODULES.WALLET, '[WalletRepository] Wallets file does not exist, creating empty...');
         await fs.writeFile(this.walletsPath, JSON.stringify([], null, 2), 'utf-8');
         return [];
       }
@@ -150,7 +151,7 @@ export class WalletRepository {
       const data = await fs.readFile(this.walletsPath, 'utf-8');
       const storedWallets = JSON.parse(data);
 
-      console.log(`[WalletRepository] Read ${storedWallets.length} wallets from file`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Read ${storedWallets.length} wallets from file`);
 
       if (!Array.isArray(storedWallets)) {
         throw new WalletError('Некорректный формат файла кошельков');
@@ -159,14 +160,14 @@ export class WalletRepository {
       const wallets = storedWallets.map((stored, index) => {
         if (isLegacyWallet(stored)) {
 
-          console.log(`[WalletRepository] Wallet ${index} is in legacy format, converting...`);
+          logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Wallet ${index} is in legacy format, converting...`);
           return {
             publicKey: stored.publicKey,
             privateKey: stored.privateKey,
           };
         } else if (isStoredWallet(stored)) {
 
-          console.log(`[WalletRepository] Wallet ${index} is encrypted, decrypting...`);
+          logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Wallet ${index} is encrypted, decrypting...`);
           return this.storedToWallet(stored);
         } else {
           throw new WalletError(`Неизвестный формат кошелька на позиции ${index}`);
@@ -175,7 +176,7 @@ export class WalletRepository {
 
       this.validateWalletArray(wallets);
 
-      console.log(`[WalletRepository] ✅ Successfully loaded ${wallets.length} wallets`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] ✅ Successfully loaded ${wallets.length} wallets`);
       return wallets;
     } catch (error) {
       console.error('[WalletRepository] Error loading wallets:', error);
@@ -193,7 +194,7 @@ export class WalletRepository {
 
   async add(wallet: Wallet): Promise<void> {
     try {
-      console.log(`[WalletRepository] Adding wallet: ${wallet.publicKey}`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Adding wallet: ${wallet.publicKey}`);
       this.validateWallet(wallet);
 
       const wallets = await this.getAll();
@@ -209,7 +210,7 @@ export class WalletRepository {
       wallets.push(wallet);
 
       await this.saveAll(wallets);
-      console.log(`[WalletRepository] ✅ Wallet added successfully`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] ✅ Wallet added successfully`);
     } catch (error) {
       console.error('[WalletRepository] Error adding wallet:', error);
       if (error instanceof WalletError || error instanceof ValidationError) {
@@ -224,19 +225,19 @@ export class WalletRepository {
 
   async delete(publicKey: string): Promise<boolean> {
     try {
-      console.log(`[WalletRepository] Deleting wallet: ${publicKey}`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Deleting wallet: ${publicKey}`);
       const wallets = await this.getAll();
       const initialLength = wallets.length;
 
       const filtered = wallets.filter((w) => w.publicKey !== publicKey);
 
       if (filtered.length === initialLength) {
-        console.log(`[WalletRepository] Wallet not found`);
+        logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Wallet not found`);
         return false;
       }
 
       await this.saveAll(filtered);
-      console.log(`[WalletRepository] ✅ Wallet deleted successfully`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] ✅ Wallet deleted successfully`);
       return true;
     } catch (error) {
       console.error('[WalletRepository] Error deleting wallet:', error);
@@ -249,12 +250,12 @@ export class WalletRepository {
 
   async update(publicKey: string, updates: Partial<Wallet>): Promise<boolean> {
     try {
-      console.log(`[WalletRepository] Updating wallet: ${publicKey}`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Updating wallet: ${publicKey}`);
       const wallets = await this.getAll();
       const index = wallets.findIndex((w) => w.publicKey === publicKey);
 
       if (index === -1) {
-        console.log(`[WalletRepository] Wallet not found`);
+        logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Wallet not found`);
         return false;
       }
 
@@ -263,7 +264,7 @@ export class WalletRepository {
       this.validateWallet(wallets[index]);
 
       await this.saveAll(wallets);
-      console.log(`[WalletRepository] ✅ Wallet updated successfully`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] ✅ Wallet updated successfully`);
       return true;
     } catch (error) {
       console.error('[WalletRepository] Error updating wallet:', error);
@@ -286,24 +287,24 @@ export class WalletRepository {
 
   private async saveAll(wallets: Wallet[]): Promise<void> {
     try {
-      console.log(`[WalletRepository] Saving ${wallets.length} wallets...`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Saving ${wallets.length} wallets...`);
       this.validateWalletArray(wallets);
 
       const dirPath = path.dirname(this.walletsPath);
       await this.ensureDirectory(dirPath);
 
       const storedWallets = wallets.map((wallet, index) => {
-        console.log(`[WalletRepository] Encrypting wallet ${index}: ${wallet.publicKey}`);
+        logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Encrypting wallet ${index}: ${wallet.publicKey}`);
         return this.walletToStored(wallet);
       });
 
       await fs.writeFile(this.walletsPath, JSON.stringify(storedWallets, null, 2), 'utf-8');
 
-      console.log(`[WalletRepository] ✅ Successfully saved ${wallets.length} wallets`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] ✅ Successfully saved ${wallets.length} wallets`);
 
       const verification = await fs.readFile(this.walletsPath, 'utf-8');
       const saved = JSON.parse(verification);
-      console.log(`[WalletRepository] Verification: file contains ${saved.length} wallets`);
+      logger.info(logger.LOG_MODULES.WALLET, `[WalletRepository] Verification: file contains ${saved.length} wallets`);
     } catch (error) {
       console.error('[WalletRepository] Error saving wallets:', error);
       throw new WalletError(

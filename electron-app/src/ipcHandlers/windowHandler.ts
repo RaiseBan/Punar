@@ -1,6 +1,7 @@
 import { IpcMain, BrowserWindow, app } from 'electron';
 import { IPC_CHANNELS } from '../../../shared/types';
 import { getProcesses } from './processHandler';
+import logger from "../services/loggerService";
 
 export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWindow): void {
     ipcMain.handle(IPC_CHANNELS.MINIMIZE_WINDOW, (): void => {
@@ -8,7 +9,7 @@ export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWi
     });
 
     ipcMain.handle(IPC_CHANNELS.CLOSE_WINDOW, async (): Promise<void> => {
-        console.log('🚪 [WINDOW] Close window requested - stopping all processes...');
+        logger.info(logger.LOG_MODULES.SYSTEM, '🚪 [WINDOW] Close window requested - stopping all processes...');
 
         const processes = getProcesses();
 
@@ -17,7 +18,7 @@ export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWi
         );
 
         if (activeProcessIds.length > 0) {
-            console.log(`🛑 [WINDOW] Stopping ${activeProcessIds.length} active processes...`);
+            logger.info(logger.LOG_MODULES.SYSTEM, `🛑 [WINDOW] Stopping ${activeProcessIds.length} active processes...`);
 
             const stopPromises = activeProcessIds.map(async (taskIdStr) => {
                 const taskId = parseInt(taskIdStr);
@@ -25,7 +26,7 @@ export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWi
 
                 if (processInfo?.process && !processInfo.process.killed) {
                     try {
-                        console.log(`  - Stopping process ${taskId}...`);
+                        logger.info(logger.LOG_MODULES.SYSTEM, `  - Stopping process ${taskId}...`);
                         processInfo.process.kill('SIGTERM');
 
                         await new Promise((resolve) => {
@@ -44,7 +45,7 @@ export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWi
                         });
 
                         processInfo.isActive = false;
-                        console.log(`  ✅ Process ${taskId} stopped`);
+                        logger.info(logger.LOG_MODULES.SYSTEM, `  ✅ Process ${taskId} stopped`);
                     } catch (error) {
                         console.error(`  ❌ Error stopping process ${taskId}:`, error);
                     }
@@ -52,9 +53,9 @@ export function initializeWindowHandlers(ipcMain: IpcMain, mainWindow: BrowserWi
             });
 
             await Promise.all(stopPromises);
-            console.log('✅ [WINDOW] All processes stopped');
+            logger.info(logger.LOG_MODULES.SYSTEM, '✅ [WINDOW] All processes stopped');
         } else {
-            console.log('ℹ️ [WINDOW] No active processes to stop');
+            logger.info(logger.LOG_MODULES.SYSTEM, 'ℹ️ [WINDOW] No active processes to stop');
         }
 
         mainWindow.close();

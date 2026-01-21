@@ -117,7 +117,7 @@ export class BotService {
       }
     } catch (error: any) {
       if (error?.response?.status === 409) {
-        console.log('Webhook conflict detected, removing webhook...');
+        logger.info(logger.LOG_MODULES.SYSTEM, 'Webhook conflict detected, removing webhook...');
         await this.deleteWebhook();
         await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
@@ -191,7 +191,7 @@ export class BotService {
     entriesToDelete.forEach(chatId => this.rateLimitMap.delete(chatId));
 
     if (entriesToDelete.length > 0) {
-      console.log(`Cleaned up ${entriesToDelete.length} old rate limit entries`);
+      logger.info(logger.LOG_MODULES.SYSTEM, `Cleaned up ${entriesToDelete.length} old rate limit entries`);
     }
   }
 
@@ -227,7 +227,7 @@ export class BotService {
           chatId,
           `⚠️ Слишком много команд! Пожалуйста, подождите ${timeRemaining} секунд.`
       );
-      console.log(`Rate limit exceeded for chatId ${chatId}, command: /${command}`);
+      logger.info(logger.LOG_MODULES.SYSTEM, `Rate limit exceeded for chatId ${chatId}, command: /${command}`);
       return;
     }
 

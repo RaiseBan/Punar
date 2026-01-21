@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TaskConfig } from '../../../shared/types';
 import { getConfigRepository } from '../repositories';
+import logger from "../services/loggerService";
 
 export interface ProcessOperationResult {
     success: boolean;
@@ -61,8 +62,8 @@ function spawnModuleProcess(
 ): ChildProcess {
     const scriptPath = path.join(scriptDirectory, moduleDir, 'src', fileToExecute);
 
-    console.log(`⚡ SPAWN: Запуск: npx tsx ${scriptPath}`);
-    console.log(`📁 SPAWN: Рабочая директория: ${scriptDirectory}`);
+    logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `⚡ SPAWN: Запуск: npx tsx ${scriptPath}`);
+    logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `📁 SPAWN: Рабочая директория: ${scriptDirectory}`);
 
     const child = spawn('npx', ['tsx', scriptPath], {
         stdio: 'pipe',
@@ -82,7 +83,7 @@ function spawnModuleProcess(
 export async function spawnProcess(
     taskConfig: TaskConfig
 ): Promise<ChildProcess | null> {
-    console.log(`🚀 SPAWN: Запуск процесса для модуля: ${taskConfig.module_name}`);
+    logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `🚀 SPAWN: Запуск процесса для модуля: ${taskConfig.module_name}`);
 
     if (!taskConfig) {
         console.error('❌ SPAWN: taskConfig не определен');
@@ -104,7 +105,7 @@ export async function spawnProcess(
 
         const configDir = getConfigDirectory();
         if (!fs.existsSync(configDir)) {
-            console.log(`📂 SPAWN: Создаем директорию конфигов: ${configDir}`);
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `📂 SPAWN: Создаем директорию конфигов: ${configDir}`);
             fs.mkdirSync(configDir, { recursive: true });
         }
 
@@ -121,7 +122,7 @@ export async function spawnProcess(
         }
 
         fs.writeFileSync(configFilePath, JSON.stringify(updatedConfig, null, 2), 'utf-8');
-        console.log(`💾 SPAWN: Конфиг сохранен: ${configFilePath}`);
+        logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `💾 SPAWN: Конфиг сохранен: ${configFilePath}`);
 
         const { moduleDir, fileToExecute } = getModuleInfo(taskConfig.module_name);
 
@@ -137,7 +138,7 @@ export async function spawnProcess(
             return null;
         }
 
-        console.log(`✅ SPAWN: Процесс запущен с PID: ${child.pid}`);
+        logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `✅ SPAWN: Процесс запущен с PID: ${child.pid}`);
         return child;
 
     } catch (error) {
@@ -155,7 +156,7 @@ export function forceKillWindowsProcess(pid: number): ProcessOperationResult {
     }
 
     try {
-        console.log(`🔪 FORCE KILL: Попытка завершить процесс с PID ${pid}`);
+        logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `🔪 FORCE KILL: Попытка завершить процесс с PID ${pid}`);
 
         if (process.platform === 'win32') {
             execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
@@ -163,7 +164,7 @@ export function forceKillWindowsProcess(pid: number): ProcessOperationResult {
             process.kill(pid, 'SIGKILL');
         }
 
-        console.log(`✅ FORCE KILL: Процесс ${pid} успешно завершен`);
+        logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `✅ FORCE KILL: Процесс ${pid} успешно завершен`);
         return {
             success: true,
             message: `Процесс ${pid} завершен`,
@@ -191,10 +192,10 @@ export function stopProcess(
     }
 
     try {
-        console.log(`🛑 STOP: Остановка процесса для задачи ${taskId}`);
+        logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `🛑 STOP: Остановка процесса для задачи ${taskId}`);
 
         if (process.killed) {
-            console.log(`⚠️ STOP: Процесс ${taskId} уже остановлен`);
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `⚠️ STOP: Процесс ${taskId} уже остановлен`);
             return {
                 success: true,
                 message: `Процесс ${taskId} уже остановлен`,
@@ -204,7 +205,7 @@ export function stopProcess(
         const killed = process.kill('SIGTERM');
 
         if (killed) {
-            console.log(`✅ STOP: Процесс ${taskId} успешно остановлен`);
+            logger.info(logger.LOG_MODULES.SPAWN_PROCESS, `✅ STOP: Процесс ${taskId} успешно остановлен`);
             return {
                 success: true,
                 message: `Процесс ${taskId} остановлен`,

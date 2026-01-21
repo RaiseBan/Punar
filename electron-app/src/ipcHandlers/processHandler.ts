@@ -11,6 +11,7 @@ import {
     PROCESS_EVENTS,
     TaskConfig,
 } from '../../../shared/types';
+import logger from "../services/loggerService";
 
 interface LogQueue {
     [taskId: string]: LogEntry[];
@@ -175,7 +176,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
     ipcMain.on(
         'start-process',
         async (event, { taskId, config }: { taskId: number; config: TaskConfig }) => {
-            console.log(`ПРОЦЕСС: Запуск процесса для задачи ${taskId}`);
+            logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Запуск процесса для задачи ${taskId}`);
 
             if (processes[taskId]?.isActive) {
                 console.warn(`ПРОЦЕСС: Процесс ${taskId} уже запущен`);
@@ -214,7 +215,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                     config,
                 };
 
-                console.log(`ПРОЦЕСС: Процесс ${taskId} успешно запущен с PID ${child.pid}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Процесс ${taskId} успешно запущен с PID ${child.pid}`);
 
                 writeLogToFile(taskId.toString(), `Процесс запущен, PID: ${child.pid}`, 'system');
 
@@ -243,7 +244,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                 });
 
                 child.on('exit', (code: number | null) => {
-                    console.log(`ПРОЦЕСС: Процесс ${taskId} завершился с кодом ${code}`);
+                    logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Процесс ${taskId} завершился с кодом ${code}`);
 
                     EventBus.emit(PROCESS_EVENTS.STOPPED, {
                         processId: taskId.toString(),
@@ -317,7 +318,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
     );
 
     ipcMain.on('stop-process', async (_event, taskId: number) => {
-        console.log(`ПРОЦЕСС: Остановка процесса ${taskId}`);
+        logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Остановка процесса ${taskId}`);
 
         const processInfo = processes[taskId];
 
@@ -329,11 +330,11 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
         if (processInfo.process && !processInfo.process.killed) {
             try {
                 const pid = processInfo.process.pid;
-                console.log(`ПРОЦЕСС: Попытка остановить процесс с PID ${pid}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Попытка остановить процесс с PID ${pid}`);
 
                 try {
                     processInfo.process.kill('SIGTERM');
-                    console.log(`ПРОЦЕСС: Отправлен SIGTERM процессу ${taskId}`);
+                    logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Отправлен SIGTERM процессу ${taskId}`);
 
                     setTimeout(() => {
                         if (processInfo.process && !processInfo.process.killed) {
@@ -356,7 +357,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                 processInfo.exitReason = 'error';
             }
         } else {
-            console.log(`ПРОЦЕСС: Процесс ${taskId} уже завершен или убит`);
+            logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Процесс ${taskId} уже завершен или убит`);
             processInfo.isActive = false;
             processInfo.exitTime = Date.now();
             processInfo.exitReason = 'already_stopped';
@@ -366,7 +367,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
     ipcMain.on(
         'resume-process',
         async (event, { taskId, config }: { taskId: number; config: TaskConfig }) => {
-            console.log(`ПРОЦЕСС: Получен запрос на возобновление процесса ${taskId}`);
+            logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Получен запрос на возобновление процесса ${taskId}`);
 
             const processInfo = processes[taskId];
 
@@ -389,7 +390,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
 
             try {
 
-                console.log(`ПРОЦЕСС: Запуск процесса для задачи ${taskId} с конфигурацией:`, config);
+                logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Запуск процесса для задачи ${taskId} с конфигурацией:`, config);
 
                 const childProcess = await spawnProcess(config);
 
@@ -407,7 +408,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                 processes[taskId].exitReason = undefined;
                 processes[taskId].moduleName = config.module_name || config.moduleName || 'Unknown';
 
-                console.log(`ПРОЦЕСС: Процесс ${taskId} успешно запущен с PID ${pid}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Процесс ${taskId} успешно запущен с PID ${pid}`);
 
                 EventBus.emit(PROCESS_EVENTS.STARTED, {
                     processId: taskId.toString(),
@@ -437,7 +438,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                     }
                 });
 
-                console.log(`ПРОЦЕСС: Отправка события process-started в UI для задачи ${taskId}`);
+                logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Отправка события process-started в UI для задачи ${taskId}`);
                 event.reply('process-started', {
                     taskId: taskId,
                     config: config,
@@ -461,7 +462,7 @@ export function initializeProcessHandlers(ipcMain: IpcMain, mainWindow: BrowserW
                 });
 
                 childProcess.on('exit', (code: number | null) => {
-                    console.log(`ПРОЦЕСС: Процесс ${taskId} завершен с кодом ${code}`);
+                    logger.info(logger.LOG_MODULES.SYSTEM, `ПРОЦЕСС: Процесс ${taskId} завершен с кодом ${code}`);
 
                     if (processes[taskId]) {
                         processes[taskId].isActive = false;
