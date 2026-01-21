@@ -9,7 +9,7 @@ build/
 .npm/
 .DS_Store
 Thumbs.db
-/docs
+
 # Electron (electron-app)
 electron-app/node_modules/
 electron-app/dist/
@@ -20,7 +20,8 @@ electron-app/src/configs
 electron-app/src/globalConfigs
 electron-app/src/scriptConfigs
 electron-app/electron-data
-
+clear.py
+docs/Tasks
 # Telegram-service 
 telegram-service/.env
 # React (react-app)
