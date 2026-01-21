@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateTask } from '../../../store/tasksSlice';
 import { RootState } from '../../../store/store';
@@ -10,19 +10,13 @@ export function useTaskTelegram(
     status: string,
     moduleName: string,
     config: any,
-    dataRef: React.MutableRefObject<TaskDataRow[]>,
-    processedRowsRef: React.MutableRefObject<string[]>
 ) {
   const dispatch = useDispatch();
-  const processingRowRef = useRef(false);
 
   const logs = useSelector((state: RootState) =>
       state.tasks.tasks.find((task) => task.id === id)?.logs || []
   );
 
-  const processedRows = useSelector((state: RootState) =>
-      state.tasks.tasks.find((t) => t.id === id)?.processedTelegramRows || []
-  );
 
   useEffect(() => {
     console.log(`Setting up Telegram handlers for task ${id}`);

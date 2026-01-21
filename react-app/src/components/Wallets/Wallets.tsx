@@ -30,6 +30,11 @@ export default function Wallets() {
     deleteWalletFromSet,
   } = useWalletSets();
 
+  const confirmDialog = (message: string) => {
+    // eslint-disable-next-line no-restricted-globals
+    return confirm(message);
+  };
+
   // Состояния диалогов
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [createSetDialogOpen, setCreateSetDialogOpen] = useState(false);
@@ -51,7 +56,7 @@ export default function Wallets() {
   }, [importWallet]);
 
   const handleDeleteWallet = useCallback(async (publicKey: string) => {
-    if (confirm('Are you sure you want to delete this wallet?')) {
+    if (confirmDialog('Are you sure you want to delete this wallet?')) {
       await deleteWallet(publicKey);
     }
   }, [deleteWallet]);
@@ -66,7 +71,7 @@ export default function Wallets() {
   }, [generateSet]);
 
   const handleDeleteSet = useCallback(async (setName: string) => {
-    if (confirm(`Are you sure you want to delete set "${setName}"?`)) {
+    if (confirmDialog(`Are you sure you want to delete set "${setName}"?`)) {
       await deleteSet(setName);
     }
   }, [deleteSet]);
@@ -90,7 +95,7 @@ export default function Wallets() {
     setName: string,
     publicKey: string
   ) => {
-    if (confirm('Are you sure you want to delete this wallet from the set?')) {
+    if (confirmDialog('Are you sure you want to delete this wallet from the set?')) {
       await deleteWalletFromSet(setName, publicKey);
     }
   }, [deleteWalletFromSet]);

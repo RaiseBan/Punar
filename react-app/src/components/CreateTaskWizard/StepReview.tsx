@@ -118,7 +118,6 @@ export default function StepReview({
             walletApproach,
             singleWalletMethod,
             selectedWalletPublicKey,
-            manualPrivateKey,
             chosenSetName,
         } = launchMyNftParams;
 

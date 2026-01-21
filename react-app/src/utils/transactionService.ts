@@ -4,7 +4,6 @@ import {
     Keypair,
     ComputeBudgetProgram,
     SendTransactionError,
-    LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

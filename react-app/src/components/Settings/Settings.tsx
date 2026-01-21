@@ -6,7 +6,6 @@ import {
     Typography, 
     IconButton, 
     Stack,
-    FormHelperText 
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CheckCircle from "@mui/icons-material/CheckCircle";

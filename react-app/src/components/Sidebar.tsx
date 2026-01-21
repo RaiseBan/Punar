@@ -11,7 +11,6 @@ import {
 import { Link, useLocation } from "react-router-dom";
 
 // Иконки из MUI
-import HomeIcon from "@mui/icons-material/Home";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import SettingsInputAntennaIcon from "@mui/icons-material/SettingsInputAntenna";

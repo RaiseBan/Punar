@@ -135,7 +135,7 @@ export function useToolsTransaction() {
       const sender = Keypair.fromSecretKey(new Uint8Array(bs58.decode(fromPrivKey)));
 
       // Получаем получателей
-      let receivers: PublicKey[] = [];
+      const receivers: PublicKey[] = [];
       
       if (toMethod === 'existing') {
         receivers.push(new PublicKey(toSelectedPubKey));

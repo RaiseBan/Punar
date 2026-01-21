@@ -20,14 +20,11 @@ import {
     Divider,
     OutlinedInput,
     InputAdornment,
-    IconButton,
-    Avatar,
     Tooltip,
     Skeleton,
     Container,
     useTheme,
     Slider,
-    Stack,
     List,
     ListItem,
     ListItemAvatar,
@@ -44,9 +41,7 @@ import LayersIcon from '@mui/icons-material/Layers';
 import FingerPrintIcon from '@mui/icons-material/Fingerprint';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
-import ViewComfyIcon from '@mui/icons-material/ViewComfy';
 import LinkIcon from '@mui/icons-material/Link';
-import AspectRatioIcon from '@mui/icons-material/AspectRatio';
 
 interface Transaction {
     tx: {
@@ -234,20 +229,6 @@ const TxHistorySearch = () => {
 
     const handleViewModeChange = (newValue: number) => {
         setViewMode(newValue);
-    };
-
-    const getViewModeIcon = () => {
-        switch(viewMode) {
-            case VIEW_MODES.CARDS:
-                return <ViewModuleIcon />;
-            case VIEW_MODES.MEDIUM:
-                return <ViewComfyIcon />;
-            case VIEW_MODES.COMPACT:
-            case VIEW_MODES.LIST:
-                return <ViewListIcon />;
-            default:
-                return <ViewModuleIcon />;
-        }
     };
 
     // Function to render loading skeletons

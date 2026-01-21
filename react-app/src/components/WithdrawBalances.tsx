@@ -93,8 +93,6 @@ export default function WithdrawBalances({
         onStatusUpdate("Starting withdrawal process...", "info");
 
         try {
-            let successful = 0;
-            let total = 0;
 
             for (const sender of senders) {
                 try {
@@ -153,7 +151,7 @@ export default function WithdrawBalances({
                     finalTx.feePayer = sender.publicKey;
 
                     // 7. Отправляем транзакцию
-                    const result = await sendTransactionWithRetries(
+                    await sendTransactionWithRetries(
                         finalTx,
                         sender,
                         connection.rpcEndpoint,
@@ -163,10 +161,6 @@ export default function WithdrawBalances({
                         feeEstimate.value!
                     );
 
-                    if (result.success) {
-                        successful++;
-                        total += safeAmount;
-                    }
                 } catch (e) {
                     console.error(`Failed for ${sender.publicKey}:`, e);
                     throw e

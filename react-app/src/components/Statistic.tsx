@@ -14,7 +14,7 @@ import {
     Select,
     Box,
     Paper,
-    useTheme, createTheme, Slider
+    useTheme, Slider
 } from '@mui/material';
 import { collections } from '../constants';
 import { sleep } from '../utils/base';
@@ -80,19 +80,16 @@ const Statistic: React.FC = () => {
         localStorage.setItem('statisticParams', JSON.stringify({ wallet, collection, search }));
     }, [wallet, collection, search, isInitialized]);
 
+    // Генерация ключа кэша
+    const generateCacheKey = useCallback(() =>
+        `${wallet}:${collection}:${search}`, [wallet, collection, search]);
+
     // Автоматическая загрузка из кэша
     useEffect(() => {
         if (!isInitialized) return;
         const cacheKey = generateCacheKey();
         if (cache[cacheKey]) setStats(cache[cacheKey]);
-    }, [wallet, collection, search, cache, isInitialized]);
-
-
-
-
-    // Генерация ключа кэша
-    const generateCacheKey = useCallback(() =>
-        `${wallet}:${collection}:${search}`, [wallet, collection, search]);
+    }, [wallet, collection, search, cache, isInitialized, generateCacheKey]);
 
     // // Сохранение в кэш при размонтировании
     // useEffect(() => {
@@ -104,55 +101,6 @@ const Statistic: React.FC = () => {
     const totalNFTs = stats.reduce((sum, item) => sum + item.count, 0);
     const totalProfit = stats.reduce((sum, item) => sum + item.profit, 0);
     const totalSpent = stats.reduce((sum, item) => sum + item.spent, 0);
-
-    const fetchInventory = useCallback(async () => {
-        if (!collections.has(collection)) return;
-        if (!tensorKey) return console.error('Missing Tensor API key');
-
-        setLoading(true);
-        try {
-            const collId = collections.get(collection)!;
-            const inventory = await getWalletInventory(wallet, collId);
-
-            const nameMap = new Map<string, string[]>();
-            inventory.mints.forEach((nft: any) => {
-                if (nft.name.toLowerCase().includes(search.toLowerCase())) {
-                    nameMap.set(nft.name, [
-                        ...(nameMap.get(nft.name) || []),
-                        nft.lastSale?.price || '0'
-                    ]);
-                }
-            });
-
-            // Восстановили последовательные запросы с задержкой
-            const results: NFTData[] = [];
-            for (const [name, prices] of nameMap) {
-                const currentPriceData = await fetchCurrentPrice(name, collId);
-                await sleep(200); // Важная задержка между запросами
-
-                const spent = prices.reduce((sum, p) => sum + parseInt(p), 0) / 1e9;
-                const current = parseInt(currentPriceData.price) / 1e9;
-
-                results.push({
-                    name,
-                    spent,
-                    profit: (current * prices.length) - spent,
-                    count: prices.length,
-                    image: currentPriceData.imageUri
-                });
-            }
-
-            const cacheKey = generateCacheKey();
-            const newCache = { ...cache, [cacheKey]: results };
-            setCache(newCache);
-            localStorage.setItem('nftCache', JSON.stringify(newCache));
-            setStats(results);
-        } catch (error) {
-            console.error('Fetch error:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, [wallet, collection, search, tensorKey, cache, generateCacheKey]);
 
     const getWalletInventory = useCallback(async (wallet: string, collId: string) => {
         const params = new URLSearchParams({
@@ -203,6 +151,55 @@ const Statistic: React.FC = () => {
             imageUri: data.mints[0]?.imageUri || ''
         };
     }, [tensorKey]);
+
+    const fetchInventory = useCallback(async () => {
+        if (!collections.has(collection)) return;
+        if (!tensorKey) return console.error('Missing Tensor API key');
+
+        setLoading(true);
+        try {
+            const collId = collections.get(collection)!;
+            const inventory = await getWalletInventory(wallet, collId);
+
+            const nameMap = new Map<string, string[]>();
+            inventory.mints.forEach((nft: any) => {
+                if (nft.name.toLowerCase().includes(search.toLowerCase())) {
+                    nameMap.set(nft.name, [
+                        ...(nameMap.get(nft.name) || []),
+                        nft.lastSale?.price || '0'
+                    ]);
+                }
+            });
+
+            // Восстановили последовательные запросы с задержкой
+            const results: NFTData[] = [];
+            for (const [name, prices] of nameMap) {
+                const currentPriceData = await fetchCurrentPrice(name, collId);
+                await sleep(200); // Важная задержка между запросами
+
+                const spent = prices.reduce((sum, p) => sum + parseInt(p), 0) / 1e9;
+                const current = parseInt(currentPriceData.price) / 1e9;
+
+                results.push({
+                    name,
+                    spent,
+                    profit: (current * prices.length) - spent,
+                    count: prices.length,
+                    image: currentPriceData.imageUri
+                });
+            }
+
+            const cacheKey = generateCacheKey();
+            const newCache = { ...cache, [cacheKey]: results };
+            setCache(newCache);
+            localStorage.setItem('nftCache', JSON.stringify(newCache));
+            setStats(results);
+        } catch (error) {
+            console.error('Fetch error:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [wallet, collection, search, tensorKey, cache, generateCacheKey, getWalletInventory, fetchCurrentPrice]);
     return (
         <Box
             sx={{

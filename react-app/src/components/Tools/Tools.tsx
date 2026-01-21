@@ -118,7 +118,7 @@ export default function Tools() {
           onStatusUpdate={(message, severity) => {
             showSnackbar(message, severity);
           }}
-          onLoading={(loading) => {
+          onLoading={() => {
             // isLoading управляется внутри хука useToolsTransaction
           }}
         />

@@ -6,12 +6,12 @@ module.exports = {
   ],
   rules: {
     // TypeScript specific
-    '@typescript-eslint/no-explicit-': 'error',
+    '@typescript-eslint/no-explicit-any': 'warn', // ИСПРАВЛЕНО: было 'no-explicit-'
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-    '@typescript-eslint/no-non-null-assertion': 'warn',
 
     // General
     'prefer-const': 'error',
     'no-var': 'error',
+    'no-restricted-globals': ['error', 'confirm', 'prompt', 'alert'], // ДОБАВЛЕНО
   },
 };

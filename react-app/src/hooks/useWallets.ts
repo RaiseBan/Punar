@@ -12,10 +12,6 @@ export function useWallets() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadWallets();
-  }, []);
-
   const loadWallets = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -28,6 +24,10 @@ export function useWallets() {
       setIsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    loadWallets();
+  }, [loadWallets]);
 
   const createWallet = useCallback(async () => {
     try {

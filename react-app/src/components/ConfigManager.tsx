@@ -7,7 +7,6 @@ import {
     MenuItem,
     Typography,
     Card,
-    Divider,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import ConfigItemComponent from "./ConfigItemComponent";

@@ -6,13 +6,6 @@ import {
   DialogActions,
   Button,
   TextField,
-  FormControl,
-  FormLabel,
-  FormControlLabel,
-  Switch,
-  Box,
-  Typography,
-  Divider
 } from '@mui/material';
 
 interface SettingsDialogProps {

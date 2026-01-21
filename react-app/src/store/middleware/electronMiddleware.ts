@@ -45,9 +45,6 @@ export const electronMiddleware: Middleware = (store) => {
 
             window.electronAPI.onProcessOutput((event, data) => {
 
-                const state = store.getState() as RootState;
-                const task = state.tasks.tasks.find(t => t.id === data.taskId);
-
                 const log = data.log.toString();
 
                 if (log.includes("[") && log.includes("]") ||

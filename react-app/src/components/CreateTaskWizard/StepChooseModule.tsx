@@ -9,7 +9,6 @@ interface StepChooseModuleProps {
 }
 
 export default function StepChooseModule({
-                                             selectedModule,
                                              setSelectedModule,
                                              handleNext,
                                          }: StepChooseModuleProps) {

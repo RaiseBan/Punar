@@ -6,7 +6,6 @@ import DeviceHubIcon from "@mui/icons-material/DeviceHub";
 import SettingsEthernetIcon from "@mui/icons-material/SettingsEthernet";
 import AutoGraphIcon from "@mui/icons-material/AutoGraph";
 import CloudIcon from "@mui/icons-material/Cloud";
-import {OfflineBolt} from "@mui/icons-material";
 
 /** Наш интерфейс: иконка может быть JSX.Element */
 export interface ModuleItem {

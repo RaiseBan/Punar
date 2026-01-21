@@ -15,10 +15,6 @@ export function useWalletSets() {
   const [walletSets, setWalletSets] = useState<WalletSet>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadWalletSets();
-  }, []);
-
   const loadWalletSets = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -32,6 +28,10 @@ export function useWalletSets() {
       setIsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    loadWalletSets();
+  }, [loadWalletSets]);
 
   const saveToSettings = useCallback(async (updatedSets: WalletSet) => {
     try {
