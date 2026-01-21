@@ -138,7 +138,7 @@ export default function Settings() {
         setTouched(new Set(Object.keys(settings)));
 
         if (hasErrors) {
-            alert('Please fix all validation errors before saving');
+            console.error('Please fix all validation errors before saving');
             return;
         }
 
