@@ -1,12 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Card, CardContent } from '@mui/material';
-
-import { useDispatch } from 'react-redux';
-import { updateTask } from '../../store/tasksSlice';
 import { useTaskData } from './hooks/useTaskData';
 import { useTaskActions } from './hooks/useTaskActions';
 import { useTaskTelegram } from './hooks/useTaskTelegram';
-import { fetchImageUrl } from '../../utils/tensorFunctions';
+import { useTaskImage } from './hooks/useTaskImage';
 import { TaskHeader } from './TaskHeader';
 import { TaskDataTable } from './TaskDataTable';
 import { SettingsDialog, FullViewDialog, LogsDialog } from './Dialogs';
@@ -14,155 +11,126 @@ import { TaskProps } from './types';
 import { COLS_NAMES } from '../../constants';
 
 export default function Task(props: TaskProps) {
-    const { id, name, moduleName, status, columns, data, config } = props;
+  const { id, name, moduleName, status, columns, data, config } = props;
 
-    const dispatch = useDispatch();
+  // Мемоизация columns - вычисляется только когда меняется moduleName или columns
+  const effectiveColumns = useMemo(() => {
+    return columns && columns.length > 0 
+      ? columns 
+      : COLS_NAMES.get(moduleName) || [];
+  }, [columns, moduleName]);
 
-    // Состояние для изображения коллекции Tensor
-    const [imageUrl, setImageUrl] = useState<string>('');
+  // Хуки для управления состоянием и логикой
+  const taskData = useTaskData(id, data, effectiveColumns);
 
-    // Получаем данные и методы из пользовательских хуков
-    const taskData = useTaskData(
-        id,
-        data,
-        columns && columns.length > 0 ? columns : COLS_NAMES.get(moduleName) || []
-    );
+  const taskActions = useTaskActions(
+    id,
+    status,
+    config,
+    name,
+    taskData.dataRef,
+    taskData.processedRowsRef
+  );
 
-    const taskActions = useTaskActions(
-        id,
-        status,
-        config,
-        name,
-        taskData.dataRef,
-        taskData.processedRowsRef
-    );
+  const taskTelegram = useTaskTelegram(
+    id,
+    data,
+    status,
+    moduleName,
+    config,
+    taskData.dataRef,
+    taskData.processedRowsRef
+  );
 
-    const taskTelegram = useTaskTelegram(
-        id,
-        data,
-        status,
-        moduleName,
-        config,
-        taskData.dataRef,
-        taskData.processedRowsRef
-    );
+  const { imageUrl, collectionLabel } = useTaskImage(moduleName, config);
 
-    // Загрузка изображения для Tensor
-    useEffect(() => {
-        let isMounted = true;
-        if (moduleName === 'Tensor sniper (SDK)' && config?.collection_id) {
-            fetchImageUrl(config.collection_id).then((url) => {
-                if (isMounted) {
-                    setImageUrl(url || '');
-                }
-            });
-        } else {
-            setImageUrl('');
-        }
-        return () => {
-            isMounted = false;
-        };
-    }, [moduleName, config?.collection_id]);
+  // Определяем, можно ли редактировать конфигурацию
+  const canEditConfig = status === 'Stopped';
 
-    // Формируем label для коллекции
-    let collectionLabel = '';
-    if (moduleName === 'Tensor sniper (SDK)' && config?.collection_id) {
-        const parts = config.collection_id.split('/');
-        const lastPart = parts[parts.length - 1] || '';
-        collectionLabel = lastPart.toUpperCase();
-    }
+  // Обработчики для изменения настроек (мемоизированы для предотвращения лишних ререндеров)
+  const handleNameChange = useCallback((value: string) => {
+    taskActions.setEditName(value);
+  }, [taskActions]);
 
-    // Определяем, можно ли редактировать конфигурацию
-    const canEditConfig = status === 'Stopped';
+  const handleModuleNameChange = useCallback((value: string) => {
+    taskActions.setEditModuleName(value);
+  }, [taskActions]);
 
-    // Обработчики для настроек
-    const handleNameChange = (value: string) => {
-        taskActions.setEditName(value);
-    };
+  const handleConfigChange = useCallback((key: string, value: any) => {
+    const updatedConfig = { ...taskActions.editConfig, [key]: value };
+    taskActions.setEditConfig(updatedConfig);
+  }, [taskActions]);
 
-    const handleModuleNameChange = (value: string) => {
-        taskActions.setEditModuleName(value);
-    };
+  return (
+    <>
+      <Card
+        sx={{
+          backgroundColor: '#0e0e0e',
+          color: '#fff',
+          width: '100%',
+          borderRadius: '8px',
+          border: '1px solid #2A2A2A',
+          padding: '10px',
+        }}
+      >
+        <CardContent sx={{ padding: '10px' }}>
+          <TaskHeader
+            name={name}
+            moduleName={moduleName}
+            status={status}
+            tableCollapsed={taskData.tableCollapsed}
+            toggleTable={taskData.toggleTable}
+            imageUrl={imageUrl}
+            collectionLabel={collectionLabel}
+            config={config}
+            handleOpenFullView={taskActions.handleOpenFullView}
+            handleOpenSettings={taskActions.handleOpenSettings}
+            handleOpenLogs={taskActions.handleOpenLogs}
+            handleStop={taskActions.handleStop}
+            handleResume={taskActions.handleResume}
+            handleDelete={taskActions.handleDelete}
+          />
 
-    const handleConfigChange = (key: string, value: any) => {
-        const updatedConfig = { ...taskActions.editConfig, [key]: value };
-        taskActions.setEditConfig(updatedConfig);
-    };
+          <TaskDataTable
+            columns={effectiveColumns}
+            sortedData={taskData.sortedData}
+            orderBy={taskData.orderBy}
+            order={taskData.order}
+            handleRequestSort={taskData.handleRequestSort}
+            onDeleteRow={taskActions.handleDeleteRow}
+          />
+        </CardContent>
+      </Card>
 
-    return (
-        <>
-            <Card
-                sx={{
-                    backgroundColor: '#0e0e0e',
-                    color: '#fff',
-                    width: '100%',
-                    borderRadius: '8px',
-                    border: '1px solid #2A2A2A',
-                    padding: '10px',
-                }}
-            >
-                <CardContent sx={{ padding: '10px' }}>
-                    <TaskHeader
-                        name={name}
-                        moduleName={moduleName}
-                        status={status}
-                        tableCollapsed={taskData.tableCollapsed}
-                        toggleTable={taskData.toggleTable}
-                        imageUrl={imageUrl}
-                        collectionLabel={collectionLabel}
-                        config={config}
-                        handleOpenFullView={taskActions.handleOpenFullView}
-                        handleOpenSettings={taskActions.handleOpenSettings}
-                        handleOpenLogs={taskActions.handleOpenLogs}
-                        handleStop={taskActions.handleStop}
-                        handleResume={taskActions.handleResume}
-                        handleDelete={taskActions.handleDelete}
-                    />
+      {/* Диалоги */}
+      <SettingsDialog
+        open={taskActions.settingsOpen}
+        onClose={taskActions.handleCloseSettings}
+        editName={taskActions.editName}
+        editModuleName={taskActions.editModuleName}
+        editConfig={taskActions.editConfig}
+        canEditConfig={canEditConfig}
+        onNameChange={handleNameChange}
+        onModuleNameChange={handleModuleNameChange}
+        onConfigChange={handleConfigChange}
+        onSave={taskActions.handleSaveSettings}
+      />
 
-                    <TaskDataTable
-                        columns={
-                            columns && columns.length > 0
-                                ? columns
-                                : COLS_NAMES.get(moduleName) || []
-                        }
-                        sortedData={taskData.sortedData}
-                        orderBy={taskData.orderBy}
-                        order={taskData.order}
-                        handleRequestSort={taskData.handleRequestSort}
-                        onDeleteRow={taskActions.handleDeleteRow}
-                    />
-                </CardContent>
-            </Card>
+      <FullViewDialog
+        open={taskActions.fullViewOpen}
+        onClose={taskActions.handleCloseFullView}
+        name={name}
+        columns={effectiveColumns}
+        data={data}
+        onDeleteRow={taskActions.handleDeleteRow}
+      />
 
-            {/* Диалоги */}
-            <SettingsDialog
-                open={taskActions.settingsOpen}
-                onClose={taskActions.handleCloseSettings}
-                editName={taskActions.editName}
-                editModuleName={taskActions.editModuleName}
-                editConfig={taskActions.editConfig}
-                canEditConfig={canEditConfig}
-                onNameChange={handleNameChange}
-                onModuleNameChange={handleModuleNameChange}
-                onConfigChange={handleConfigChange}
-                onSave={taskActions.handleSaveSettings}
-            />
-
-            <FullViewDialog
-                open={taskActions.fullViewOpen}
-                onClose={taskActions.handleCloseFullView}
-                name={name}
-                columns={columns}
-                data={data}
-                onDeleteRow={taskActions.handleDeleteRow}
-            />
-
-            <LogsDialog
-                open={taskActions.logsOpen}
-                onClose={taskActions.handleCloseLogs}
-                name={name}
-                logs={taskTelegram.logs}
-            />
-        </>
-    );
+      <LogsDialog
+        open={taskActions.logsOpen}
+        onClose={taskActions.handleCloseLogs}
+        name={name}
+        logs={taskTelegram.logs}
+      />
+    </>
+  );
 }

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateTask } from '../../../store/tasksSlice';
 import { RootState } from '../../../store/store';
@@ -26,6 +26,7 @@ export function useTaskData(id: number, data: TaskDataRow[], columns: string[]) 
     processedRowsRef.current = processedRows;
   }, [processedRows]);
 
+  // Добавление rowId к строкам, если их нет
   useEffect(() => {
     if (data && data.length > 0) {
       const dataWithIds = data.map((row, index) => {
@@ -49,10 +50,24 @@ export function useTaskData(id: number, data: TaskDataRow[], columns: string[]) 
     }
   }, [data, id, dispatch]);
 
-  const sortData = (data: TaskDataRow[]) => {
-    if (!orderBy) return data;
+  const handleRequestSort = (property: string) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
 
-    return [...data].map((row, index) => ({
+  const toggleTable = () => setTableCollapsed(!tableCollapsed);
+
+  // Отображаемые данные (свернуто/развернуто)
+  const displayedData = useMemo(() => {
+    return tableCollapsed ? data.slice(0, 2) : data;
+  }, [tableCollapsed, data]);
+
+  // Сортировка с мемоизацией
+  const sortedData = useMemo(() => {
+    if (!orderBy) return displayedData;
+
+    return [...displayedData].map((row, index) => ({
       ...row,
       originalIndex: index
     })).sort((a, b) => {
@@ -69,17 +84,7 @@ export function useTaskData(id: number, data: TaskDataRow[], columns: string[]) 
         ? aValue.localeCompare(bValue)
         : bValue.localeCompare(aValue);
     });
-  };
-
-  const handleRequestSort = (property: string) => {
-    const isAsc = orderBy === property && order === 'asc';
-    setOrder(isAsc ? 'desc' : 'asc');
-    setOrderBy(property);
-  };
-
-  const toggleTable = () => setTableCollapsed(!tableCollapsed);
-  const displayedData = tableCollapsed ? data.slice(0, 2) : data;
-  const sortedData = sortData(displayedData);
+  }, [displayedData, orderBy, order, columns]);
 
   return {
     dataRef,

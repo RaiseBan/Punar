@@ -1,43 +1,41 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { Box, Button, Typography } from '@mui/material';
 import Task from './Task/Task';
-import { useDispatch, useSelector } from 'react-redux';
-import { addOrUpdateTask } from '../store/tasksSlice';
-import { RootState } from '../store/store';
 import CreateTaskWizard from './CreateTaskWizard/CreateTaskWizard';
+import { useTasksPage } from '../hooks/useTasksPage';
 
 export default function TasksPage() {
-  const tasks = useSelector((state: RootState) => state.tasks.tasks);
-  const dispatch = useDispatch();
-  const [wizardOpen, setWizardOpen] = useState(false);
-
-
-  const handleCreateTask = useCallback(
-    (config: unknown) => {
-      const taskId = Date.now();
-      dispatch(addOrUpdateTask({ taskId, config }));
-      window.electronAPI?.startProcess(taskId, config);
-      setWizardOpen(false);
-    },
-    [dispatch]
-  );
+  const {
+    tasks,
+    wizardOpen,
+    openWizard,
+    closeWizard,
+    handleCreateTask,
+  } = useTasksPage();
 
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h4" sx={{ mb: 2 }}>
         DeFi Tasks
       </Typography>
-      <Button variant="contained" onClick={() => setWizardOpen(true)}>
+
+      <Button variant="contained" onClick={openWizard}>
         Create Task +
       </Button>
+
       <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {tasks.map((t) => (
-          <Task key={t.id} {...t} />
-        ))}
+        {tasks.length > 0 ? (
+          tasks.map((task) => <Task key={task.id} {...task} />)
+        ) : (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            No tasks yet. Create your first task!
+          </Typography>
+        )}
       </Box>
+
       <CreateTaskWizard
         open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
+        onClose={closeWizard}
         onCreateTask={handleCreateTask}
       />
     </Box>

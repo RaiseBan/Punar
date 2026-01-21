@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import {
     Box,
     Table,
@@ -20,14 +20,14 @@ interface TaskDataTableProps {
     onDeleteRow: (rowIndex: number) => void;
 }
 
-export const TaskDataTable: React.FC<TaskDataTableProps> = ({
-                                                                columns,
-                                                                sortedData,
-                                                                orderBy,
-                                                                order,
-                                                                handleRequestSort,
-                                                                onDeleteRow,
-                                                            }) => {
+const TaskDataTableComponent: React.FC<TaskDataTableProps> = ({
+    columns,
+    sortedData,
+    orderBy,
+    order,
+    handleRequestSort,
+    onDeleteRow,
+}) => {
     return (
         <Box
             sx={{
@@ -114,53 +114,16 @@ export const TaskDataTable: React.FC<TaskDataTableProps> = ({
                 </TableHead>
                 <TableBody>
                     {sortedData.map((row, rowIndex) => (
-                        <TableRow
-                            key={rowIndex}
-                            sx={{
-                                '&:hover': {
-                                    backgroundColor: '#1A1A1A',
-                                },
-                            }}
-                        >
+                        <TableRow key={row.rowId || rowIndex}>
                             {row.cells.map((cell, cellIndex) => (
-                                <TableCell
-                                    key={cellIndex}
-                                    sx={{
-                                        ...(columns[cellIndex].toLowerCase().includes('address') && {
-                                            minWidth: '300px',
-                                        }),
-                                        ...(columns[cellIndex].toLowerCase().includes('name') && {
-                                            minWidth: '150px',
-                                        }),
-                                        ...(columns[cellIndex].toLowerCase().includes('volume') && {
-                                            minWidth: '120px',
-                                        }),
-                                        ...(columns[cellIndex].toLowerCase().includes('price') && {
-                                            minWidth: '100px',
-                                        }),
-                                    }}
-                                >
-                                    {cell}
-                                </TableCell>
+                                <TableCell key={cellIndex}>{cell}</TableCell>
                             ))}
-                            <TableCell
-                                sx={{
-                                    width: '80px',
-                                    minWidth: '80px',
-                                }}
-                            >
+                            <TableCell>
                                 <Button
-                                    variant="contained"
                                     size="small"
-                                    onClick={() => onDeleteRow(rowIndex)}
-                                    sx={{
-                                        bgcolor: '#f44336',
-                                        '&:hover': { bgcolor: '#ff5252' },
-                                        color: 'white',
-                                        px: 1.5,
-                                        py: 0.5,
-                                        minWidth: '60px',
-                                    }}
+                                    color="error"
+                                    onClick={() => onDeleteRow(row.rowId || rowIndex)}
+                                    sx={{ minWidth: '60px' }}
                                 >
                                     Delete
                                 </Button>
@@ -172,3 +135,6 @@ export const TaskDataTable: React.FC<TaskDataTableProps> = ({
         </Box>
     );
 };
+
+// Мемоизация компонента для предотвращения лишних ререндеров
+export const TaskDataTable = memo(TaskDataTableComponent);
