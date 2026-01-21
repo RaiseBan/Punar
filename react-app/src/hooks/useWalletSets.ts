@@ -15,7 +15,6 @@ export function useWalletSets() {
   const [walletSets, setWalletSets] = useState<WalletSet>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // Загрузка наборов из settings
   useEffect(() => {
     loadWalletSets();
   }, []);
@@ -34,7 +33,6 @@ export function useWalletSets() {
     }
   }, []);
 
-  // Сохранение в settings
   const saveToSettings = useCallback(async (updatedSets: WalletSet) => {
     try {
       const settings = await window.electronAPI?.getSettings();
@@ -48,7 +46,6 @@ export function useWalletSets() {
     }
   }, []);
 
-  // Создать пустой набор
   const createSet = useCallback(async (setName: string) => {
     if (!setName.trim()) {
       throw new Error('Set name is required');
@@ -62,7 +59,6 @@ export function useWalletSets() {
     await saveToSettings(updatedSets);
   }, [walletSets, saveToSettings]);
 
-  // Сгенерировать набор с кошельками
   const generateSet = useCallback(async (setName: string, count: number) => {
     if (!setName.trim()) {
       throw new Error('Set name is required');
@@ -85,7 +81,6 @@ export function useWalletSets() {
     await saveToSettings(updatedSets);
   }, [walletSets, saveToSettings]);
 
-  // Удалить набор
   const deleteSet = useCallback(async (setName: string) => {
     const updatedSets = { ...walletSets };
     delete updatedSets[setName];
@@ -93,7 +88,6 @@ export function useWalletSets() {
     await saveToSettings(updatedSets);
   }, [walletSets, saveToSettings]);
 
-  // Добавить кошелёк в набор (генерация)
   const generateWalletInSet = useCallback(async (setName: string) => {
     const kp = Keypair.generate();
     const newWallet: Wallet = {
@@ -107,7 +101,6 @@ export function useWalletSets() {
     await saveToSettings(updatedSets);
   }, [walletSets, saveToSettings]);
 
-  // Импорт кошелька в набор
   const importWalletInSet = useCallback(async (
     setName: string,
     publicKey: string,
@@ -128,7 +121,6 @@ export function useWalletSets() {
     await saveToSettings(updatedSets);
   }, [walletSets, saveToSettings]);
 
-  // Удалить кошелёк из набора
   const deleteWalletFromSet = useCallback(async (setName: string, publicKey: string) => {
     const filtered = (walletSets[setName] || []).filter(
       (w) => w.publicKey !== publicKey

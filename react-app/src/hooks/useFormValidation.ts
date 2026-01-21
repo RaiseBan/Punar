@@ -24,7 +24,6 @@ export function useFormValidation<T extends Record<string, any>>(
     return initial;
   });
 
-  // Валидация одного поля
   const validateField = useCallback(
     (fieldName: keyof T, value: any): string | null => {
       const config = initialFields[fieldName];
@@ -36,7 +35,6 @@ export function useFormValidation<T extends Record<string, any>>(
     [initialFields]
   );
 
-  // Установка ошибки для поля
   const setFieldError = useCallback((fieldName: keyof T, error: string | null) => {
     setFields((prev) => ({
       ...prev,
@@ -44,7 +42,6 @@ export function useFormValidation<T extends Record<string, any>>(
     }));
   }, []);
 
-  // Пометить поле как "тронутое"
   const touchField = useCallback((fieldName: keyof T) => {
     setFields((prev) => ({
       ...prev,
@@ -52,7 +49,6 @@ export function useFormValidation<T extends Record<string, any>>(
     }));
   }, []);
 
-  // Валидация при изменении (blur)
   const handleBlur = useCallback(
     (fieldName: keyof T, value: any) => {
       touchField(fieldName);
@@ -62,7 +58,6 @@ export function useFormValidation<T extends Record<string, any>>(
     [validateField, setFieldError, touchField]
   );
 
-  // Валидация всех полей
   const validateAll = useCallback(
     (values: Record<keyof T, any>): boolean => {
       let isValid = true;
@@ -71,9 +66,9 @@ export function useFormValidation<T extends Record<string, any>>(
       Object.keys(initialFields).forEach((key) => {
         const fieldName = key as keyof T;
         const error = validateField(fieldName, values[fieldName]);
-        
+
         newFields[key] = { error, touched: true };
-        
+
         if (error) {
           isValid = false;
         }
@@ -85,7 +80,6 @@ export function useFormValidation<T extends Record<string, any>>(
     [initialFields, validateField, fields]
   );
 
-  // Очистка всех ошибок
   const clearErrors = useCallback(() => {
     const cleared: Record<string, FieldValidation> = {};
     Object.keys(fields).forEach((key) => {
@@ -94,7 +88,6 @@ export function useFormValidation<T extends Record<string, any>>(
     setFields(cleared);
   }, [fields]);
 
-  // Получить состояние поля
   const getFieldState = useCallback(
     (fieldName: keyof T) => {
       return fields[fieldName] || { error: null, touched: false };
@@ -102,7 +95,6 @@ export function useFormValidation<T extends Record<string, any>>(
     [fields]
   );
 
-  // Есть ли ошибки в форме
   const hasErrors = useCallback(() => {
     return Object.values(fields).some((field) => field.error !== null);
   }, [fields]);

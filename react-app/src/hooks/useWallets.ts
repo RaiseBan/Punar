@@ -12,7 +12,6 @@ export function useWallets() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Загрузка кошельков при монтировании
   useEffect(() => {
     loadWallets();
   }, []);
@@ -21,12 +20,7 @@ export function useWallets() {
     try {
       setIsLoading(true);
       const response = await window.electronAPI?.getWallets();
-      
-      if (response) {
-        console.log("Success");
-      } else {
-        setWallets(response || []);
-      }
+      setWallets(response || []);
     } catch (err) {
       console.error('Ошибка при загрузке кошельков', err);
       setError('Failed to load wallets');
@@ -35,7 +29,6 @@ export function useWallets() {
     }
   }, []);
 
-  // Создание нового кошелька
   const createWallet = useCallback(async () => {
     try {
       const newKeypair = Keypair.generate();
@@ -53,7 +46,6 @@ export function useWallets() {
     }
   }, []);
 
-  // Импорт кошелька
   const importWallet = useCallback(async (publicKey: string, privateKey: string) => {
     try {
       const newWallet = {
@@ -74,7 +66,6 @@ export function useWallets() {
     }
   }, []);
 
-  // Удаление кошелька
   const deleteWallet = useCallback(async (publicKey: string) => {
     try {
       await window.electronAPI?.deleteWallet(publicKey);
