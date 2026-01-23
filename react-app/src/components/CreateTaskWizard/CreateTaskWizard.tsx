@@ -214,7 +214,8 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
 
     if (selectedModule === 'tensor_sdk') {
       const p = tensorSdkParams;
-      const cfg = {
+      const cfg: TaskConfig = {
+        moduleName: 'Tensor sniper (SDK)', // ✅ ДОБАВЛЕНО
         module_name: 'Tensor sniper (SDK)',
         task_name: taskName || '',
         collection_id: p.collectionId,
@@ -237,7 +238,8 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
       onCreateTask(cfg);
     } else if (selectedModule === 'tensor_reprice') {
       const p = tensorSdkParams;
-      const cfg = {
+      const cfg: TaskConfig = {
+        moduleName: 'Tensor reprice', // ✅ ДОБАВЛЕНО
         module_name: 'Tensor reprice',
         task_name: taskName,
         collection_id: p.collectionId,
@@ -282,6 +284,7 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
       }
 
       const cfg = {
+        moduleName: 'LaunchMyNft', // ✅ ДОБАВЛЕНО
         module_name: 'LaunchMyNft',
         task_name: taskName,
         target_url: p.target_url,
@@ -301,7 +304,8 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
       onCreateTask(cfg);
     } else if (selectedModule === 'meteora_dlmm') {
       const settings = await window.electronAPI.getSettings();
-      const cfg = {
+      const cfg: TaskConfig = {
+        moduleName: 'Meteora', // ✅ ДОБАВЛЕНО
         module_name: 'Meteora DLMM',
         task_name: taskName,
         accounts: meteoraParams.accounts.filter((a) => a.trim() !== ''),

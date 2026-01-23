@@ -210,6 +210,7 @@ export function useToolsTransaction() {
     toSelectedPubKey,
     toManualPubKey,
     toSelectedSetName,
+    rpcUrl,
     validation,
     showSnackbar,
   ]);

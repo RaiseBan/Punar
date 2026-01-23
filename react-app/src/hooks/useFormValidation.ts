@@ -76,10 +76,11 @@ export function useFormValidation<T extends Record<string, unknown>>(fields: {
 
   // Новый метод: получить состояние поля (touched + error)
   const getFieldState = useCallback(
-    (fieldName: keyof T): FieldState => {
+    (fieldName: string): FieldState => {
+      const key = fieldName as keyof T;
       return {
-        touched: touched.has(fieldName),
-        error: errors[fieldName] || null,
+        touched: touched.has(key),
+        error: errors[key] || null,
       };
     },
     [touched, errors]
@@ -87,13 +88,14 @@ export function useFormValidation<T extends Record<string, unknown>>(fields: {
 
   // Новый метод: обработчик onBlur
   const handleBlur = useCallback(
-    (fieldName: keyof T, value: unknown) => {
+    (fieldName: string, value: unknown) => {
+      const key = fieldName as keyof T;
       // Отмечаем поле как touched
-      setTouched((prev) => new Set(prev).add(fieldName));
+      setTouched((prev) => new Set(prev).add(key));
 
       // Валидируем и устанавливаем ошибку
-      const error = validateField(fieldName, value);
-      setFieldError(fieldName, error);
+      const error = validateField(key, value);
+      setFieldError(key, error);
     },
     [validateField, setFieldError]
   );
