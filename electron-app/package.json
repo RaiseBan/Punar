@@ -81,7 +81,6 @@
     "axios": "^1.8.1",
     "bs58": "^6.0.0",
     "electron-squirrel-startup": "^1.0.1",
-    "express": "^5.2.1",
-    "eslint-config-prettier": "^9.1.0"
+    "express": "^5.2.1"
   }
 }
