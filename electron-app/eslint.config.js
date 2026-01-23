@@ -25,10 +25,10 @@ module.exports = [
         rules: {
             ...tsPlugin.configs.recommended.rules,
             '@typescript-eslint/no-explicit-any': 'warn',
-            '@typescript-eslint/no-unused-vars': 'warn', // было 'error'
-            '@typescript-eslint/ban-ts-comment': 'warn', // добавь эту строку
-            '@typescript-eslint/no-require-imports': 'warn', // добавь эту строку
-            '@typescript-eslint/no-non-null-asserted-optional-chain': 'warn', // добавь эту строку
+            '@typescript-eslint/no-unused-vars': 'warn',
+            '@typescript-eslint/ban-ts-comment': 'warn',
+            '@typescript-eslint/no-require-imports': 'off',
+            '@typescript-eslint/no-non-null-asserted-optional-chain': 'warn'
         },
     },
 ];

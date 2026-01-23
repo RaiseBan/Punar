@@ -59,7 +59,7 @@ describe('dexScreenerAPI', () => {
 
         it('should handle error with cause', async () => {
             const error = new Error('Test error');
-            (error as any).cause = 'Test cause';
+            (error as Error & { cause?: string }).cause = 'Test cause';
             mockedAxios.get.mockRejectedValue(error);
 
             const result = await checkPairDex('test-pair');

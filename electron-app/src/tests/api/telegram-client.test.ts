@@ -18,7 +18,7 @@ class TelegramClient {
                 type: 'system'
             });
             return response.status === 200;
-        } catch (error) {
+        } catch {
             return false;
         }
     }
@@ -27,7 +27,7 @@ class TelegramClient {
         try {
             const response = await axios.get(`${this.baseUrl}/health`);
             return response.status === 200;
-        } catch (error) {
+        } catch {
             return false;
         }
     }
