@@ -1,55 +1,38 @@
-name: CI for Dev Branch
+name: CI
 
 on:
   push:
-    branches: [dev]
+    branches: [main, dev]
   pull_request:
-    branches: [dev]
+    branches: [main, dev]
 
 jobs:
-  test-electron:
+  ci:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: 16
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-    - name: Generate lock files
-      run: |
-        cd electron-app && npm install
-        cd ../react-app && npm install
-      # Создаем package-lock.json если его нет
+      - name: Install dependencies
+        run: |
+          cd electron-app && npm ci
+          cd ../react-app && npm ci
+          cd ../telegram-service && npm ci
 
-    - name: Cache dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          electron-app/node_modules
-          react-app/node_modules
-          electron-app/package-lock.json
-          react-app/package-lock.json
-        key: ${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+      - name: Lint
+        run: |
+          cd electron-app && npm run lint
+          cd ../react-app && npm run lint
 
-    - name: Install dependencies
-      run: |
-        cd electron-app && npm ci --production=false
-        cd ../react-app && npm ci --production=false
+      - name: Test
+        run: |
+          cd electron-app && npm test
 
-    - name: Build React app
-      run: |
-        cd react-app
-        CI=false npm run build
-        ls -la build/  # Проверка содержимого сборки
-        mkdir -p ../electron-app/dist
-        cp -r build ../electron-app/dist/react-build
-        ls -la ../electron-app/dist/  # Проверка копирования
-        
-    - name: Run Electron tests
-      run: |
-        cd electron-app
-        npm test -- --detectOpenHandles --forceExit
+      - name: Build
+        run: |
+          cd react-app && npm run build
+          cd ../electron-app && npm run build
