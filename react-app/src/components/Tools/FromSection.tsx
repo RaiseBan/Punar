@@ -12,11 +12,6 @@ import {
   InputLabel,
 } from '@mui/material';
 
-interface ValidationProp {
-  getFieldState: (field: string) => { touched: boolean; error: string | null };
-  handleBlur: (field: string, value: unknown) => void;
-}
-
 interface Wallet {
   publicKey: string;
   privateKey: string;
@@ -30,7 +25,10 @@ interface FromSectionProps {
   manualPrivateKey: string;
   onManualPrivateKeyChange: (value: string) => void;
   wallets: Wallet[];
-  validation: ValidationProp;
+  validation: {
+    getFieldState: (field: string) => { touched: boolean; error: string | null };
+    handleBlur: (field: string, value: unknown) => void;
+  };
 }
 
 export const FromSection: React.FC<FromSectionProps> = ({

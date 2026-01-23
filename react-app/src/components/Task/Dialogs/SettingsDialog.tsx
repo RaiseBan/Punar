@@ -14,7 +14,7 @@ interface SettingsDialogProps {
   onClose: () => void;
   editName: string;
   editModuleName: string;
-  editConfig: TaskConfig | null;
+  editConfig: Partial<TaskConfig> | null;
   canEditConfig: boolean;
   onNameChange: (value: string) => void;
   onModuleNameChange: (value: string) => void;

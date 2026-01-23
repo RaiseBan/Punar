@@ -16,6 +16,7 @@ import StepConfigureTensorSdk from './StepConfigureTensorSdk';
 import StepConfigureTensorReprice from './StepConfigureTensorReprice';
 import StepConfigureLaunchMyNft from './StepConfigureLaunchMyNft';
 import StepReview from './StepReview';
+import { TaskConfig } from '../../../../shared/types';
 
 // Типы (скорректируйте пути под свой проект)
 import { Wallet, TensorSdkParams, LaunchMyNftParams, MeteoraParams } from '../../types';
@@ -28,7 +29,7 @@ const STEPS = ['Choose module', 'Configure module', 'Review & Create'];
 interface CreateTaskWizardProps {
   open: boolean;
   onClose: () => void;
-  onCreateTask: (config: unknown) => void;
+  onCreateTask: (config: TaskConfig) => void; // ✅
 }
 
 export default function CreateTaskWizard({ open, onClose, onCreateTask }: CreateTaskWizardProps) {

@@ -5,21 +5,32 @@ interface ValidationResult {
   error?: string;
 }
 
+interface FieldState {
+  touched: boolean;
+  error: string | null;
+}
+
 export function useFormValidation<T extends Record<string, unknown>>(fields: {
   [K in keyof T]: {
     value: T[K];
     validator: (value: T[K]) => ValidationResult;
   };
 }) {
-  const [errors, setErrors] = useState<Record<keyof T, string | null>>({} as Record<keyof T, string | null>);
+  const [errors, setErrors] = useState<Record<keyof T, string | null>>(
+    {} as Record<keyof T, string | null>
+  );
+  const [touched, setTouched] = useState<Set<keyof T>>(new Set());
 
-  const validateField = useCallback((fieldName: keyof T, value: unknown): string | null => {
-    const field = fields[fieldName];
-    if (!field) return null;
+  const validateField = useCallback(
+    (fieldName: keyof T, value: unknown): string | null => {
+      const field = fields[fieldName];
+      if (!field) return null;
 
-    const result = field.validator(value as T[keyof T]);
-    return result.isValid ? null : result.error || 'Validation failed';
-  }, [fields]);
+      const result = field.validator(value as T[keyof T]);
+      return result.isValid ? null : result.error || 'Validation failed';
+    },
+    [fields]
+  );
 
   const validateAll = useCallback((): boolean => {
     const newErrors: Record<keyof T, string | null> = {} as Record<keyof T, string | null>;
@@ -32,6 +43,8 @@ export function useFormValidation<T extends Record<string, unknown>>(fields: {
     });
 
     setErrors(newErrors);
+    // Отмечаем все поля как touched при валидации всех
+    setTouched(new Set(Object.keys(fields) as Array<keyof T>));
     return !hasErrors;
   }, [fields, validateField]);
 
@@ -44,15 +57,46 @@ export function useFormValidation<T extends Record<string, unknown>>(fields: {
 
   const clearErrors = useCallback(() => {
     setErrors({} as Record<keyof T, string | null>);
+    setTouched(new Set());
   }, []);
 
-  const getError = useCallback((fieldName: keyof T): string | null => {
-    return errors[fieldName] || null;
-  }, [errors]);
+  const getError = useCallback(
+    (fieldName: keyof T): string | null => {
+      return errors[fieldName] || null;
+    },
+    [errors]
+  );
 
-  const hasError = useCallback((fieldName: keyof T): boolean => {
-    return Boolean(errors[fieldName]);
-  }, [errors]);
+  const hasError = useCallback(
+    (fieldName: keyof T): boolean => {
+      return Boolean(errors[fieldName]);
+    },
+    [errors]
+  );
+
+  // Новый метод: получить состояние поля (touched + error)
+  const getFieldState = useCallback(
+    (fieldName: keyof T): FieldState => {
+      return {
+        touched: touched.has(fieldName),
+        error: errors[fieldName] || null,
+      };
+    },
+    [touched, errors]
+  );
+
+  // Новый метод: обработчик onBlur
+  const handleBlur = useCallback(
+    (fieldName: keyof T, value: unknown) => {
+      // Отмечаем поле как touched
+      setTouched((prev) => new Set(prev).add(fieldName));
+
+      // Валидируем и устанавливаем ошибку
+      const error = validateField(fieldName, value);
+      setFieldError(fieldName, error);
+    },
+    [validateField, setFieldError]
+  );
 
   return {
     errors,
@@ -62,5 +106,7 @@ export function useFormValidation<T extends Record<string, unknown>>(fields: {
     clearErrors,
     getError,
     hasError,
+    getFieldState,
+    handleBlur,
   };
 }

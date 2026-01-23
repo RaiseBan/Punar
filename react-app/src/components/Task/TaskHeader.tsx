@@ -62,34 +62,36 @@ export const TaskHeader: React.FC<TaskHeaderProps> = ({
     >
       {/* Левая часть: Название, Модуль, Статус */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-          {name}
-        </Typography>
-        <Typography variant="caption" sx={{ color: '#999' }}>
-          Module: {moduleName}
-        </Typography>
+        <>
+          <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+            {name}
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#999' }}>
+            Module: {moduleName}
+          </Typography>
 
-        {/* Если это Tensor sniper (SDK), покажем картинку и label коллекции */}
-        {moduleName === 'Tensor sniper (SDK)' && config?.collection_id && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-            {imageUrl && (
-              <img
-                src={imageUrl}
-                alt="Collection"
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 4,
-                  objectFit: 'cover',
-                  border: '1px solid #333',
-                }}
-              />
-            )}
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#ccc' }}>
-              {collectionLabel}
-            </Typography>
-          </Box>
-        )}
+          {/* Если это Tensor sniper (SDK), покажем картинку и label коллекции */}
+          {moduleName === 'Tensor sniper (SDK)' && config?.collection_id && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+              {imageUrl && (
+                <img
+                  src={imageUrl}
+                  alt="Collection"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 4,
+                    objectFit: 'cover',
+                    border: '1px solid #333',
+                  }}
+                />
+              )}
+              <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#ccc' }}>
+                {collectionLabel}
+              </Typography>
+            </Box>
+          )}
+        </>
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
