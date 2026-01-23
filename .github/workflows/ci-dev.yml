@@ -15,13 +15,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install dependencies
         run: |
-          cd electron-app && npm ci
-          cd ../react-app && npm ci
-          cd ../telegram-service && npm ci
+          cd electron-app && npm ci --ignore-scripts
+          cd ../react-app && npm ci --ignore-scripts
+          cd ../telegram-service && npm ci --ignore-scripts
 
       - name: Lint
         run: |
