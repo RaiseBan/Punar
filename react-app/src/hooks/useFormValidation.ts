@@ -1,113 +1,66 @@
 import { useState, useCallback } from 'react';
-import { ValidationResult } from '../utils/validators';
 
-interface FieldValidation {
-  error: string | null;
-  touched: boolean;
+interface ValidationResult {
+  isValid: boolean;
+  error?: string;
 }
 
-type ValidatorFunction = (value: any) => ValidationResult;
+export function useFormValidation<T extends Record<string, unknown>>(fields: {
+  [K in keyof T]: {
+    value: T[K];
+    validator: (value: T[K]) => ValidationResult;
+  };
+}) {
+  const [errors, setErrors] = useState<Record<keyof T, string | null>>({} as Record<keyof T, string | null>);
 
-interface FieldConfig {
-  value: any;
-  validator?: ValidatorFunction;
-}
+  const validateField = useCallback((fieldName: keyof T, value: unknown): string | null => {
+    const field = fields[fieldName];
+    if (!field) return null;
 
-export function useFormValidation<T extends Record<string, any>>(
-  initialFields: Record<keyof T, FieldConfig>
-) {
-  const [fields, setFields] = useState(() => {
-    const initial: Record<string, FieldValidation> = {};
-    Object.keys(initialFields).forEach((key) => {
-      initial[key] = { error: null, touched: false };
+    const result = field.validator(value as T[keyof T]);
+    return result.isValid ? null : result.error || 'Validation failed';
+  }, [fields]);
+
+  const validateAll = useCallback((): boolean => {
+    const newErrors: Record<keyof T, string | null> = {} as Record<keyof T, string | null>;
+    let hasErrors = false;
+
+    (Object.keys(fields) as Array<keyof T>).forEach((fieldName) => {
+      const error = validateField(fieldName, fields[fieldName].value);
+      newErrors[fieldName] = error;
+      if (error) hasErrors = true;
     });
-    return initial;
-  });
 
-  const validateField = useCallback(
-    (fieldName: keyof T, value: any): string | null => {
-      const config = initialFields[fieldName];
-      if (!config.validator) return null;
-
-      const result = config.validator(value);
-      return result.isValid ? null : result.error || 'Invalid value';
-    },
-    [initialFields]
-  );
+    setErrors(newErrors);
+    return !hasErrors;
+  }, [fields, validateField]);
 
   const setFieldError = useCallback((fieldName: keyof T, error: string | null) => {
-    setFields((prev) => ({
+    setErrors((prev) => ({
       ...prev,
-      [fieldName]: { ...prev[fieldName], error, touched: true },
+      [fieldName]: error,
     }));
   }, []);
-
-  const touchField = useCallback((fieldName: keyof T) => {
-    setFields((prev) => ({
-      ...prev,
-      [fieldName]: { ...prev[fieldName], touched: true },
-    }));
-  }, []);
-
-  const handleBlur = useCallback(
-    (fieldName: keyof T, value: any) => {
-      touchField(fieldName);
-      const error = validateField(fieldName, value);
-      setFieldError(fieldName, error);
-    },
-    [validateField, setFieldError, touchField]
-  );
-
-  const validateAll = useCallback(
-    (values: Record<keyof T, any>): boolean => {
-      let isValid = true;
-      const newFields = { ...fields };
-
-      Object.keys(initialFields).forEach((key) => {
-        const fieldName = key as keyof T;
-        const error = validateField(fieldName, values[fieldName]);
-
-        newFields[key] = { error, touched: true };
-
-        if (error) {
-          isValid = false;
-        }
-      });
-
-      setFields(newFields);
-      return isValid;
-    },
-    [initialFields, validateField, fields]
-  );
 
   const clearErrors = useCallback(() => {
-    const cleared: Record<string, FieldValidation> = {};
-    Object.keys(fields).forEach((key) => {
-      cleared[key] = { error: null, touched: false };
-    });
-    setFields(cleared);
-  }, [fields]);
+    setErrors({} as Record<keyof T, string | null>);
+  }, []);
 
-  const getFieldState = useCallback(
-    (fieldName: keyof T) => {
-      return fields[fieldName] || { error: null, touched: false };
-    },
-    [fields]
-  );
+  const getError = useCallback((fieldName: keyof T): string | null => {
+    return errors[fieldName] || null;
+  }, [errors]);
 
-  const hasErrors = useCallback(() => {
-    return Object.values(fields).some((field) => field.error !== null);
-  }, [fields]);
+  const hasError = useCallback((fieldName: keyof T): boolean => {
+    return Boolean(errors[fieldName]);
+  }, [errors]);
 
   return {
-    fields,
+    errors,
     validateField,
-    setFieldError,
-    touchField,
-    handleBlur,
     validateAll,
+    setFieldError,
     clearErrors,
-    getFieldState,
-    hasErrors,
+    getError,
+    hasError,
   };
 }

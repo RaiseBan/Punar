@@ -66,7 +66,7 @@ export default function Settings() {
     }, []);
 
     // Валидация поля
-    const validateField = useCallback((field: keyof AppSettings, value: any): string | null => {
+    const validateField = useCallback((field: keyof AppSettings, value: string): string | null => {
         // RPC URLs
         if (field === 'mainRpc' || field === 'additionalRpc') {
             if (!value) return null; // Опционально
