@@ -33,3 +33,4 @@ jobs:
         run: |
           npm run build --workspace=react-app
           npm run build --workspace=electron-app
+
