@@ -33,6 +33,13 @@ interface NFTData {
   image: string;
 }
 
+interface NFTItem {
+  name: string;
+  lastSale?: {
+    price: string;
+  };
+}
+
 const Statistic: React.FC = () => {
   // Все состояния и логика остаются без изменений
   const [wallet, setWallet] = useState('');
@@ -69,8 +76,8 @@ const Statistic: React.FC = () => {
 
       // Загрузка API ключа
       try {
-        const settings = await window.electronAPI?.getSettings();
-        setTensorKey(settings?.tensor_api_token || '');
+        const settings = await window.electronAPI.getSettings();
+        setTensorKey(settings.tensor_api_token || '');
       } catch (error) {
         console.error('Error loading settings:', error);
       }
@@ -176,7 +183,7 @@ const Statistic: React.FC = () => {
       const inventory = await getWalletInventory(wallet, collId);
 
       const nameMap = new Map<string, string[]>();
-      inventory.mints.forEach((nft: unknown) => {
+      inventory.mints.forEach((nft: NFTItem) => {
         if (nft.name.toLowerCase().includes(search.toLowerCase())) {
           nameMap.set(nft.name, [...(nameMap.get(nft.name) || []), nft.lastSale?.price || '0']);
         }

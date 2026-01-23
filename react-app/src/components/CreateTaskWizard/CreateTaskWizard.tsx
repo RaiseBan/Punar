@@ -105,12 +105,12 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
   // При открытии диалога: грузим кошельки, списки сетов, конфиги и т.д.
   useEffect(() => {
     if (open) {
-      window.electronAPI?.getWallets().then((arr: Wallet[]) => {
+      window.electronAPI.getWallets().then((arr: Wallet[]) => {
         setWallets(arr);
       });
       // Список сетов
-      window.electronAPI?.getSettings().then((settings: unknown) => {
-        if (settings?.walletsSet) {
+      window.electronAPI.getSettings().then((settings) => {
+        if (settings.walletsSet) {
           setWalletSets(Object.keys(settings.walletsSet));
         } else {
           setWalletSets([]);
@@ -209,7 +209,7 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
       return;
     }
 
-    const settings = await window.electronAPI?.getSettings(); // часто нужно
+    const settings = await window.electronAPI.getSettings(); // часто нужно
 
     if (selectedModule === 'tensor_sdk') {
       const p = tensorSdkParams;
@@ -228,10 +228,10 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
         bloxroute_tip_lamports: p.bloxrouteTipLamports,
         tx_to_send: p.txToSend,
         privateKey: p.privateKey,
-        main_rpc: settings?.mainRpc || '',
-        helius_rpcs: settings?.heliusRpcs || [],
-        thor_streamer_address: settings?.thor_streamer_address,
-        thor_streamer_token: settings?.thor_streamer_token,
+        main_rpc: settings.mainRpc || '',
+        helius_rpcs: settings.heliusRpcs || [],
+        thor_streamer_address: settings.thor_streamer_address,
+        thor_streamer_token: settings.thor_streamer_token,
       };
       onCreateTask(cfg);
     } else if (selectedModule === 'tensor_reprice') {
@@ -243,9 +243,9 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
         delta: p.delta,
         limit_config: p.priceConfig,
         privateKey: p.privateKey,
-        main_rpc: settings?.mainRpc || '',
-        helius_rpcs: settings?.heliusRpcs || [],
-        tensor_api_token: settings?.tensor_api_token || '',
+        main_rpc: settings.mainRpc || '',
+        helius_rpcs: settings.heliusRpcs || [],
+        tensor_api_token: settings.tensor_api_token || '',
       };
       onCreateTask(cfg);
     } else if (selectedModule === 'launch_my_nft') {
@@ -273,7 +273,7 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
         // ✅ ДОБАВЬ ПРОВЕРКУ:
         if (
           p.chosenSetName &&
-          settings?.walletsSet?.[p.chosenSetName] &&
+          settings.walletsSet?.[p.chosenSetName] &&
           Array.isArray(settings.walletsSet[p.chosenSetName])
         ) {
           walletSet = settings.walletsSet[p.chosenSetName];
@@ -295,11 +295,11 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
         walletSource, // "manaully" или "set"
         wallet: singleWalletPk, // если single
         walletSet, // если set
-        main_rpc: settings?.mainRpc || '',
+        main_rpc: settings.mainRpc || '',
       };
       onCreateTask(cfg);
     } else if (selectedModule === 'meteora_dlmm') {
-      const settings = await window.electronAPI?.getSettings();
+      const settings = await window.electronAPI.getSettings();
       const cfg = {
         module_name: 'Meteora DLMM',
         task_name: taskName,
@@ -310,9 +310,9 @@ export default function CreateTaskWizard({ open, onClose, onCreateTask }: Create
         strategy: meteoraParams.strategy,
         private_key: meteoraParams.privateKey,
         ...meteoraParams.additionalParams,
-        main_rpc: settings?.mainRpc || '',
-        thor_streamer_address: settings?.thor_streamer_address,
-        thor_streamer_token: settings?.thor_streamer_token,
+        main_rpc: settings.mainRpc || '',
+        thor_streamer_address: settings.thor_streamer_address,
+        thor_streamer_token: settings.thor_streamer_token,
       };
       onCreateTask(cfg);
     }

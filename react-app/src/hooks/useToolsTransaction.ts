@@ -10,11 +10,6 @@ interface Wallet {
   privateKey: string;
 }
 
-interface SettingsWithWalletsSet {
-  walletsSet?: Record<string, Wallet[]>;
-  mainRpc?: string;
-}
-
 export function useToolsTransaction() {
   // Данные кошельков
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -25,14 +20,13 @@ export function useToolsTransaction() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const w = await window.electronAPI?.getWallets();
+        const w = await window.electronAPI.getWallets(); // убрали ?.
         setWallets(w || []);
 
-        const settings = (await window.electronAPI?.getSettings()) as
-          | SettingsWithWalletsSet
-          | undefined;
-        if (settings?.walletsSet) {
-          setRpcUrl(settings?.mainRpc || '');
+        const settings = await window.electronAPI.getSettings(); // убрали ?. и as cast
+        if (settings.walletsSet) {
+          // убрали ?
+          setRpcUrl(settings.mainRpc || ''); // убрали ?
           const setNames = Object.keys(settings.walletsSet);
           setWalletSets(setNames);
         }
@@ -152,10 +146,10 @@ export function useToolsTransaction() {
       } else if (toMethod === 'manual') {
         receivers.push(new PublicKey(toManualPubKey));
       } else if (toMethod === 'set') {
-        const settings = (await window.electronAPI?.getSettings()) as
+        const settings = (await window.electronAPI.getSettings()) as
           | SettingsWithWalletsSet
           | undefined;
-        if (settings?.walletsSet && settings.walletsSet[toSelectedSetName]) {
+        if (settings.walletsSet && settings.walletsSet[toSelectedSetName]) {
           const walletList = settings.walletsSet[toSelectedSetName];
           walletList.forEach((wallet: Wallet) => {
             receivers.push(new PublicKey(wallet.publicKey));
@@ -178,7 +172,7 @@ export function useToolsTransaction() {
       transaction.add(...instructions);
 
       const cuLimit = receivers.length * 600;
-      const settings = (await window.electronAPI?.getSettings()) as
+      const settings = (await window.electronAPI.getSettings()) as
         | SettingsWithWalletsSet
         | undefined;
 

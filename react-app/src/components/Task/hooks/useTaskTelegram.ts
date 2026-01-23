@@ -28,7 +28,7 @@ export function useTaskTelegram(
 
       if (telegramTaskId === id) {
         console.log(`[StopTask] Stopping task ${id}`);
-        window.electronAPI?.stopProcess(id);
+        window.electronAPI.stopProcess(id);
         dispatch(updateTask({ id, status: 'Stopped' }));
       }
     };
@@ -41,7 +41,7 @@ export function useTaskTelegram(
       if (telegramTaskId === id) {
         console.log(`[RemoveTask] Removing task ${id}`);
         if (status !== 'Stopped') {
-          window.electronAPI?.stopProcess(id);
+          window.electronAPI.stopProcess(id);
         }
       }
     };
@@ -58,25 +58,21 @@ export function useTaskTelegram(
         );
 
         if (configExists) {
-          window.electronAPI?.resumeProcess(id, config);
+          window.electronAPI.resumeProcess(id, config);
           dispatch(updateTask({ id, status: 'Running' }));
         }
       }
     };
 
-    if (window.electronAPI) {
-      window.electronAPI.onTelegramStopTask(stopTaskHandler);
-      window.electronAPI.onTelegramRemoveTask(removeTaskHandler);
-      window.electronAPI.onTelegramResumeTask(resumeTaskHandler);
-    }
+    window.electronAPI.onTelegramStopTask(stopTaskHandler);
+    window.electronAPI.onTelegramRemoveTask(removeTaskHandler);
+    window.electronAPI.onTelegramResumeTask(resumeTaskHandler);
 
     return () => {
       console.log(`Removing Telegram handlers for task ${id}`);
-      if (window.electronAPI) {
-        window.electronAPI.removeListener('telegram-bot:stop-task', stopTaskHandler);
-        window.electronAPI.removeListener('telegram-bot:remove-task', removeTaskHandler);
-        window.electronAPI.removeListener('telegram-bot:resume-task', resumeTaskHandler);
-      }
+      window.electronAPI.removeListener('telegram-bot:stop-task', stopTaskHandler);
+      window.electronAPI.removeListener('telegram-bot:remove-task', removeTaskHandler);
+      window.electronAPI.removeListener('telegram-bot:resume-task', resumeTaskHandler);
     };
   }, [id, config, status, dispatch]);
 

@@ -34,7 +34,7 @@ export function useTaskActions(
 
   const handleOpenLogs = () => {
     console.log(`Opening logs file for task ${id}`);
-    window.electronAPI?.openLogFile(id).catch((err: Error) => {
+    window.electronAPI.openLogFile(id).catch((err: Error) => {
       console.error(`Error opening log file: ${err}`);
     });
   };
@@ -54,18 +54,18 @@ export function useTaskActions(
   };
 
   const handleStop = () => {
-    window.electronAPI?.stopProcess(id);
+    window.electronAPI.stopProcess(id);
     dispatch(updateTask({ id, status: 'Stopped' }));
   };
 
   const handleResume = () => {
-    window.electronAPI?.resumeProcess(id, editConfig || {});
+    window.electronAPI.resumeProcess(id, editConfig || {});
     dispatch(updateTask({ id, status: 'Running' }));
   };
 
   const handleDelete = () => {
     if (status !== 'Stopped') {
-      window.electronAPI?.stopProcess(id);
+      window.electronAPI.stopProcess(id);
     }
     dispatch(removeTask(id));
   };

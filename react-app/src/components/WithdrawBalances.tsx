@@ -74,7 +74,7 @@ export default function WithdrawBalances({
         if (!manualKey) throw new Error('Enter private key');
         senders.push(Keypair.fromSecretKey(bs58.decode(manualKey)));
       } else if (fromMethod === 'set') {
-        const response = (await window.electronAPI?.getSettings()) as
+        const response = (await window.electronAPI.getSettings()) as
           | SettingsWithWalletsSet
           | undefined;
         const set = response?.walletsSet?.[setName];

@@ -20,7 +20,7 @@ export function useTasksPage() {
     (config: unknown) => {
       const taskId = Date.now();
       dispatch(addOrUpdateTask({ taskId, config }));
-      window.electronAPI?.startProcess(taskId, config);
+      window.electronAPI.startProcess(taskId, config);
       closeWizard();
     },
     [dispatch, closeWizard]

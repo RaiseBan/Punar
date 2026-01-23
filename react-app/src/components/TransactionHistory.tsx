@@ -175,8 +175,8 @@ const TxHistorySearch = () => {
     setLoading(true);
     setError('');
     try {
-      console.log(window.electronAPI?.tensorAPI);
-      const collId = await window.electronAPI?.tensorAPI.getCollIdByUrl(filters.url);
+      console.log(window.electronAPI.tensorAPI);
+      const collId = await window.electronAPI.tensorAPI.getCollIdByUrl(filters.url);
       if (!collId) throw new Error('Invalid collection URL');
 
       let collected: Transaction[] = [];
@@ -193,7 +193,7 @@ const TxHistorySearch = () => {
         };
         console.log(`params.cursor: ${params.cursor}`);
 
-        const response = (await window.electronAPI?.tensorAPI.getTxHistory(params)) as
+        const response = (await window.electronAPI.tensorAPI.getTxHistory(params)) as
           | TxHistoryResponse
           | undefined;
 

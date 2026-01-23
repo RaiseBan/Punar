@@ -18,8 +18,8 @@ export function useWalletSets() {
   const loadWalletSets = useCallback(async () => {
     try {
       setIsLoading(true);
-      const settings = await window.electronAPI?.getSettings();
-      if (settings?.walletsSet) {
+      const settings = await window.electronAPI.getSettings();
+      if (settings.walletsSet) {
         setWalletSets(settings.walletsSet);
       }
     } catch (err) {
@@ -35,8 +35,8 @@ export function useWalletSets() {
 
   const saveToSettings = useCallback(async (updatedSets: WalletSet) => {
     try {
-      const settings = await window.electronAPI?.getSettings();
-      await window.electronAPI?.saveSettings({
+      const settings = await window.electronAPI.getSettings();
+      await window.electronAPI.saveSettings({
         ...settings,
         walletsSet: updatedSets,
       });
@@ -46,89 +46,101 @@ export function useWalletSets() {
     }
   }, []);
 
-  const createSet = useCallback(async (setName: string) => {
-    if (!setName.trim()) {
-      throw new Error('Set name is required');
-    }
-    if (walletSets[setName]) {
-      throw new Error('Set with this name already exists');
-    }
+  const createSet = useCallback(
+    async (setName: string) => {
+      if (!setName.trim()) {
+        throw new Error('Set name is required');
+      }
+      if (walletSets[setName]) {
+        throw new Error('Set with this name already exists');
+      }
 
-    const updatedSets = { ...walletSets, [setName]: [] };
-    setWalletSets(updatedSets);
-    await saveToSettings(updatedSets);
-  }, [walletSets, saveToSettings]);
+      const updatedSets = { ...walletSets, [setName]: [] };
+      setWalletSets(updatedSets);
+      await saveToSettings(updatedSets);
+    },
+    [walletSets, saveToSettings]
+  );
 
-  const generateSet = useCallback(async (setName: string, count: number) => {
-    if (!setName.trim()) {
-      throw new Error('Set name is required');
-    }
-    if (walletSets[setName]) {
-      throw new Error('Set with this name already exists');
-    }
+  const generateSet = useCallback(
+    async (setName: string, count: number) => {
+      if (!setName.trim()) {
+        throw new Error('Set name is required');
+      }
+      if (walletSets[setName]) {
+        throw new Error('Set with this name already exists');
+      }
 
-    const generated: Wallet[] = [];
-    for (let i = 0; i < count; i++) {
+      const generated: Wallet[] = [];
+      for (let i = 0; i < count; i++) {
+        const kp = Keypair.generate();
+        generated.push({
+          publicKey: kp.publicKey.toString(),
+          privateKey: bs58.encode(kp.secretKey),
+        });
+      }
+
+      const updatedSets = { ...walletSets, [setName]: generated };
+      setWalletSets(updatedSets);
+      await saveToSettings(updatedSets);
+    },
+    [walletSets, saveToSettings]
+  );
+
+  const deleteSet = useCallback(
+    async (setName: string) => {
+      const updatedSets = { ...walletSets };
+      delete updatedSets[setName];
+      setWalletSets(updatedSets);
+      await saveToSettings(updatedSets);
+    },
+    [walletSets, saveToSettings]
+  );
+
+  const generateWalletInSet = useCallback(
+    async (setName: string) => {
       const kp = Keypair.generate();
-      generated.push({
+      const newWallet: Wallet = {
         publicKey: kp.publicKey.toString(),
         privateKey: bs58.encode(kp.secretKey),
-      });
-    }
+      };
 
-    const updatedSets = { ...walletSets, [setName]: generated };
-    setWalletSets(updatedSets);
-    await saveToSettings(updatedSets);
-  }, [walletSets, saveToSettings]);
+      const updatedSet = [newWallet, ...(walletSets[setName] || [])];
+      const updatedSets = { ...walletSets, [setName]: updatedSet };
+      setWalletSets(updatedSets);
+      await saveToSettings(updatedSets);
+    },
+    [walletSets, saveToSettings]
+  );
 
-  const deleteSet = useCallback(async (setName: string) => {
-    const updatedSets = { ...walletSets };
-    delete updatedSets[setName];
-    setWalletSets(updatedSets);
-    await saveToSettings(updatedSets);
-  }, [walletSets, saveToSettings]);
+  const importWalletInSet = useCallback(
+    async (setName: string, publicKey: string, privateKey: string) => {
+      const wallet: Wallet = {
+        publicKey: publicKey.trim(),
+        privateKey: privateKey.trim(),
+      };
 
-  const generateWalletInSet = useCallback(async (setName: string) => {
-    const kp = Keypair.generate();
-    const newWallet: Wallet = {
-      publicKey: kp.publicKey.toString(),
-      privateKey: bs58.encode(kp.secretKey),
-    };
+      if (!wallet.publicKey || !wallet.privateKey) {
+        throw new Error('Public key and private key are required');
+      }
 
-    const updatedSet = [newWallet, ...(walletSets[setName] || [])];
-    const updatedSets = { ...walletSets, [setName]: updatedSet };
-    setWalletSets(updatedSets);
-    await saveToSettings(updatedSets);
-  }, [walletSets, saveToSettings]);
+      const updatedSet = [wallet, ...(walletSets[setName] || [])];
+      const updatedSets = { ...walletSets, [setName]: updatedSet };
+      setWalletSets(updatedSets);
+      await saveToSettings(updatedSets);
+    },
+    [walletSets, saveToSettings]
+  );
 
-  const importWalletInSet = useCallback(async (
-    setName: string,
-    publicKey: string,
-    privateKey: string
-  ) => {
-    const wallet: Wallet = {
-      publicKey: publicKey.trim(),
-      privateKey: privateKey.trim(),
-    };
-
-    if (!wallet.publicKey || !wallet.privateKey) {
-      throw new Error('Public key and private key are required');
-    }
-
-    const updatedSet = [wallet, ...(walletSets[setName] || [])];
-    const updatedSets = { ...walletSets, [setName]: updatedSet };
-    setWalletSets(updatedSets);
-    await saveToSettings(updatedSets);
-  }, [walletSets, saveToSettings]);
-
-  const deleteWalletFromSet = useCallback(async (setName: string, publicKey: string) => {
-    const filtered = (walletSets[setName] || []).filter(
-      (w) => w.publicKey !== publicKey
-    );
-    const updatedSets = { ...walletSets, [setName]: filtered };
-    setWalletSets(updatedSets);
-    await saveToSettings(updatedSets);
-  }, [walletSets, saveToSettings]);
+  const deleteWalletFromSet = useCallback(
+    async (setName: string, publicKey: string) => {
+      const filtered = (walletSets[setName] || []).filter((w) => w.publicKey !== publicKey);
+      const updatedSets = { ...walletSets, [setName]: filtered };
+      setWalletSets(updatedSets);
+      await saveToSettings(updatedSets);
+    },
+    [walletSets, saveToSettings]
+  );
 
   return {
     walletSets,

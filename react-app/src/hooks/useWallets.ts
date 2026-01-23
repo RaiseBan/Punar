@@ -15,7 +15,7 @@ export function useWallets() {
   const loadWallets = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await window.electronAPI?.getWallets();
+      const response = await window.electronAPI.getWallets();
       setWallets(response || []);
     } catch (err) {
       console.error('Ошибка при загрузке кошельков', err);
@@ -37,7 +37,7 @@ export function useWallets() {
         privateKey: bs58.encode(newKeypair.secretKey),
       };
 
-      await window.electronAPI?.addWallet(newWallet);
+      await window.electronAPI.addWallet(newWallet);
       setWallets((prev) => [newWallet, ...prev]);
       return newWallet;
     } catch (err) {
@@ -57,7 +57,7 @@ export function useWallets() {
         throw new Error('Public key and private key are required');
       }
 
-      await window.electronAPI?.addWallet(newWallet);
+      await window.electronAPI.addWallet(newWallet);
       setWallets((prev) => [newWallet, ...prev]);
       return newWallet;
     } catch (err) {
@@ -68,7 +68,7 @@ export function useWallets() {
 
   const deleteWallet = useCallback(async (publicKey: string) => {
     try {
-      await window.electronAPI?.deleteWallet(publicKey);
+      await window.electronAPI.deleteWallet(publicKey);
       setWallets((prev) => prev.filter((w) => w.publicKey !== publicKey));
     } catch (err) {
       console.error('Ошибка при удалении кошелька', err);
