@@ -7,17 +7,18 @@ import {
   Button,
   TextField,
 } from '@mui/material';
+import { TaskConfig } from '../../../../../shared/types';
 
 interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
   editName: string;
   editModuleName: string;
-  editConfig: any;
+  editConfig: TaskConfig | null;
   canEditConfig: boolean;
   onNameChange: (value: string) => void;
   onModuleNameChange: (value: string) => void;
-  onConfigChange: (key: string, value: any) => void;
+  onConfigChange: (key: string, value: unknown) => void;
   onSave: () => void;
 }
 
@@ -31,12 +32,12 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
   onNameChange,
   onModuleNameChange,
   onConfigChange,
-  onSave
+  onSave,
 }) => {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Task Settings</DialogTitle>
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
         <TextField
           label="Task Name"
           variant="outlined"
@@ -54,7 +55,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
         />
 
         {/* Если модуль "Tensor sniper (SDK)", показываем threshold_price */}
-        {editConfig?.module_name === "Tensor sniper (SDK)" && (
+        {editConfig?.module_name === 'Tensor sniper (SDK)' && (
           <TextField
             label="Threshold Price"
             type="number"
@@ -68,12 +69,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
         <Button onClick={onClose} color="inherit">
           Cancel
         </Button>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={onSave}
-          disabled={!canEditConfig}
-        >
+        <Button variant="contained" color="primary" onClick={onSave} disabled={!canEditConfig}>
           Save
         </Button>
       </DialogActions>

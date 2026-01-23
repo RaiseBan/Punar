@@ -3,20 +3,20 @@ import { useDispatch, useSelector } from 'react-redux';
 import { updateTask } from '../../../store/tasksSlice';
 import { RootState } from '../../../store/store';
 import { TaskDataRow } from '../types';
+import { TaskConfig } from '../../../../../shared/types';
 
 export function useTaskTelegram(
-    id: number,
-    data: TaskDataRow[],
-    status: string,
-    moduleName: string,
-    config: any,
+  id: number,
+  data: TaskDataRow[],
+  status: string,
+  moduleName: string,
+  config: TaskConfig | undefined
 ) {
   const dispatch = useDispatch();
 
-  const logs = useSelector((state: RootState) =>
-      state.tasks.tasks.find((task) => task.id === id)?.logs || []
+  const logs = useSelector(
+    (state: RootState) => state.tasks.tasks.find((task) => task.id === id)?.logs || []
   );
-
 
   useEffect(() => {
     console.log(`Setting up Telegram handlers for task ${id}`);
@@ -43,7 +43,6 @@ export function useTaskTelegram(
         if (status !== 'Stopped') {
           window.electronAPI?.stopProcess(id);
         }
-
       }
     };
 
@@ -54,7 +53,9 @@ export function useTaskTelegram(
 
       if (telegramTaskId === id) {
         const configExists = config !== undefined && config !== null;
-        console.log(`[ResumeTask] Resuming task ${id}, config ${configExists ? 'exists' : 'missing'}`);
+        console.log(
+          `[ResumeTask] Resuming task ${id}, config ${configExists ? 'exists' : 'missing'}`
+        );
 
         if (configExists) {
           window.electronAPI?.resumeProcess(id, config);

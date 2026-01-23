@@ -2,21 +2,22 @@ import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { removeTask, updateTask } from '../../../store/tasksSlice';
 import { TaskDataRow } from '../types';
+import { TaskConfig } from '../../../../../shared/types';
 
 export function useTaskActions(
-    id: number,
-    status: string,
-    config: any,
-    name: string,
-    dataRef: React.MutableRefObject<TaskDataRow[]>,
-    processedRowsRef: React.MutableRefObject<string[]>
+  id: number,
+  status: string,
+  config: TaskConfig | undefined,
+  name: string,
+  dataRef: React.MutableRefObject<TaskDataRow[]>,
+  processedRowsRef: React.MutableRefObject<string[]>
 ) {
   const dispatch = useDispatch();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fullViewOpen, setFullViewOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
 
-  const [editConfig, setEditConfig] = useState<any>(config || {});
+  const [editConfig, setEditConfig] = useState<Partial<TaskConfig>>(config || {});
   const [editName, setEditName] = useState(name);
   const [editModuleName, setEditModuleName] = useState(config?.module_name || '');
 
@@ -33,22 +34,21 @@ export function useTaskActions(
 
   const handleOpenLogs = () => {
     console.log(`Opening logs file for task ${id}`);
-    window.electronAPI?.openLogFile(id)
-        .catch((err: Error) => {
-          console.error(`Error opening log file: ${err}`);
-        });
+    window.electronAPI?.openLogFile(id).catch((err: Error) => {
+      console.error(`Error opening log file: ${err}`);
+    });
   };
 
   const handleCloseLogs = () => setLogsOpen(false);
 
   const handleSaveSettings = () => {
     dispatch(
-        updateTask({
-          id,
-          name: editName,
-          moduleName: editModuleName,
-          config: editConfig,
-        })
+      updateTask({
+        id,
+        name: editName,
+        moduleName: editModuleName,
+        config: editConfig,
+      })
     );
     setSettingsOpen(false);
   };
@@ -93,7 +93,7 @@ export function useTaskActions(
     } else {
       if (rowIndexOrId < 0 || rowIndexOrId >= currentData.length) {
         console.error(
-            `Row index out of bounds: ${rowIndexOrId}, data length: ${currentData.length}`
+          `Row index out of bounds: ${rowIndexOrId}, data length: ${currentData.length}`
         );
         return;
       }
@@ -101,10 +101,7 @@ export function useTaskActions(
     }
 
     const rowToDelete = currentData[rowIndex];
-    const newData = [
-      ...currentData.slice(0, rowIndex),
-      ...currentData.slice(rowIndex + 1),
-    ];
+    const newData = [...currentData.slice(0, rowIndex), ...currentData.slice(rowIndex + 1)];
 
     console.log(`Original data length: ${currentData.length}, New data length: ${newData.length}`);
 
@@ -114,11 +111,11 @@ export function useTaskActions(
     });
 
     dispatch(
-        updateTask({
-          id: id,
-          data: newData,
-          processedTelegramRows: newProcessedRows,
-        })
+      updateTask({
+        id: id,
+        data: newData,
+        processedTelegramRows: newProcessedRows,
+      })
     );
 
     console.log(`Deleted row ${rowIndex} from task ${id}`);

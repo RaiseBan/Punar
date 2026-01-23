@@ -1,3 +1,5 @@
+import { TaskConfig } from '../../../../shared/types';
+
 export interface TaskDataRow {
   cells: string[];
   originalIndex?: number;
@@ -11,7 +13,7 @@ export interface TaskProps {
   status: string;
   columns: string[];
   data: TaskDataRow[];
-  config?: any;
+  config?: TaskConfig;
 }
 
 export interface TelegramTaskData {

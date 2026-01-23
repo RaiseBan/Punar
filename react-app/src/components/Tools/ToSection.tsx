@@ -17,6 +17,11 @@ interface Wallet {
   privateKey: string;
 }
 
+interface ValidationProp {
+  getFieldState: (field: string) => { touched: boolean; error: string | null };
+  handleBlur: (field: string, value: unknown) => void;
+}
+
 interface ToSectionProps {
   toMethod: 'existing' | 'manual' | 'set';
   onMethodChange: (method: 'existing' | 'manual' | 'set') => void;
@@ -28,7 +33,7 @@ interface ToSectionProps {
   onSelectSetName: (value: string) => void;
   wallets: Wallet[];
   walletSets: string[];
-  validation: any;
+  validation: ValidationProp;
 }
 
 export const ToSection: React.FC<ToSectionProps> = ({
@@ -51,7 +56,7 @@ export const ToSection: React.FC<ToSectionProps> = ({
       <Typography variant="h6" sx={{ mt: 4 }}>
         To
       </Typography>
-      
+
       <FormControl component="fieldset">
         <RadioGroup
           row
