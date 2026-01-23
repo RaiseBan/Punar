@@ -1,6 +1,5 @@
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const tsParser = require('@typescript-eslint/parser');
-const prettierConfig = require('eslint-config-prettier');
 
 module.exports = [
     {
@@ -25,7 +24,6 @@ module.exports = [
         },
         rules: {
             ...tsPlugin.configs.recommended.rules,
-            ...prettierConfig.rules,
             '@typescript-eslint/no-explicit-any': 'warn',
             '@typescript-eslint/no-unused-vars': 'warn', // было 'error'
             '@typescript-eslint/ban-ts-comment': 'warn', // добавь эту строку
