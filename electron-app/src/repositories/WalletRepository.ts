@@ -22,7 +22,7 @@ function isLegacyWallet(wallet: Wallet): wallet is LegacyWallet {
       !('encryptedPrivateKey' in wallet);
 }
 
-function isStoredWallet(wallet: any): wallet is StoredWallet {
+function isStoredWallet(wallet: StoredWallet): wallet is StoredWallet {
   return wallet &&
       typeof wallet.publicKey === 'string' &&
       typeof wallet.encryptedPrivateKey === 'string';

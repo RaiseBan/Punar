@@ -79,7 +79,7 @@ describe('tensorApiHandler', () => {
         });
 
         it('should handle empty listings', () => {
-            const mockListings: any[] = [];
+            const mockListings: unknown[] = [];
 
             expect(mockListings).toHaveLength(0);
         });
