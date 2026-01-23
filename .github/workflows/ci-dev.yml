@@ -18,21 +18,18 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: |
-          cd electron-app && npm ci --ignore-scripts
-          cd ../react-app && npm ci --ignore-scripts
-          cd ../telegram-service && npm ci --ignore-scripts
+        run: npm ci --ignore-scripts
 
-      - name: Lint
-        run: |
-          cd electron-app && npm run lint
-          cd ../react-app && npm run lint
+      - name: Lint electron-app
+        run: npm run lint --workspace=electron-app
+
+      - name: Lint react-app
+        run: npm run lint --workspace=react-app
 
       - name: Test
-        run: |
-          cd electron-app && npm test
+        run: npm test --workspace=electron-app
 
       - name: Build
         run: |
-          cd react-app && npm run build
-          cd ../electron-app && npm run build
+          npm run build --workspace=react-app
+          npm run build --workspace=electron-app
