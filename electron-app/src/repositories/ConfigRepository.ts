@@ -31,7 +31,12 @@ export class ConfigRepository {
         await fs.access(this.settingsPath);
       } catch {
 
-        const defaultSettings: AppSettings = {};
+        const defaultSettings: AppSettings = {
+          mainRpc: '',
+          heliusRpcs: [],
+          tensor_api_token: '',
+          walletsSet: {}
+        };
         await this.saveSettings(defaultSettings);
         return defaultSettings;
       }

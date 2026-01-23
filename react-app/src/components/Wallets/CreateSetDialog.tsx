@@ -6,6 +6,7 @@ import {
   DialogActions,
   Button,
   TextField,
+  Alert,
 } from '@mui/material';
 
 interface Props {
@@ -17,16 +18,18 @@ interface Props {
 export const CreateSetDialog: React.FC<Props> = ({ open, onClose, onCreate }) => {
   const [setName, setSetName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     try {
+      setError(null);
       setIsSubmitting(true);
       await onCreate(setName);
       setSetName('');
       onClose();
     } catch (err) {
       console.error('Create set failed:', err);
-      alert(err instanceof Error ? err.message : 'Failed to create set');
+      setError(err instanceof Error ? err.message : 'Failed to create set');
     } finally {
       setIsSubmitting(false);
     }
@@ -34,6 +37,7 @@ export const CreateSetDialog: React.FC<Props> = ({ open, onClose, onCreate }) =>
 
   const handleClose = () => {
     setSetName('');
+    setError(null);
     onClose();
   };
 
@@ -41,6 +45,11 @@ export const CreateSetDialog: React.FC<Props> = ({ open, onClose, onCreate }) =>
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Create Wallet Set</DialogTitle>
       <DialogContent>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         <TextField
           autoFocus
           margin="dense"

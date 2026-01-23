@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { addOrUpdateTask } from '../store/tasksSlice';
 import { RootState } from '../store/store';
+import { TaskConfig } from '../../../shared/types';
 
 export function useTasksPage() {
   const tasks = useSelector((state: RootState) => state.tasks.tasks);
@@ -17,10 +18,10 @@ export function useTasksPage() {
   }, []);
 
   const handleCreateTask = useCallback(
-    (config: unknown) => {
+    (config: TaskConfig) => {
       const taskId = Date.now();
       dispatch(addOrUpdateTask({ taskId, config }));
-      window.electronAPI?.startProcess(taskId, config);
+      window.electronAPI.startProcess(taskId, config);
       closeWizard();
     },
     [dispatch, closeWizard]

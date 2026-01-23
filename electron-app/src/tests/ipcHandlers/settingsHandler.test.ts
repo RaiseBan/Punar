@@ -1,4 +1,5 @@
 import { mockConfigRepository, createMockSettings } from '../mocks/repositories.mock';
+import {AppSettings} from "../../../../shared/types/settings";
 
 jest.mock('../../repositories', () => ({
     getConfigRepository: jest.fn(() => mockConfigRepository)
@@ -71,7 +72,7 @@ describe('settingsHandler', () => {
                 mainRpc: 'https://rpc.com',
                 tensor_api_token: 'token123',
                 helius_api_key: 'helius123'
-            } as any);
+            } as Partial<AppSettings>);
 
             await mockConfigRepository.saveSettings(settings);
 

@@ -1,5 +1,8 @@
 // global.d.ts
-declare module "*.module.css" {
+// Импортируем AppSettings из shared для использования в Window
+import type { AppSettings } from '../../shared/types';
+
+declare module '*.module.css' {
   const classes: { [key: string]: string };
   export default classes;
 }
@@ -8,22 +11,30 @@ export {};
 
 declare global {
   interface Window {
-    electronAPI?: {
+    electronAPI: {
       // ============= General IPC =============
-      invoke: <T = any>(channel: string, ...args: any[]) => Promise<T>;
-      sendToMain: (channel: string, ...args: any[]) => void;
+      invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>;
+      sendToMain: (channel: string, ...args: unknown[]) => void;
 
       // ============= Process Management =============
-      startProcess: (taskId: number, config: any) => void;
+      startProcess: (taskId: number, config: unknown) => void;
       stopProcess: (taskId: number) => void;
-      resumeProcess: (taskId: number, config: any) => void;
+      resumeProcess: (taskId: number, config: unknown) => void;
 
       // ============= Process Events =============
-      onProcessStarted: (callback: (event: any, data: { taskId: number; config: any }) => void) => void;
-      onProcessOutput: (callback: (event: any, data: { taskId: number; log: string }) => void) => void;
-      onProcessExit: (callback: (event: any, data: { taskId: number; code: number }) => void) => void;
-      onProcessError: (callback: (event: any, data: { taskId: number; error: string }) => void) => void;
-      removeListener: (channel: string, callback: (...args: any[]) => void) => void;
+      onProcessStarted: (
+        callback: (event: unknown, data: { taskId: number; config: unknown }) => void
+      ) => void;
+      onProcessOutput: (
+        callback: (event: unknown, data: { taskId: number; log: string }) => void
+      ) => void;
+      onProcessExit: (
+        callback: (event: unknown, data: { taskId: number; code: number }) => void
+      ) => void;
+      onProcessError: (
+        callback: (event: unknown, data: { taskId: number; error: string }) => void
+      ) => void;
+      removeListener: (channel: string, callback: (...args: unknown[]) => void) => void;
       removeAllListeners: () => void;
 
       // ============= Task Logs =============
@@ -34,8 +45,9 @@ declare global {
       removeTasksListener: () => void;
 
       // ============= Settings =============
-      getSettings: () => Promise<any>;
-      saveSettings: (settings: any) => Promise<void>;
+      // ✅ Используем Partial<AppSettings> - принимает неполные настройки
+      getSettings: () => Promise<Partial<AppSettings>>;
+      saveSettings: (settings: Partial<AppSettings>) => Promise<void>;
 
       // ============= Wallets =============
       getWallets: () => Promise<{ publicKey: string; privateKey: string }[]>;
@@ -43,9 +55,9 @@ declare global {
       deleteWallet: (publicKey: string) => Promise<void>;
 
       // ============= Configs =============
-      saveConfig: (configType: string, fileName: string, content: any) => Promise<boolean>;
+      saveConfig: (configType: string, fileName: string, content: unknown) => Promise<boolean>;
       getConfigs: (configType: string) => Promise<string[]>;
-      getConfig: (configType: string, fileName: string) => Promise<any>;
+      getConfig: (configType: string, fileName: string) => Promise<unknown>;
       deleteConfig: (configType: string, fileName: string) => Promise<boolean>;
       getConfigPaths: (configType: string) => Promise<{ name: string; path: string }[]>;
 
@@ -58,33 +70,36 @@ declare global {
       tensorAPI: {
         getCollectionInfo: (slug: string) => Promise<string | null>;
         getCollIdByUrl: (url: string) => Promise<string | null>;
-        getNftsForCollection: (collId: string, limit?: number, onlyListings?: boolean) => Promise<any>;
-        getTxHistory: (params: any) => Promise<any>;
+        getNftsForCollection: (
+          collId: string,
+          limit?: number,
+          onlyListings?: boolean
+        ) => Promise<unknown>;
+        getTxHistory: (params: unknown) => Promise<unknown>;
       };
 
       // ============= Telegram Bot =============
       telegramBot: {
         getConfig: () => Promise<{
           token: string;
-          enabled: boolean;
-          chatIds?: number[];
+          isRunning: boolean;
+          chatIds: number[];
         }>;
         setToken: (token: string) => Promise<{ success: boolean; error?: string }>;
         getStatus: () => Promise<{
           isRunning: boolean;
           isConfigured: boolean;
-          chatCount: number;
-          lastActivity?: string;
+          error?: string;
         }>;
         start: () => Promise<{ success: boolean; error?: string }>;
         stop: () => Promise<{ success: boolean; error?: string }>;
         testConnection: () => Promise<{ success: boolean; error?: string }>;
       };
 
-      // ============= Telegram Task Events =============
-      onTelegramStopTask?: (callback: (event: any, data: { taskId: number }) => void) => void;
-      onTelegramRemoveTask?: (callback: (event: any, data: { taskId: number }) => void) => void;
-      onTelegramResumeTask?: (callback: (event: any, data: { taskId: number }) => void) => void;
+      // ============= Telegram Events =============
+      onTelegramStopTask: (callback: (event: unknown, data: { taskId: number }) => void) => void;
+      onTelegramRemoveTask: (callback: (event: unknown, data: { taskId: number }) => void) => void;
+      onTelegramResumeTask: (callback: (event: unknown, data: { taskId: number }) => void) => void;
     };
   }
 }

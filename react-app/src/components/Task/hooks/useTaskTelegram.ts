@@ -3,20 +3,20 @@ import { useDispatch, useSelector } from 'react-redux';
 import { updateTask } from '../../../store/tasksSlice';
 import { RootState } from '../../../store/store';
 import { TaskDataRow } from '../types';
+import { TaskConfig } from '../../../../../shared/types';
 
 export function useTaskTelegram(
-    id: number,
-    data: TaskDataRow[],
-    status: string,
-    moduleName: string,
-    config: any,
+  id: number,
+  data: TaskDataRow[],
+  status: string,
+  moduleName: string,
+  config: TaskConfig | undefined
 ) {
   const dispatch = useDispatch();
 
-  const logs = useSelector((state: RootState) =>
-      state.tasks.tasks.find((task) => task.id === id)?.logs || []
+  const logs = useSelector(
+    (state: RootState) => state.tasks.tasks.find((task) => task.id === id)?.logs || []
   );
-
 
   useEffect(() => {
     console.log(`Setting up Telegram handlers for task ${id}`);
@@ -28,7 +28,7 @@ export function useTaskTelegram(
 
       if (telegramTaskId === id) {
         console.log(`[StopTask] Stopping task ${id}`);
-        window.electronAPI?.stopProcess(id);
+        window.electronAPI.stopProcess(id);
         dispatch(updateTask({ id, status: 'Stopped' }));
       }
     };
@@ -41,9 +41,8 @@ export function useTaskTelegram(
       if (telegramTaskId === id) {
         console.log(`[RemoveTask] Removing task ${id}`);
         if (status !== 'Stopped') {
-          window.electronAPI?.stopProcess(id);
+          window.electronAPI.stopProcess(id);
         }
-
       }
     };
 
@@ -54,28 +53,26 @@ export function useTaskTelegram(
 
       if (telegramTaskId === id) {
         const configExists = config !== undefined && config !== null;
-        console.log(`[ResumeTask] Resuming task ${id}, config ${configExists ? 'exists' : 'missing'}`);
+        console.log(
+          `[ResumeTask] Resuming task ${id}, config ${configExists ? 'exists' : 'missing'}`
+        );
 
         if (configExists) {
-          window.electronAPI?.resumeProcess(id, config);
+          window.electronAPI.resumeProcess(id, config);
           dispatch(updateTask({ id, status: 'Running' }));
         }
       }
     };
 
-    if (window.electronAPI) {
-      window.electronAPI.onTelegramStopTask(stopTaskHandler);
-      window.electronAPI.onTelegramRemoveTask(removeTaskHandler);
-      window.electronAPI.onTelegramResumeTask(resumeTaskHandler);
-    }
+    window.electronAPI.onTelegramStopTask(stopTaskHandler);
+    window.electronAPI.onTelegramRemoveTask(removeTaskHandler);
+    window.electronAPI.onTelegramResumeTask(resumeTaskHandler);
 
     return () => {
       console.log(`Removing Telegram handlers for task ${id}`);
-      if (window.electronAPI) {
-        window.electronAPI.removeListener('telegram-bot:stop-task', stopTaskHandler);
-        window.electronAPI.removeListener('telegram-bot:remove-task', removeTaskHandler);
-        window.electronAPI.removeListener('telegram-bot:resume-task', resumeTaskHandler);
-      }
+      window.electronAPI.removeListener('telegram-bot:stop-task', stopTaskHandler);
+      window.electronAPI.removeListener('telegram-bot:remove-task', removeTaskHandler);
+      window.electronAPI.removeListener('telegram-bot:resume-task', resumeTaskHandler);
     };
   }, [id, config, status, dispatch]);
 

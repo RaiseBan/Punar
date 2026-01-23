@@ -14,8 +14,18 @@ jest.mock('../../ipcHandlers/processHandler', () => ({
 
 import { getProcesses } from '../../ipcHandlers/processHandler';
 
+interface MockWindow {
+    minimize: jest.Mock;
+    close: jest.Mock;
+    isDestroyed: jest.Mock;
+    webContents: {
+        send: jest.Mock;
+    };
+}
+
+
 describe('windowHandler', () => {
-    let mockWindow: any;
+    let mockWindow: MockWindow;
 
     beforeEach(() => {
         jest.clearAllMocks();

@@ -7,6 +7,7 @@ import {
   Button,
   TextField,
   Box,
+  Alert,
 } from '@mui/material';
 
 interface Props {
@@ -19,9 +20,11 @@ export const GenerateSetDialog: React.FC<Props> = ({ open, onClose, onGenerate }
   const [setName, setSetName] = useState('');
   const [count, setCount] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     try {
+      setError(null);
       setIsSubmitting(true);
       await onGenerate(setName, count);
       setSetName('');
@@ -29,7 +32,7 @@ export const GenerateSetDialog: React.FC<Props> = ({ open, onClose, onGenerate }
       onClose();
     } catch (err) {
       console.error('Generate set failed:', err);
-      alert(err instanceof Error ? err.message : 'Failed to generate set');
+      setError(err instanceof Error ? err.message : 'Failed to generate set');
     } finally {
       setIsSubmitting(false);
     }
@@ -38,6 +41,7 @@ export const GenerateSetDialog: React.FC<Props> = ({ open, onClose, onGenerate }
   const handleClose = () => {
     setSetName('');
     setCount(1);
+    setError(null);
     onClose();
   };
 
@@ -45,6 +49,11 @@ export const GenerateSetDialog: React.FC<Props> = ({ open, onClose, onGenerate }
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Generate Wallet Set</DialogTitle>
       <DialogContent>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         <Box display="flex" flexDirection="column" gap={2} mt={1}>
           <TextField
             autoFocus

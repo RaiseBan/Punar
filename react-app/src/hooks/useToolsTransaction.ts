@@ -1,58 +1,35 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { useState, useCallback, useEffect } from 'react';
+import { useFormValidation } from './useFormValidation';
+import { validatePrivateKey, validatePublicKey, validateSolAmount } from '../utils/validators';
+import { Connection, Keypair, PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { sendTransactionWithRetries } from '../utils/transactionService';
-import { validatePrivateKey, validatePublicKey, validateSolAmount } from '../utils/validators';
-import { useFormValidation } from './useFormValidation';
-
-interface Wallet {
-  publicKey: string;
-  privateKey: string;
-}
+import { AppSettings } from '../../../shared/types';
 
 export function useToolsTransaction() {
-  // Данные кошельков
-  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [wallets, setWallets] = useState<Array<{ publicKey: string; privateKey: string }>>([]);
   const [walletSets, setWalletSets] = useState<string[]>([]);
   const [rpcUrl, setRpcUrl] = useState('');
 
-  // Загрузка данных
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const w = await window.electronAPI?.getWallets();
-        setWallets(w || []);
-
-        const settings = await window.electronAPI?.getSettings();
-        if (settings?.walletsSet) {
-          setRpcUrl(settings?.mainRpc || '');
-          const setNames = Object.keys(settings.walletsSet);
-          setWalletSets(setNames);
-        }
-      } catch (error) {
-        console.error('Error loading data:', error);
-      }
-    };
-    loadData();
-  }, []);
-
-  // Состояния формы
+  // From состояния
   const [fromMethod, setFromMethod] = useState<'existing' | 'manual'>('existing');
   const [fromSelectedPrivateKey, setFromSelectedPrivateKey] = useState('');
   const [fromManualPrivateKey, setFromManualPrivateKey] = useState('');
 
+  // To состояния
   const [toMethod, setToMethod] = useState<'existing' | 'manual' | 'set'>('existing');
   const [toSelectedPubKey, setToSelectedPubKey] = useState('');
   const [toManualPubKey, setToManualPubKey] = useState('');
   const [toSelectedSetName, setToSelectedSetName] = useState('');
 
-  const [amount, setAmount] = useState<string>('');
+  // Amount
+  const [amount, setAmount] = useState('');
 
   // UI состояния
   const [isLoading, setIsLoading] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info'>('success');
 
   // Валидация
   const validation = useFormValidation({
@@ -70,15 +47,35 @@ export function useToolsTransaction() {
     },
   });
 
-  // Обработчик изменения суммы
+  // Загрузка данных при монтировании
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Загружаем wallets отдельно
+        const w = await window.electronAPI.getWallets();
+        setWallets(w || []);
+
+        // Загружаем settings для walletsSet и RPC
+        const settings = await window.electronAPI.getSettings();
+        setWalletSets(Object.keys(settings.walletsSet || {}));
+        setRpcUrl(settings.mainRpc || '');
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+      }
+    };
+    loadData();
+  }, []);
+
+  // Обработка изменения amount
   const handleAmountChange = useCallback((value: string) => {
-    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+    // Разрешаем только числа и точку
+    if (/^\d*\.?\d*$/.test(value)) {
       setAmount(value);
     }
   }, []);
 
   // Показать уведомление
-  const showSnackbar = useCallback((message: string, severity: 'success' | 'error') => {
+  const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info') => {
     setSnackbarMessage(message);
     setSnackbarSeverity(severity);
     setSnackbarOpen(true);
@@ -100,7 +97,10 @@ export function useToolsTransaction() {
 
     // Валидация manual полей
     if (fromMethod === 'manual' && !validatePrivateKey(fromManualPrivateKey).isValid) {
-      validation.setFieldError('fromManualPrivateKey', validatePrivateKey(fromManualPrivateKey).error || null);
+      validation.setFieldError(
+        'fromManualPrivateKey',
+        validatePrivateKey(fromManualPrivateKey).error || null
+      );
       showSnackbar('Invalid private key', 'error');
       return;
     }
@@ -132,74 +132,72 @@ export function useToolsTransaction() {
     try {
       // Получаем отправителя
       const fromPrivKey = fromMethod === 'existing' ? fromSelectedPrivateKey : fromManualPrivateKey;
-      const sender = Keypair.fromSecretKey(new Uint8Array(bs58.decode(fromPrivKey)));
+      const sender = Keypair.fromSecretKey(bs58.decode(fromPrivKey));
 
       // Получаем получателей
-      const receivers: PublicKey[] = [];
-      
+      let receivers: PublicKey[] = [];
       if (toMethod === 'existing') {
-        receivers.push(new PublicKey(toSelectedPubKey));
+        receivers = [new PublicKey(toSelectedPubKey)];
       } else if (toMethod === 'manual') {
-        receivers.push(new PublicKey(toManualPubKey));
+        receivers = [new PublicKey(toManualPubKey)];
       } else if (toMethod === 'set') {
-        const settings = await window.electronAPI?.getSettings();
-        if (settings?.walletsSet && settings.walletsSet[toSelectedSetName]) {
+        const settings = (await window.electronAPI.getSettings()) as AppSettings;
+        if (settings.walletsSet && settings.walletsSet[toSelectedSetName]) {
           const walletList = settings.walletsSet[toSelectedSetName];
-          walletList.forEach((wallet: Wallet) => {
-            receivers.push(new PublicKey(wallet.publicKey));
-          });
+          receivers = walletList.map(
+            (w) => Keypair.fromSecretKey(bs58.decode(w.privateKey)).publicKey
+          );
         } else {
           throw new Error(`Wallet set "${toSelectedSetName}" not found`);
         }
       }
 
-      // Создаем транзакцию
-      const transaction = new Transaction();
-      const instructions = receivers.map(receiver =>
-        SystemProgram.transfer({
-          fromPubkey: sender.publicKey,
-          toPubkey: receiver,
-          lamports: Number(amount) * LAMPORTS_PER_SOL,
-        })
-      );
+      if (receivers.length === 0) {
+        throw new Error('No receivers found');
+      }
 
-      transaction.add(...instructions);
-
+      // Создаём connection и параметры транзакции
+      const connection = new Connection(rpcUrl);
+      const recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+      const lamports = Math.floor(parseFloat(amount) * 1e9);
       const cuLimit = receivers.length * 600;
-      const settings = await window.electronAPI?.getSettings();
-      
-      if (!settings || !settings.mainRpc) {
-        throw new Error('RPC not configured');
+
+      // Отправляем транзакцию на каждого получателя
+      for (const receiver of receivers) {
+        const transaction = new Transaction({
+          recentBlockhash,
+          feePayer: sender.publicKey,
+        });
+
+        transaction.add(
+          SystemProgram.transfer({
+            fromPubkey: sender.publicKey,
+            toPubkey: receiver,
+            lamports,
+          })
+        );
+
+        // Исправленный вызов sendTransactionWithRetries
+        const result = await sendTransactionWithRetries(
+          transaction,
+          sender,
+          rpcUrl,
+          5, // maxRetries
+          30000, // timeout
+          cuLimit,
+          20000 // fee
+        );
+
+        if (!result.success) {
+          throw new Error(result.error || 'Transaction failed');
+        }
       }
 
-      // Отправляем транзакцию
-      const result = await sendTransactionWithRetries(
-        transaction,
-        sender,
-        settings.mainRpc,
-        5,        // maxRetries
-        30000,    // timeout
-        cuLimit,  // cuLimit
-        20000     // fee
-      );
-
-      if (!result.success) {
-        throw new Error(result.error || 'Transaction failed');
-      }
-
-      showSnackbar(
-        `Successfully sent ${amount} SOL to ${receivers.length} wallet(s)`,
-        'success'
-      );
-
-      // Сброс формы
-      setAmount('');
-      if (fromMethod === 'manual') setFromManualPrivateKey('');
-      if (toMethod === 'manual') setToManualPubKey('');
-      
-    } catch (error: any) {
-      console.error('Transaction error:', error);
-      showSnackbar(error.message || 'Transaction failed', 'error');
+      showSnackbar(`Successfully sent ${amount} SOL to ${receivers.length} wallet(s)`, 'success');
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Transaction failed';
+      showSnackbar(errorMessage, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -212,6 +210,7 @@ export function useToolsTransaction() {
     toSelectedPubKey,
     toManualPubKey,
     toSelectedSetName,
+    rpcUrl,
     validation,
     showSnackbar,
   ]);
@@ -221,7 +220,7 @@ export function useToolsTransaction() {
     wallets,
     walletSets,
     rpcUrl,
-    
+
     // From состояния
     fromMethod,
     fromSelectedPrivateKey,
@@ -229,7 +228,7 @@ export function useToolsTransaction() {
     setFromMethod,
     setFromSelectedPrivateKey,
     setFromManualPrivateKey,
-    
+
     // To состояния
     toMethod,
     toSelectedPubKey,
@@ -239,22 +238,22 @@ export function useToolsTransaction() {
     setToSelectedPubKey,
     setToManualPubKey,
     setToSelectedSetName,
-    
+
     // Amount
     amount,
     handleAmountChange,
-    
+
     // UI
     isLoading,
     snackbarOpen,
     snackbarMessage,
     snackbarSeverity,
     closeSnackbar,
-    showSnackbar,  // Добавлено!
-    
+    showSnackbar,
+
     // Валидация
     validation,
-    
+
     // Действия
     handleSendTransaction,
   };

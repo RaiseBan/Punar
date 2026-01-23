@@ -15,9 +15,7 @@ export default function Task(props: TaskProps) {
 
   // Мемоизация columns - вычисляется только когда меняется moduleName или columns
   const effectiveColumns = useMemo(() => {
-    return columns && columns.length > 0 
-      ? columns 
-      : COLS_NAMES.get(moduleName) || [];
+    return columns && columns.length > 0 ? columns : COLS_NAMES.get(moduleName) || [];
   }, [columns, moduleName]);
 
   // Хуки для управления состоянием и логикой
@@ -32,15 +30,7 @@ export default function Task(props: TaskProps) {
     taskData.processedRowsRef
   );
 
-  const taskTelegram = useTaskTelegram(
-    id,
-    data,
-    status,
-    moduleName,
-    config,
-    taskData.dataRef,
-    taskData.processedRowsRef
-  );
+  const taskTelegram = useTaskTelegram(id, data, status, moduleName, config);
 
   const { imageUrl, collectionLabel } = useTaskImage(moduleName, config);
 
@@ -48,18 +38,27 @@ export default function Task(props: TaskProps) {
   const canEditConfig = status === 'Stopped';
 
   // Обработчики для изменения настроек (мемоизированы для предотвращения лишних ререндеров)
-  const handleNameChange = useCallback((value: string) => {
-    taskActions.setEditName(value);
-  }, [taskActions]);
+  const handleNameChange = useCallback(
+    (value: string) => {
+      taskActions.setEditName(value);
+    },
+    [taskActions]
+  );
 
-  const handleModuleNameChange = useCallback((value: string) => {
-    taskActions.setEditModuleName(value);
-  }, [taskActions]);
+  const handleModuleNameChange = useCallback(
+    (value: string) => {
+      taskActions.setEditModuleName(value);
+    },
+    [taskActions]
+  );
 
-  const handleConfigChange = useCallback((key: string, value: any) => {
-    const updatedConfig = { ...taskActions.editConfig, [key]: value };
-    taskActions.setEditConfig(updatedConfig);
-  }, [taskActions]);
+  const handleConfigChange = useCallback(
+    (key: string, value: unknown) => {
+      const updatedConfig = { ...taskActions.editConfig, [key]: value };
+      taskActions.setEditConfig(updatedConfig);
+    },
+    [taskActions]
+  );
 
   return (
     <>

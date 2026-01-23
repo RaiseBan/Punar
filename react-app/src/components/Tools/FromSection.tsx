@@ -25,7 +25,10 @@ interface FromSectionProps {
   manualPrivateKey: string;
   onManualPrivateKeyChange: (value: string) => void;
   wallets: Wallet[];
-  validation: any;
+  validation: {
+    getFieldState: (field: string) => { touched: boolean; error: string | null };
+    handleBlur: (field: string, value: unknown) => void;
+  };
 }
 
 export const FromSection: React.FC<FromSectionProps> = ({
@@ -45,7 +48,7 @@ export const FromSection: React.FC<FromSectionProps> = ({
       <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
         From
       </Typography>
-      
+
       <FormControl component="fieldset">
         <RadioGroup
           row

@@ -28,7 +28,10 @@ interface ToSectionProps {
   onSelectSetName: (value: string) => void;
   wallets: Wallet[];
   walletSets: string[];
-  validation: any;
+  validation: {
+    getFieldState: (field: string) => { touched: boolean; error: string | null };
+    handleBlur: (field: string, value: unknown) => void;
+  };
 }
 
 export const ToSection: React.FC<ToSectionProps> = ({
@@ -51,7 +54,7 @@ export const ToSection: React.FC<ToSectionProps> = ({
       <Typography variant="h6" sx={{ mt: 4 }}>
         To
       </Typography>
-      
+
       <FormControl component="fieldset">
         <RadioGroup
           row

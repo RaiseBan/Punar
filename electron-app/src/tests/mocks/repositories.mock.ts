@@ -34,7 +34,10 @@ export function createMockWallet(overrides?: Partial<Wallet>): Wallet {
 
 export function createMockSettings(overrides?: Partial<AppSettings>): AppSettings {
     return {
-        mainRpc: 'https://mock-rpc.com',
         ...overrides,
-    };
+        mainRpc: overrides?.mainRpc || 'https://mock-rpc.com',
+        heliusRpcs: overrides?.heliusRpcs ?? [],
+        walletsSet: overrides?.walletsSet || {},
+        tensor_api_token: overrides?.tensor_api_token || '',
+    } as AppSettings;
 }
